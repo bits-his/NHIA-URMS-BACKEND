@@ -1,0 +1,31 @@
+{
+  "name": "nhia-backend",
+  "version": "1.0.0",
+  "description": "NHIA Annual Report Backend API",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "db:sync": "node src/scripts/syncDb.js",
+    "db:migrate-monthly": "node src/scripts/addMonthlyApprovalColumns.js",
+    "db:migrate-roles": "node src/scripts/migrateRoles.js",
+    "db:migrate-depts": "node src/scripts/migrateDepartmentsUnits.js",
+    "db:seed-users": "node src/scripts/seedUsers.js",
+    "db:migrate-participating-institutions": "node src/scripts/addParticipatingInstitutions.js",
+    "db:generate-seed-monthly": "python3 scripts/generate_seed_monthly_from_excel.py"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-validator": "^7.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.0",
+    "mysql2": "^3.9.7",
+    "sequelize": "^6.37.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
