@@ -38,7 +38,7 @@ function staffEmail(staffId) {
   return `${staffId.toLowerCase()}@nhia.gov.ng`;
 }
 
-const DEMO_PASSWORD = "Nhia@2025";
+const DEMO_PASSWORD = "123456";
 
 // ─── Privilege templates (match src/access/moduleConfig.ts titles) ───────────
 
@@ -139,7 +139,9 @@ async function buildUserSpecs(deptMap, unitMap) {
   });
 
   if (!states.length) {
-    throw new Error("No states found. Load zones/states first (seed_data.sql or seedZonesStates.js).");
+    throw new Error(
+      "No states found. Run first: npm run db:seed-zones-states"
+    );
   }
 
   const specs = [];

@@ -7,6 +7,8 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "db:sync": "node src/scripts/syncDb.js",
+    "db:seed-zones-states": "node src/scripts/seedZonesStates.js",
+    "db:seed-depts": "node src/scripts/seedDepartmentsUnits.js",
     "db:migrate-monthly": "node src/scripts/addMonthlyApprovalColumns.js",
     "db:migrate-roles": "node src/scripts/migrateRoles.js",
     "db:migrate-depts": "node src/scripts/migrateDepartmentsUnits.js",

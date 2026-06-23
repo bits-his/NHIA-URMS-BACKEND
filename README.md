@@ -22,6 +22,20 @@ CREATE DATABASE nhia_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 npm run db:sync
 ```
 
+## Seed data (run in this order on a fresh database)
+
+```bash
+npm run db:migrate-monthly
+npm run db:migrate-roles
+npm run db:migrate-depts
+npm run db:migrate-participating-institutions
+npm run db:seed-zones-states    # 6 zones + 37 states (required before users)
+npm run db:seed-depts             # departments & units (optional, links officers to depts)
+npm run db:seed-users             # SDO, zonal coordinators, state users (password: Nhia@2025)
+```
+
+Alternatively import `seed_data.sql` if you have monthly report history from Excel.
+
 ## Run (development)
 
 ```bash
