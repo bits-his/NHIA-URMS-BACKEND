@@ -23,6 +23,7 @@ const StockAsset = sequelize.define(
     item_description: { type: DataTypes.STRING(255), allowNull: false },
     asset_tag:        { type: DataTypes.STRING(100), allowNull: true },
     book_balance:     { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 },
+    is_active:        { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   },
   { tableName: "stock_assets", modelName: "StockAsset" }
 );

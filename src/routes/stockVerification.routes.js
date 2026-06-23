@@ -3,7 +3,7 @@ const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
 const {
   getZones, getStates, getDepartments, getUnits,
-  getAssets, createAsset, updateAsset, deleteAsset,
+  getAssets, createAsset, updateAsset, setAssetStatus,
   createVerification, listVerifications, getVerification,
   updateVerification, updateStatus,
 } = require("../controllers/stockVerification.controller");
@@ -20,7 +20,11 @@ router.get("/units",       getUnits);
 router.get("/assets",      getAssets);
 router.post("/assets",     createAsset);
 router.put("/assets/:id",  updateAsset);
-router.delete("/assets/:id", deleteAsset);
+router.patch("/assets/:id/status",
+  body("is_active").custom((v) => typeof v === "boolean").withMessage("is_active must be true or false"),
+  validate,
+  setAssetStatus
+);
 
 // ── Verification CRUD ─────────────────────────────────────────────────────────
 const verificationRules = [

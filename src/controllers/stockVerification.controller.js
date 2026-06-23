@@ -1,4 +1,5 @@
 const sequelize = require("../config/database");
+const { Op } = require("sequelize");
 const {
   StockVerification, StockVerificationItem, StockAsset,
   ZonalOffice, StateOffice, Department, Unit,
@@ -53,17 +54,33 @@ const getUnits = async (req, res, next) => {
 const getAssets = async (req, res, next) => {
   try {
     const where = {};
-    if (req.query.state_id)  where.state_id = req.query.state_id;
-    if (req.query.unit_id)   where.unit_id  = req.query.unit_id;
+    if (req.query.state_id) where.state_id = req.query.state_id;
+    if (req.query.unit_id)  where.unit_id  = req.query.unit_id;
+
+    const status = String(req.query.status || "all").toLowerCase();
+    if (status === "active") {
+      where.is_active = { [Op.eq]: 1 };
+    } else if (status === "inactive") {
+      where.is_active = { [Op.eq]: 0 };
+    }
+    // status === "all" → no is_active constraint
+
     const assets = await StockAsset.findAll({
       where,
       include: [
-        { model: StateOffice, as: "state", attributes: ["id","description"] },
-        { model: Unit,        as: "unit",  attributes: ["id","name"] },
+        { model: StateOffice, as: "state", attributes: ["id", "description"] },
+        { model: Unit,        as: "unit",  attributes: ["id", "name"] },
       ],
       order: [["item_class", "ASC"], ["item_description", "ASC"]],
     });
-    res.json({ success: true, data: assets });
+
+    const data = assets.map((row) => {
+      const json = row.toJSON();
+      json.is_active = json.is_active === true || json.is_active === 1;
+      return json;
+    });
+
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 };
 
@@ -79,18 +96,30 @@ const updateAsset = async (req, res, next) => {
   try {
     const asset = await StockAsset.findByPk(req.params.id);
     if (!asset) return res.status(404).json({ success: false, message: "Asset not found" });
-    const { state_id, unit_id, item_class, item_description, asset_tag, book_balance } = req.body;
-    await asset.update({ state_id, unit_id: unit_id || null, item_class, item_description, asset_tag: asset_tag || null, book_balance: book_balance || 0 });
+    const { state_id, unit_id, item_class, item_description, asset_tag, book_balance, is_active } = req.body;
+    await asset.update({
+      state_id, unit_id: unit_id || null, item_class, item_description,
+      asset_tag: asset_tag || null, book_balance: book_balance || 0,
+      ...(typeof is_active === "boolean" ? { is_active } : {}),
+    });
     res.json({ success: true, data: asset });
   } catch (err) { next(err); }
 };
 
-const deleteAsset = async (req, res, next) => {
+const setAssetStatus = async (req, res, next) => {
   try {
     const asset = await StockAsset.findByPk(req.params.id);
     if (!asset) return res.status(404).json({ success: false, message: "Asset not found" });
-    await asset.destroy();
-    res.json({ success: true, message: "Asset deleted" });
+    const raw = req.body.is_active;
+    const active = raw === true || raw === 1 || raw === "1" || raw === "true";
+    await asset.update({ is_active: active });
+    const json = asset.toJSON();
+    json.is_active = json.is_active === true || json.is_active === 1;
+    res.json({
+      success: true,
+      message: active ? "Asset reactivated" : "Asset deactivated",
+      data: json,
+    });
   } catch (err) { next(err); }
 };
 
@@ -264,7 +293,7 @@ const findVerification = (id) =>
 
 module.exports = {
   getZones, getStates, getDepartments, getUnits,
-  getAssets, createAsset, updateAsset, deleteAsset,
+  getAssets, createAsset, updateAsset, setAssetStatus,
   createVerification, listVerifications, getVerification,
   updateVerification, updateStatus,
 };
