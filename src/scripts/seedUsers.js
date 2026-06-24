@@ -80,7 +80,16 @@ const zonalCoordinatorAccess = [
 const sdoAccess = [
   ...dashboard,
   ...annual,
-  { access_to: "SDO", functionalities: ["Stock Verification", "My Verifications", "Asset Register"] },
+  {
+    access_to: "SDO",
+    functionalities: [
+      "Stock Verification",
+      "Asset Register",
+      "Dashboard",
+      "Monitoring Visits",
+      "Complaints",
+    ],
+  },
   ...notifications,
 ];
 

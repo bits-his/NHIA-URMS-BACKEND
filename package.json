@@ -15,6 +15,9 @@
     "db:seed-users": "node src/scripts/seedUsers.js",
     "db:migrate-participating-institutions": "node src/scripts/addParticipatingInstitutions.js",
     "db:migrate-asset-is-active": "node src/scripts/addAssetIsActive.js",
+    "db:seed-servicom": "node src/scripts/seedServicomIndicators.js",
+    "db:seed-servicom-data": "node src/scripts/seedServicomData.js",
+    "db:seed-servicom-all": "node src/scripts/seedServicomIndicators.js && node src/scripts/seedServicomData.js",
     "db:generate-seed-monthly": "python3 scripts/generate_seed_monthly_from_excel.py"
   },
   "dependencies": {
@@ -25,6 +28,7 @@
     "express-validator": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
     "mysql2": "^3.9.7",
     "sequelize": "^6.37.3"
   },

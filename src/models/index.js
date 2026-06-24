@@ -12,6 +12,16 @@ const StockVerificationItem   = require("./StockVerificationItem");
 const FinanceMonthlyReport    = require("./FinanceMonthlyReport");
 const ProgrammesMonthlyReport = require("./ProgrammesMonthlyReport");
 const SqaMonthlyReport        = require("./SqaMonthlyReport");
+const ServicomAssessmentIndicator = require("./ServicomAssessmentIndicator");
+const ServicomFacility            = require("./ServicomFacility");
+const MonitoringVisit             = require("./MonitoringVisit");
+const ServicomAssessmentScore     = require("./ServicomAssessmentScore");
+const ServicomKpiRecord           = require("./ServicomKpiRecord");
+const ServicomComplaint           = require("./ServicomComplaint");
+const ServicomFinding             = require("./ServicomFinding");
+const ServicomRecommendation      = require("./ServicomRecommendation");
+const ServicomEvidence            = require("./ServicomEvidence");
+const ServicomAuditLog            = require("./ServicomAuditLog");
 
 // ── Zone ↔ State ──────────────────────────────────────────────────────────────
 ZonalOffice.hasMany(StateOffice,   { foreignKey: "zonal_id", as: "states" });
@@ -55,6 +65,43 @@ ProgrammesMonthlyReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "st
 StateOffice.hasMany(SqaMonthlyReport,          { foreignKey: "state_id", as: "sqa_reports"        });
 SqaMonthlyReport.belongsTo(StateOffice,        { foreignKey: "state_id", as: "state"              });
 
+// ── SERVICOM M&E ──────────────────────────────────────────────────────────────
+ZonalOffice.hasMany(ServicomFacility,    { foreignKey: "zone_id",  as: "servicom_facilities" });
+ServicomFacility.belongsTo(ZonalOffice,  { foreignKey: "zone_id",  as: "zone"                });
+StateOffice.hasMany(ServicomFacility,    { foreignKey: "state_id", as: "servicom_facilities" });
+ServicomFacility.belongsTo(StateOffice,  { foreignKey: "state_id", as: "state"               });
+
+ZonalOffice.hasMany(MonitoringVisit,     { foreignKey: "zone_id",  as: "monitoring_visits"   });
+MonitoringVisit.belongsTo(ZonalOffice,   { foreignKey: "zone_id",  as: "zone"                });
+StateOffice.hasMany(MonitoringVisit,     { foreignKey: "state_id", as: "monitoring_visits"   });
+MonitoringVisit.belongsTo(StateOffice,   { foreignKey: "state_id", as: "state"               });
+ServicomFacility.hasMany(MonitoringVisit,{ foreignKey: "facility_id", as: "visits"           });
+MonitoringVisit.belongsTo(ServicomFacility, { foreignKey: "facility_id", as: "facility"      });
+
+MonitoringVisit.hasMany(ServicomAssessmentScore, { foreignKey: "visit_id", as: "scores" });
+ServicomAssessmentScore.belongsTo(MonitoringVisit, { foreignKey: "visit_id", as: "visit" });
+ServicomAssessmentIndicator.hasMany(ServicomAssessmentScore, { foreignKey: "indicator_id", as: "scores" });
+ServicomAssessmentScore.belongsTo(ServicomAssessmentIndicator, { foreignKey: "indicator_id", as: "indicator" });
+
+MonitoringVisit.hasOne(ServicomKpiRecord, { foreignKey: "visit_id", as: "kpi" });
+ServicomKpiRecord.belongsTo(MonitoringVisit, { foreignKey: "visit_id", as: "visit" });
+
+MonitoringVisit.hasMany(ServicomFinding, { foreignKey: "visit_id", as: "findings" });
+ServicomFinding.belongsTo(MonitoringVisit, { foreignKey: "visit_id", as: "visit" });
+MonitoringVisit.hasMany(ServicomRecommendation, { foreignKey: "visit_id", as: "recommendations" });
+ServicomRecommendation.belongsTo(MonitoringVisit, { foreignKey: "visit_id", as: "visit" });
+MonitoringVisit.hasMany(ServicomEvidence, { foreignKey: "visit_id", as: "evidence" });
+ServicomEvidence.belongsTo(MonitoringVisit, { foreignKey: "visit_id", as: "visit" });
+
+ZonalOffice.hasMany(ServicomComplaint,   { foreignKey: "zone_id",  as: "servicom_complaints" });
+ServicomComplaint.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"                });
+StateOffice.hasMany(ServicomComplaint,   { foreignKey: "state_id", as: "servicom_complaints" });
+ServicomComplaint.belongsTo(StateOffice, { foreignKey: "state_id", as: "state"               });
+ServicomFacility.hasMany(ServicomComplaint, { foreignKey: "facility_id", as: "complaints"   });
+ServicomComplaint.belongsTo(ServicomFacility, { foreignKey: "facility_id", as: "facility"  });
+MonitoringVisit.hasMany(ServicomComplaint, { foreignKey: "visit_id", as: "complaints" });
+ServicomComplaint.belongsTo(MonitoringVisit, { foreignKey: "visit_id", as: "visit" });
+
 // ── User ↔ Role (by key) ──────────────────────────────────────────────────────
 User.belongsTo(Role, { foreignKey: "role", targetKey: "key", as: "roleRecord", constraints: false });
 
@@ -63,4 +110,7 @@ module.exports = {
   ZonalOffice, StateOffice, Department, Unit, User, Role,
   StockAsset, StockVerification, StockVerificationItem,
   FinanceMonthlyReport, ProgrammesMonthlyReport, SqaMonthlyReport,
+  ServicomAssessmentIndicator, ServicomFacility, MonitoringVisit,
+  ServicomAssessmentScore, ServicomKpiRecord, ServicomComplaint,
+  ServicomFinding, ServicomRecommendation, ServicomEvidence, ServicomAuditLog,
 };

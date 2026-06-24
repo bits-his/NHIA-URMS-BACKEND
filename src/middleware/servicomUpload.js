@@ -1,0 +1,35 @@
+const path = require("path");
+const fs = require("fs");
+const multer = require("multer");
+
+const UPLOAD_DIR = path.join(__dirname, "../../uploads/servicom");
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const ALLOWED_MIME = new Set([
+  "image/jpeg", "image/png", "image/webp", "image/gif",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "audio/mpeg", "audio/wav", "audio/mp4",
+]);
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+    cb(null, `${Date.now()}-${safe}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME.has(file.mimetype)) cb(null, true);
+    else cb(new Error("File type not allowed"));
+  },
+});
+
+module.exports = { upload, UPLOAD_DIR };

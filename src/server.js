@@ -1,4 +1,5 @@
 require("dotenv").config();
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
@@ -12,6 +13,7 @@ const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
 const stockRoutes = require("./routes/stockVerification.routes");
 const monthlyRoutes = require("./routes/monthlyReport.routes");
+const servicomRoutes = require("./routes/servicom.routes");
 const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -32,6 +34,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 app.use(morgan("dev"));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -42,6 +45,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/annual-reports", annualReportRoutes);
 app.use("/api/stock", stockRoutes);
 app.use("/api/monthly", monthlyRoutes);
+app.use("/api/servicom", servicomRoutes);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 

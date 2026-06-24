@@ -1,0 +1,545 @@
+/**
+ * Seed realistic SERVICOM sample data: facilities, monitoring visits,
+ * assessment scores, KPIs, findings, recommendations, and complaints.
+ * Idempotent — safe to re-run (uses fixed reference IDs).
+ */
+require("dotenv").config();
+const sequelize = require("../config/database");
+const {
+  ZonalOffice, StateOffice,
+  ServicomAssessmentIndicator,
+  ServicomFacility, MonitoringVisit,
+  ServicomAssessmentScore, ServicomKpiRecord,
+  ServicomFinding, ServicomRecommendation,
+  ServicomComplaint,
+} = require("../models");
+const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
+
+const FACILITIES = [
+  {
+    name: "Lagos University Teaching Hospital",
+    facility_type: "tertiary",
+    state_code: "LAG",
+    lga: "Surulere",
+    address: "1-3 Oba Akinjobi Street, Idi-Araba, Lagos",
+    contact_person: "Dr. Wale Okonkwo",
+    phone: "08031234567",
+    email: "servicom@luth.gov.ng",
+  },
+  {
+    name: "General Hospital Ikeja",
+    facility_type: "secondary",
+    state_code: "LAG",
+    lga: "Ikeja",
+    address: "1-3 Oba Akinjobi Way, Ikeja, Lagos",
+    contact_person: "Mrs. Adaeze Nwosu",
+    phone: "08029876543",
+    email: "ghikeja@lagosstate.gov.ng",
+  },
+  {
+    name: "Aminu Kano Teaching Hospital",
+    facility_type: "tertiary",
+    state_code: "KAN",
+    lga: "Kano Municipal",
+    address: "Zaria Road, Kano",
+    contact_person: "Dr. Ibrahim Musa",
+    phone: "08034561234",
+    email: "servicom@akth.gov.ng",
+  },
+  {
+    name: "National Hospital Abuja",
+    facility_type: "tertiary",
+    state_code: "FCT",
+    lga: "Abuja Municipal",
+    address: "Herbert Macaulay Way, Central Business District, Abuja",
+    contact_person: "Dr. Fatima Bello",
+    phone: "08091122334",
+    email: "servicom@nationalhospital.gov.ng",
+  },
+  {
+    name: "University of Port Harcourt Teaching Hospital",
+    facility_type: "tertiary",
+    state_code: "RIV",
+    lga: "Port Harcourt",
+    address: "East-West Road, Choba, Port Harcourt",
+    contact_person: "Dr. Emeka Diri",
+    phone: "08055667788",
+    email: "servicom@upth.gov.ng",
+  },
+  {
+    name: "Barau Dikko Teaching Hospital",
+    facility_type: "tertiary",
+    state_code: "KAD",
+    lga: "Kaduna North",
+    address: "Kawo Road, Kaduna",
+    contact_person: "Dr. Hauwa Suleiman",
+    phone: "08033445566",
+    email: "servicom@bdth.gov.ng",
+  },
+  {
+    name: "Federal Medical Centre Owerri",
+    facility_type: "secondary",
+    state_code: "IMO",
+    lga: "Owerri Municipal",
+    address: "Orlu Road, Owerri",
+    contact_person: "Dr. Chinedu Okafor",
+    phone: "08077889900",
+    email: "servicom@fmcomwerri.gov.ng",
+  },
+  {
+    name: "State Specialist Hospital Akure",
+    facility_type: "secondary",
+    state_code: "OND",
+    lga: "Akure South",
+    address: "Ondo Road, Akure",
+    contact_person: "Mrs. Bola Adeyemi",
+    phone: "08022334455",
+    email: "servicom@sshakure.gov.ng",
+  },
+];
+
+const VISITS = [
+  {
+    reference_id: "MV-2026-00001",
+    facility_name: "Lagos University Teaching Hospital",
+    monitoring_type: "routine",
+    visit_date: "2026-01-15",
+    monitoring_officer: "Mrs. Grace Etim",
+    status: "approved",
+    submitted_by: "grace.etim@nhia.gov.ng",
+    approved_by: "zonal.sdo@nhia.gov.ng",
+    scores: [5, 4, 4, 5, 4, 5, 4, 4, 5, 4, 4, 5, 4, 4, 5],
+    kpi: {
+      enrollees_served: 1240,
+      avg_waiting_time_mins: 45,
+      complaints_received: 18,
+      complaints_resolved: 16,
+      claims_within_timeline: 892,
+      beneficiary_satisfaction_rate: 82.5,
+      facilities_meeting_standards: 11,
+    },
+    strengths: [
+      "SERVICOM charter prominently displayed at all service points",
+      "Dedicated complaint desk with trained officers on duty",
+      "NHIA enrollee registration materials readily available",
+    ],
+    challenges: [
+      "Peak-hour waiting times exceed the 60-minute target",
+      "Limited seating in the outpatient waiting area",
+    ],
+    recommendations: [
+      {
+        description: "Deploy additional registration counters during peak hours (8–11 AM)",
+        priority: "high",
+        responsible_officer: "Hospital Administrator",
+        timeline: "2026-03-31",
+        status: "in_progress",
+      },
+      {
+        description: "Expand outpatient waiting area seating by 30%",
+        priority: "medium",
+        responsible_officer: "Works & Maintenance Unit",
+        timeline: "2026-06-30",
+        status: "open",
+      },
+    ],
+  },
+  {
+    reference_id: "MV-2026-00002",
+    facility_name: "Aminu Kano Teaching Hospital",
+    monitoring_type: "follow_up",
+    visit_date: "2026-02-08",
+    monitoring_officer: "Mr. Yusuf Abdullahi",
+    status: "reviewed",
+    submitted_by: "yusuf.abdullahi@nhia.gov.ng",
+    reviewed_by: "state.sdo@nhia.gov.ng",
+    scores: [4, 4, 3, 4, 3, 4, 3, 4, 4, 3, 4, 4, 3, 3, 4],
+    kpi: {
+      enrollees_served: 980,
+      avg_waiting_time_mins: 72,
+      complaints_received: 24,
+      complaints_resolved: 19,
+      claims_within_timeline: 710,
+      beneficiary_satisfaction_rate: 71.0,
+      facilities_meeting_standards: 8,
+    },
+    strengths: [
+      "Improved complaint resolution turnaround since last visit",
+      "Staff professionalism noted during ward rounds",
+    ],
+    challenges: [
+      "Drug stock-outs affecting NHIA-covered prescriptions",
+      "Complaint log not consistently updated",
+    ],
+    recommendations: [
+      {
+        description: "Establish weekly pharmacy stock review for NHIA formulary items",
+        priority: "high",
+        responsible_officer: "Chief Pharmacist",
+        timeline: "2026-04-15",
+        status: "open",
+      },
+    ],
+  },
+  {
+    reference_id: "MV-2026-00003",
+    facility_name: "National Hospital Abuja",
+    monitoring_type: "spot_check",
+    visit_date: "2026-02-20",
+    monitoring_officer: "Dr. Amina Lawal",
+    status: "submitted",
+    submitted_by: "amina.lawal@nhia.gov.ng",
+    scores: [5, 5, 4, 5, 5, 5, 4, 5, 5, 4, 5, 5, 5, 4, 5],
+    kpi: {
+      enrollees_served: 1560,
+      avg_waiting_time_mins: 38,
+      complaints_received: 12,
+      complaints_resolved: 12,
+      claims_within_timeline: 1105,
+      beneficiary_satisfaction_rate: 88.0,
+      facilities_meeting_standards: 14,
+    },
+    strengths: [
+      "Excellent visibility of service standards and NHIA guidelines",
+      "Digital complaint tracking system in use",
+      "Accessible facilities for persons with disabilities",
+    ],
+    challenges: [
+      "Minor delays in claims documentation for secondary referrals",
+    ],
+    recommendations: [
+      {
+        description: "Standardize referral documentation checklist for NHIA claims",
+        priority: "medium",
+        responsible_officer: "HMO Liaison Officer",
+        timeline: "2026-05-01",
+        status: "open",
+      },
+    ],
+  },
+  {
+    reference_id: "MV-2026-00004",
+    facility_name: "General Hospital Ikeja",
+    monitoring_type: "routine",
+    visit_date: "2026-03-05",
+    monitoring_officer: "Mrs. Grace Etim",
+    status: "draft",
+    submitted_by: null,
+    scores: [3, 3, 2, 3, 2, 3, 2, 3, 3, 2, 3, 3, 2, 2, 3],
+    kpi: {
+      enrollees_served: 620,
+      avg_waiting_time_mins: 95,
+      complaints_received: 31,
+      complaints_resolved: 14,
+      claims_within_timeline: 380,
+      beneficiary_satisfaction_rate: 54.0,
+      facilities_meeting_standards: 4,
+    },
+    strengths: [
+      "NHIA desk operational during monitoring visit",
+    ],
+    challenges: [
+      "No visible SERVICOM charter at main entrance",
+      "Long enrollee waiting times without triage system",
+      "Staff attitude complaints from multiple beneficiaries",
+      "Incomplete patient records for NHIA claims",
+    ],
+    recommendations: [
+      {
+        description: "Install SERVICOM charter and service standards at all entry points",
+        priority: "high",
+        responsible_officer: "Medical Director",
+        timeline: "2026-03-20",
+        status: "open",
+      },
+      {
+        description: "Conduct customer service refresher training for frontline staff",
+        priority: "high",
+        responsible_officer: "HR & Training Unit",
+        timeline: "2026-04-30",
+        status: "open",
+      },
+    ],
+  },
+  {
+    reference_id: "MV-2026-00005",
+    facility_name: "University of Port Harcourt Teaching Hospital",
+    monitoring_type: "special_investigation",
+    visit_date: "2026-03-12",
+    monitoring_officer: "Mr. Daniel Hart",
+    status: "returned",
+    submitted_by: "daniel.hart@nhia.gov.ng",
+    returned_by: "zonal.sdo@nhia.gov.ng",
+    return_reason: "Incomplete KPI data and missing evidence attachments for claims timeline verification.",
+    scores: [4, 3, 4, 4, 3, 4, 3, 4, 4, 3, 4, 3, 4, 3, 4],
+    kpi: {
+      enrollees_served: 870,
+      avg_waiting_time_mins: 58,
+      complaints_received: 20,
+      complaints_resolved: 15,
+      claims_within_timeline: null,
+      beneficiary_satisfaction_rate: 68.5,
+      facilities_meeting_standards: 7,
+    },
+    strengths: [
+      "Records unit maintains organized NHIA enrollee files",
+    ],
+    challenges: [
+      "Claims processing delays beyond NHIA timeline",
+      "Complaint desk not staffed on weekends",
+    ],
+    recommendations: [
+      {
+        description: "Submit verified claims timeline report with supporting documents",
+        priority: "high",
+        responsible_officer: "NHIA Desk Officer",
+        timeline: "2026-03-25",
+        status: "open",
+      },
+    ],
+  },
+];
+
+const COMPLAINTS = [
+  {
+    complaint_number: "SC-2026-00001",
+    facility_name: "Lagos University Teaching Hospital",
+    state_code: "LAG",
+    complaint_date: "2026-01-20",
+    category: "delay_in_service",
+    description: "Enrollee waited over 3 hours for NHIA card verification before seeing a doctor.",
+    status: "resolved",
+    assigned_officer: "Mrs. Grace Etim",
+    resolution_notes: "Additional verification desk opened. Patient attended same day.",
+    resolution_date: "2026-01-22",
+    created_by: "enrollee.rep@nhia.gov.ng",
+  },
+  {
+    complaint_number: "SC-2026-00002",
+    facility_name: "Aminu Kano Teaching Hospital",
+    state_code: "KAN",
+    complaint_date: "2026-02-10",
+    category: "drug_availability",
+    description: "Prescribed NHIA-covered antibiotics unavailable at hospital pharmacy for 5 consecutive days.",
+    status: "in_progress",
+    assigned_officer: "Mr. Yusuf Abdullahi",
+    created_by: "state.officer@nhia.gov.ng",
+  },
+  {
+    complaint_number: "SC-2026-00003",
+    facility_name: "General Hospital Ikeja",
+    state_code: "LAG",
+    complaint_date: "2026-03-06",
+    category: "staff_attitude",
+    description: "Front desk staff reportedly rude to elderly enrollee seeking NHIA registration assistance.",
+    status: "assigned",
+    assigned_officer: "Mrs. Grace Etim",
+    created_by: "hotline@nhia.gov.ng",
+  },
+  {
+    complaint_number: "SC-2026-00004",
+    facility_name: "National Hospital Abuja",
+    state_code: "FCT",
+    complaint_date: "2026-02-25",
+    category: "claims_processing",
+    description: "HMO claim for surgical procedure pending approval for 6 weeks despite complete documentation.",
+    status: "escalated",
+    assigned_officer: "Dr. Amina Lawal",
+    created_by: "hmo.liaison@nhia.gov.ng",
+  },
+  {
+    complaint_number: "SC-2026-00005",
+    facility_name: "Federal Medical Centre Owerri",
+    state_code: "IMO",
+    complaint_date: "2026-03-01",
+    category: "access_to_care",
+    description: "Pregnant enrollee denied antenatal booking slot despite valid NHIA coverage.",
+    status: "open",
+    assigned_officer: null,
+    created_by: "enrollee.rep@nhia.gov.ng",
+  },
+  {
+    complaint_number: "SC-2026-00006",
+    facility_name: "Barau Dikko Teaching Hospital",
+    state_code: "KAD",
+    complaint_date: "2026-02-18",
+    category: "delay_in_service",
+    description: "Laboratory results for NHIA-covered tests delayed beyond 48-hour standard.",
+    status: "closed",
+    assigned_officer: "Dr. Hauwa Suleiman",
+    resolution_notes: "Lab workflow reviewed. New turnaround SLA communicated to staff.",
+    resolution_date: "2026-02-28",
+    created_by: "state.officer@nhia.gov.ng",
+  },
+];
+
+async function resolveGeo(stateCode) {
+  const state = await StateOffice.findOne({ where: { code: stateCode } });
+  if (!state) throw new Error(`State not found: ${stateCode}`);
+  return { state_id: state.id, zone_id: state.zonal_id };
+}
+
+async function seedFacilities(stateMap) {
+  let count = 0;
+  for (const f of FACILITIES) {
+    const geo = stateMap[f.state_code];
+    if (!geo) continue;
+    const [, created] = await ServicomFacility.findOrCreate({
+      where: { name: f.name, state_id: geo.state_id },
+      defaults: {
+        name: f.name,
+        facility_type: f.facility_type,
+        zone_id: geo.zone_id,
+        state_id: geo.state_id,
+        lga: f.lga,
+        address: f.address,
+        contact_person: f.contact_person,
+        phone: f.phone,
+        email: f.email,
+        is_active: true,
+      },
+    });
+    if (created) count++;
+  }
+  return count;
+}
+
+async function seedVisit(visitDef, facilityMap, indicators) {
+  const facility = facilityMap[visitDef.facility_name];
+  if (!facility) {
+    console.warn(`  ⚠  Skipping visit ${visitDef.reference_id}: facility not found`);
+    return false;
+  }
+
+  const [visit, created] = await MonitoringVisit.findOrCreate({
+    where: { reference_id: visitDef.reference_id },
+    defaults: {
+      zone_id: facility.zone_id,
+      state_id: facility.state_id,
+      facility_id: facility.id,
+      lga: facility.lga,
+      facility_name: facility.name,
+      facility_type: facility.facility_type,
+      address: facility.address,
+      contact_person: facility.contact_person,
+      phone: facility.phone,
+      email: facility.email,
+      visit_date: visitDef.visit_date,
+      monitoring_type: visitDef.monitoring_type,
+      monitoring_officer: visitDef.monitoring_officer,
+      status: visitDef.status,
+      submitted_by: visitDef.submitted_by,
+      reviewed_by: visitDef.reviewed_by ?? null,
+      approved_by: visitDef.approved_by ?? null,
+      returned_by: visitDef.returned_by ?? null,
+      return_reason: visitDef.return_reason ?? null,
+    },
+  });
+
+  if (!created) return false;
+
+  const scoreValues = visitDef.scores.slice(0, indicators.length);
+  const assessment = computeAssessmentScores(scoreValues);
+  await visit.update(assessment);
+
+  for (let i = 0; i < indicators.length && i < scoreValues.length; i++) {
+    await ServicomAssessmentScore.create({
+      visit_id: visit.id,
+      indicator_id: indicators[i].id,
+      score: scoreValues[i],
+    });
+  }
+
+  if (visitDef.kpi) {
+    const metrics = computeKpiMetrics(visitDef.kpi);
+    await ServicomKpiRecord.create({ visit_id: visit.id, ...visitDef.kpi, ...metrics });
+  }
+
+  for (const desc of visitDef.strengths || []) {
+    await ServicomFinding.create({ visit_id: visit.id, finding_type: "strength", description: desc });
+  }
+  for (const desc of visitDef.challenges || []) {
+    await ServicomFinding.create({ visit_id: visit.id, finding_type: "challenge", description: desc });
+  }
+  for (const rec of visitDef.recommendations || []) {
+    await ServicomRecommendation.create({ visit_id: visit.id, ...rec });
+  }
+
+  return true;
+}
+
+async function seedComplaint(c, facilityMap, stateMap) {
+  const facility = facilityMap[c.facility_name];
+  const geo = stateMap[c.state_code];
+  if (!geo) return false;
+
+  const [, created] = await ServicomComplaint.findOrCreate({
+    where: { complaint_number: c.complaint_number },
+    defaults: {
+      complaint_date: c.complaint_date,
+      zone_id: geo.zone_id,
+      state_id: geo.state_id,
+      facility_id: facility?.id ?? null,
+      facility_name: c.facility_name,
+      category: c.category,
+      description: c.description,
+      status: c.status,
+      assigned_officer: c.assigned_officer,
+      resolution_notes: c.resolution_notes ?? null,
+      resolution_date: c.resolution_date ?? null,
+      created_by: c.created_by,
+    },
+  });
+  return created;
+}
+
+(async () => {
+  try {
+    await sequelize.authenticate();
+    console.log("✅  DB connected");
+
+    const states = await StateOffice.findAll();
+    if (!states.length) {
+      console.error("❌  No states found. Run: npm run db:seed-zones-states");
+      process.exit(1);
+    }
+
+    const stateMap = {};
+    for (const s of states) {
+      stateMap[s.code] = { state_id: s.id, zone_id: s.zonal_id };
+    }
+
+    const indicators = await ServicomAssessmentIndicator.findAll({
+      where: { is_active: true },
+      order: [["sort_order", "ASC"]],
+    });
+    if (!indicators.length) {
+      console.error("❌  No indicators found. Run: npm run db:seed-servicom");
+      process.exit(1);
+    }
+
+    const facilitiesCreated = await seedFacilities(stateMap);
+    console.log(`✅  Facilities seeded (${facilitiesCreated} new)`);
+
+    const facilities = await ServicomFacility.findAll();
+    const facilityMap = Object.fromEntries(facilities.map((f) => [f.name, f]));
+
+    let visitsCreated = 0;
+    for (const v of VISITS) {
+      if (await seedVisit(v, facilityMap, indicators)) visitsCreated++;
+    }
+    console.log(`✅  Monitoring visits seeded (${visitsCreated} new)`);
+
+    let complaintsCreated = 0;
+    for (const c of COMPLAINTS) {
+      if (await seedComplaint(c, facilityMap, stateMap)) complaintsCreated++;
+    }
+    console.log(`✅  Complaints seeded (${complaintsCreated} new)`);
+
+    process.exit(0);
+  } catch (err) {
+    console.error("❌  Seed failed:", err.message);
+    console.error(err);
+    process.exit(1);
+  }
+})();
