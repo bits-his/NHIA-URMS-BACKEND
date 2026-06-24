@@ -4,6 +4,7 @@
  * Idempotent — safe to re-run (uses fixed reference IDs).
  */
 require("dotenv").config();
+const { Op } = require("sequelize");
 const sequelize = require("../config/database");
 const {
   ZonalOffice, StateOffice,
@@ -14,6 +15,83 @@ const {
   ServicomComplaint,
 } = require("../models");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
+
+/** Seed state codes → DB description (works when DB uses SO-XX codes instead of LAG/KAN) */
+const STATE_LABELS = {
+  LAG: "Lagos",
+  KAN: "Kano",
+  FCT: "FCT (Abuja)",
+  RIV: "Rivers",
+  KAD: "Kaduna",
+  IMO: "Imo",
+  OND: "Ondo",
+};
+
+async function resolveGeo(stateCode) {
+  const byCode = await StateOffice.findOne({ where: { code: stateCode } });
+  if (byCode) return { state_id: byCode.id, zone_id: byCode.zonal_id };
+
+  const label = STATE_LABELS[stateCode];
+  if (!label) throw new Error(`Unknown state code in seed data: ${stateCode}`);
+
+  let byDesc = await StateOffice.findOne({ where: { description: label } });
+  if (!byDesc) {
+    const token = label.replace(/\s*\([^)]*\)\s*/g, "").trim();
+    byDesc = await StateOffice.findOne({
+      where: { description: { [Op.like]: `%${token}%` } },
+      order: [["id", "DESC"]],
+    });
+  }
+  if (!byDesc) throw new Error(`State not found for ${stateCode} (${label}). Run: npm run db:seed-zones-states`);
+
+  return { state_id: byDesc.id, zone_id: byDesc.zonal_id };
+}
+
+async function ensureFacility(def) {
+  const geo = await resolveGeo(def.state_code);
+  const [facility] = await ServicomFacility.findOrCreate({
+    where: { name: def.name, state_id: geo.state_id },
+    defaults: {
+      name: def.name,
+      facility_type: def.facility_type,
+      zone_id: geo.zone_id,
+      state_id: geo.state_id,
+      lga: def.lga,
+      address: def.address,
+      contact_person: def.contact_person,
+      phone: def.phone,
+      email: def.email,
+      is_active: true,
+    },
+  });
+  return facility;
+}
+
+async function buildFacilityMap() {
+  let created = 0;
+  const map = {};
+  for (const def of FACILITIES) {
+    const geo = await resolveGeo(def.state_code);
+    const [facility, wasCreated] = await ServicomFacility.findOrCreate({
+      where: { name: def.name, state_id: geo.state_id },
+      defaults: {
+        name: def.name,
+        facility_type: def.facility_type,
+        zone_id: geo.zone_id,
+        state_id: geo.state_id,
+        lga: def.lga,
+        address: def.address,
+        contact_person: def.contact_person,
+        phone: def.phone,
+        email: def.email,
+        is_active: true,
+      },
+    });
+    map[def.name] = facility;
+    if (wasCreated) created++;
+  }
+  return { map, created };
+}
 
 const FACILITIES = [
   {
@@ -373,41 +451,17 @@ const COMPLAINTS = [
   },
 ];
 
-async function resolveGeo(stateCode) {
-  const state = await StateOffice.findOne({ where: { code: stateCode } });
-  if (!state) throw new Error(`State not found: ${stateCode}`);
-  return { state_id: state.id, zone_id: state.zonal_id };
-}
-
-async function seedFacilities(stateMap) {
-  let count = 0;
-  for (const f of FACILITIES) {
-    const geo = stateMap[f.state_code];
-    if (!geo) continue;
-    const [, created] = await ServicomFacility.findOrCreate({
-      where: { name: f.name, state_id: geo.state_id },
-      defaults: {
-        name: f.name,
-        facility_type: f.facility_type,
-        zone_id: geo.zone_id,
-        state_id: geo.state_id,
-        lga: f.lga,
-        address: f.address,
-        contact_person: f.contact_person,
-        phone: f.phone,
-        email: f.email,
-        is_active: true,
-      },
-    });
-    if (created) count++;
-  }
-  return count;
-}
-
 async function seedVisit(visitDef, facilityMap, indicators) {
-  const facility = facilityMap[visitDef.facility_name];
+  let facility = facilityMap[visitDef.facility_name];
   if (!facility) {
-    console.warn(`  ⚠  Skipping visit ${visitDef.reference_id}: facility not found`);
+    const def = FACILITIES.find((f) => f.name === visitDef.facility_name);
+    if (def) {
+      facility = await ensureFacility(def);
+      facilityMap[def.name] = facility;
+    }
+  }
+  if (!facility) {
+    console.warn(`  ⚠  Skipping visit ${visitDef.reference_id}: facility not found (${visitDef.facility_name})`);
     return false;
   }
 
@@ -468,10 +522,15 @@ async function seedVisit(visitDef, facilityMap, indicators) {
   return true;
 }
 
-async function seedComplaint(c, facilityMap, stateMap) {
+async function seedComplaint(c, facilityMap) {
   const facility = facilityMap[c.facility_name];
-  const geo = stateMap[c.state_code];
-  if (!geo) return false;
+  let geo;
+  try {
+    geo = await resolveGeo(c.state_code);
+  } catch (err) {
+    console.warn(`  ⚠  Skipping complaint ${c.complaint_number}: ${err.message}`);
+    return false;
+  }
 
   const [, created] = await ServicomComplaint.findOrCreate({
     where: { complaint_number: c.complaint_number },
@@ -504,11 +563,6 @@ async function seedComplaint(c, facilityMap, stateMap) {
       process.exit(1);
     }
 
-    const stateMap = {};
-    for (const s of states) {
-      stateMap[s.code] = { state_id: s.id, zone_id: s.zonal_id };
-    }
-
     const indicators = await ServicomAssessmentIndicator.findAll({
       where: { is_active: true },
       order: [["sort_order", "ASC"]],
@@ -518,11 +572,8 @@ async function seedComplaint(c, facilityMap, stateMap) {
       process.exit(1);
     }
 
-    const facilitiesCreated = await seedFacilities(stateMap);
-    console.log(`✅  Facilities seeded (${facilitiesCreated} new)`);
-
-    const facilities = await ServicomFacility.findAll();
-    const facilityMap = Object.fromEntries(facilities.map((f) => [f.name, f]));
+    const { map: facilityMap, created: facilitiesCreated } = await buildFacilityMap();
+    console.log(`✅  Facilities ready (${Object.keys(facilityMap).length} total, ${facilitiesCreated} new)`);
 
     let visitsCreated = 0;
     for (const v of VISITS) {
@@ -532,7 +583,7 @@ async function seedComplaint(c, facilityMap, stateMap) {
 
     let complaintsCreated = 0;
     for (const c of COMPLAINTS) {
-      if (await seedComplaint(c, facilityMap, stateMap)) complaintsCreated++;
+      if (await seedComplaint(c, facilityMap)) complaintsCreated++;
     }
     console.log(`✅  Complaints seeded (${complaintsCreated} new)`);
 
