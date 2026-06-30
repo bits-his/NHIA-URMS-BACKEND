@@ -61,6 +61,18 @@ const sqaMonthly = [{
   functionalities: ["Monthly Report"],
 }];
 
+const stateOfficeAccess = [{
+  access_to: "State Offices",
+  functionalities: [
+    "Enrolment",
+    "Migration / Update Requests",
+    "CEmONC & FFP Beneficiaries",
+    "IGR",
+    "SSHIA Financial Report",
+    "Expenditure Profile",
+  ],
+}];
+
 /** All monthly report modules a state coordinator oversees */
 const allMonthlyModules = [
   ...dashboard,
@@ -68,6 +80,7 @@ const allMonthlyModules = [
   ...financeMonthly,
   ...programmesMonthly,
   ...sqaMonthly,
+  ...stateOfficeAccess,
   ...notifications,
 ];
 

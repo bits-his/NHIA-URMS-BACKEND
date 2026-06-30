@@ -1,7 +1,7 @@
 const { Router } = require("express");
 const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
-const { enrolment, migration, cemonc } = require("../controllers/stateOfficeReport.controller");
+const { enrolment, migration, cemonc, igr, sshiaFinancial, expenditureProfile } = require("../controllers/stateOfficeReport.controller");
 
 const router = Router();
 
@@ -25,5 +25,8 @@ const mount = (path, ctrl) => {
 mount("enrolment", enrolment);
 mount("migration", migration);
 mount("cemonc", cemonc);
+mount("igr", igr);
+mount("sshia-financial", sshiaFinancial);
+mount("expenditure-profile", expenditureProfile);
 
 module.exports = router;
