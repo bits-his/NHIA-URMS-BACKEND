@@ -16,6 +16,7 @@
     "db:migrate-participating-institutions": "node src/scripts/addParticipatingInstitutions.js",
     "db:migrate-asset-is-active": "node src/scripts/addAssetIsActive.js",
     "db:migrate-igr": "node src/scripts/addIgrReports.js",
+    "db:migrate-state-office": "node src/scripts/migrateStateOfficeReports.js",
     "db:migrate-igr-privileges": "node src/scripts/addIgrPrivileges.js",
     "db:migrate-sshia-financial": "node src/scripts/addSshiaFinancialReports.js",
     "db:migrate-expenditure-profile": "node src/scripts/addExpenditureProfileReports.js",

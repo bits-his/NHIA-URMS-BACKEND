@@ -1,6 +1,5 @@
 /**
- * Create sshia_financial_reports / sshia_financial_report_lines tables.
- * Run: npm run db:migrate-sshia-financial
+ * @deprecated Use npm run db:migrate-state-office
  */
 require("dotenv").config();
 const sequelize = require("../config/database");
@@ -10,7 +9,9 @@ require("../models/index");
   try {
     await sequelize.authenticate();
     console.log("✅  DB connection OK");
-    await sequelize.sync({ alter: true });
+    const { SshiaFinancialReport, SshiaFinancialReportLine } = require("../models");
+    await SshiaFinancialReport.sync();
+    await SshiaFinancialReportLine.sync();
     console.log("✅  SSHIA financial report tables synced");
     process.exit(0);
   } catch (err) {

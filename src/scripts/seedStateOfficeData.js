@@ -28,6 +28,20 @@ const {
   ComplaintSummaryLine, ComplaintStatusLine,
   ComplianceVisitLine, ReconciliationLine,
 } = require("../models/ComplaintsComplianceLines");
+const { syncStateOfficeTables } = require("./stateOfficeTableSync");
+
+const STATE_ID_TABLES = [
+  "users",
+  "enrolment_reports", "migration_reports", "cemonc_reports",
+  "igr_reports", "sshia_financial_reports", "expenditure_profile_reports",
+  "complaints_compliance_reports", "accreditation_reports", "stakeholder_reports",
+  "hmo_selection_reports", "challenges_reports",
+  "state_office_complaints", "state_office_compliance_visits",
+  "state_office_reconciliation_meetings",
+  "servicom_complaints", "servicom_facilities", "monitoring_visits",
+  "stock_verifications", "stock_assets",
+  "finance_monthly_reports", "programmes_monthly_reports", "sqa_monthly_reports",
+];
 
 const STATE_LABELS = {
   LAG: "Lagos", KAN: "Kano", FCT: "FCT (Abuja)", RIV: "Rivers",
@@ -78,7 +92,7 @@ async function resolveGeo(stateCode) {
   return { state_id: best.id, zone_id: best.zonal_id, label: best.description, code: stateCode };
 }
 
-/** Point users stuck on legacy duplicate state rows at the canonical state */
+/** Point legacy duplicate state_id references at the canonical state row */
 async function realignLegacyStateUsers() {
   const states = await StateOffice.findAll({ order: [["description", "ASC"], ["code", "ASC"]] });
   const canonicalByDesc = new Map();
@@ -95,13 +109,41 @@ async function realignLegacyStateUsers() {
     if (!isLegacyCode(s.code)) continue;
     const canonical = canonicalByDesc.get(s.description.trim().toLowerCase());
     if (!canonical || canonical.id === s.id) continue;
-    const [n] = await User.update(
-      { state_id: canonical.id, zone_id: canonical.zonal_id },
-      { where: { state_id: s.id } },
-    );
-    updated += n;
+
+    for (const table of STATE_ID_TABLES) {
+      try {
+        const [, meta] = await sequelize.query(
+          `UPDATE \`${table}\` SET state_id = ? WHERE state_id = ?`,
+          { replacements: [canonical.id, s.id] },
+        );
+        updated += meta?.affectedRows ?? 0;
+      } catch (err) {
+        const code = err.parent?.code || err.original?.code;
+        if (code === "ER_NO_SUCH_TABLE" || code === "ER_BAD_FIELD_ERROR") continue;
+        throw err;
+      }
+    }
+
+    try {
+      const [, meta] = await sequelize.query(
+        "UPDATE `users` SET zone_id = ? WHERE state_id = ?",
+        { replacements: [canonical.zonal_id, canonical.id] },
+      );
+      updated += meta?.affectedRows ?? 0;
+    } catch { /* ignore */ }
   }
   return updated;
+}
+
+async function safeDestroy(Model, where) {
+  try {
+    return await Model.destroy({ where });
+  } catch (err) {
+    if (err.parent?.code === "ER_NO_SUCH_TABLE" || err.original?.code === "ER_NO_SUCH_TABLE") {
+      return 0;
+    }
+    throw err;
+  }
 }
 
 async function purgeLegacySeedRefs() {
@@ -114,9 +156,9 @@ async function purgeLegacySeedRefs() {
   ];
   let removed = 0;
   for (const M of models) {
-    removed += await M.destroy({ where: { reference_id: like } });
+    removed += await safeDestroy(M, { reference_id: like });
   }
-  removed += await StateOfficeComplaint.destroy({ where: { complaint_number: like } });
+  removed += await safeDestroy(StateOfficeComplaint, { complaint_number: like });
   return removed;
 }
 
@@ -479,6 +521,26 @@ async function seedStateMonths(geo, months, counts) {
       console.error("❌  No states found. Run: npm run db:seed-zones-states");
       process.exit(1);
     }
+
+    console.log("📦  Ensuring State Office tables exist...");
+    await syncStateOfficeTables(sequelize, {
+      StateOffice, User,
+      EnrolmentReport, EnrolmentReportLine,
+      MigrationReport, MigrationReportLine,
+      CemoncReport, CemoncReportLine,
+      IgrReport, IgrReportLine,
+      SshiaFinancialReport, SshiaFinancialReportLine,
+      ExpenditureProfileReport, ExpenditureProfileReportLine,
+      ComplaintsComplianceReport,
+      AccreditationReport, AccreditationReportLine,
+      StakeholderReport, StakeholderReportLine,
+      HmoSelectionReport, HmoSelectionReportLine,
+      ChallengesReport,
+      StateOfficeComplaint,
+      StateOfficeComplianceVisit,
+      StateOfficeReconciliationMeeting,
+      NhiaAccreditedProvider,
+    });
 
     const purged = await purgeLegacySeedRefs();
     if (purged) console.log(`🧹  Removed ${purged} old SEED-* records`);
