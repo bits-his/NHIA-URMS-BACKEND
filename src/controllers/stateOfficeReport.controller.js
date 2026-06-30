@@ -139,6 +139,9 @@ const {
   EnrolmentReport, EnrolmentReportLine,
   MigrationReport, MigrationReportLine,
   CemoncReport, CemoncReportLine,
+  IgrReport, IgrReportLine,
+  SshiaFinancialReport, SshiaFinancialReportLine,
+  ExpenditureProfileReport, ExpenditureProfileReportLine,
 } = require("../models");
 
 const enrolment = makeReportController(
@@ -336,11 +339,58 @@ const makeTextReportController = (ReportModel, refPrefix, textFields = []) => {
 const challenges = makeTextReportController(
   ChallengesReport, "CHL", ["challenges", "recommendations"]
 );
+const igr = makeReportController(
+  IgrReport, IgrReportLine, "IGR",
+  (line, reportId, quarter) => ({
+    report_id: reportId,
+    entry_date: line.entry_date,
+    service_type: line.service_type,
+    principal_name: line.principal_name,
+    receipt_no: line.receipt_no,
+    bill_rrr_no: line.bill_rrr_no,
+    nin_charge: Number(line.nin_charge) || 0,
+    amount: Number(line.amount) || 0,
+    quarter,
+  })
+);
+
+const sshiaFinancial = makeReportController(
+  SshiaFinancialReport, SshiaFinancialReportLine, "SSHIA",
+  (line, reportId, quarter) => {
+    const A = Number(line.opening_balance) || 0;
+    const B = Number(line.receipts) || 0;
+    const D = Number(line.actual_expenditure) || 0;
+    const C = Number(line.total_budget) || (A + B);
+    const E = Number(line.balance) || (C - D);
+    const F = D !== 0 ? (C / D) * 100 : 0;
+    return {
+      report_id: reportId,
+      sub_head: line.sub_head,
+      opening_balance: A,
+      receipts: B,
+      total_budget: C,
+      actual_expenditure: D,
+      balance: E,
+      variance_pct: F,
+      quarter,
+    };
+  }
+);
+
+const expenditureProfile = makeReportController(
+  ExpenditureProfileReport, ExpenditureProfileReportLine, "EXPND",
+  (line, reportId, quarter) => ({
+    report_id: reportId,
+    sub_head: line.sub_head,
+    amount: Number(line.amount) || 0,
+    quarter,
+  })
+);
 
 const complaints = require("./complaintsCompliance.controller");
 
 module.exports = {
   enrolment, migration, cemonc,
   accreditation, stakeholder, hmoSelection, challenges,
-  complaints,
+  complaints, igr, sshiaFinancial, expenditureProfile,
 };

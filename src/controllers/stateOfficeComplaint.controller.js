@@ -1,3 +1,4 @@
+const sequelize = require("../config/database");
 const { ZonalOffice, StateOffice, StateOfficeComplaint } = require("../models");
 
 const genRefId = async (t) => {

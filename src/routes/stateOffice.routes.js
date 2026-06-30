@@ -3,7 +3,7 @@ const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
 const {
   enrolment, migration, cemonc,
-  accreditation, stakeholder, hmoSelection, challenges, complaints,
+  accreditation, stakeholder, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile
 } = require("../controllers/stateOfficeReport.controller");
 const enrolleeComplaints = require("../controllers/stateOfficeComplaint.controller");
 const complianceVisits = require("../controllers/stateOfficeComplianceVisit.controller");
@@ -37,6 +37,9 @@ mount("accreditation", accreditation);
 mount("stakeholder", stakeholder);
 mount("hmo-selection", hmoSelection);
 mount("challenges", challenges);
+mount("igr", igr);
+mount("sshia-financial", sshiaFinancial);
+mount("expenditure-profile", expenditureProfile);
 
 router.get("/enrollee-complaints/summary", enrolleeComplaints.getSummary);
 router.get("/enrollee-complaints", enrolleeComplaints.listComplaints);

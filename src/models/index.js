@@ -41,6 +41,12 @@ const StateOfficeComplaint        = require("./StateOfficeComplaint");
 const StateOfficeComplianceVisit  = require("./StateOfficeComplianceVisit");
 const StateOfficeReconciliationMeeting = require("./StateOfficeReconciliationMeeting");
 const NhiaAccreditedProvider          = require("./NhiaAccreditedProvider");
+const IgrReport                   = require("./IgrReport");
+const IgrReportLine               = require("./IgrReportLine");
+const SshiaFinancialReport        = require("./SshiaFinancialReport");
+const SshiaFinancialReportLine    = require("./SshiaFinancialReportLine");
+const ExpenditureProfileReport    = require("./ExpenditureProfileReport");
+const ExpenditureProfileReportLine = require("./ExpenditureProfileReportLine");
 
 const bindStateOfficeReport = (Model, alias) => {
   ZonalOffice.hasMany(Model, { foreignKey: "zone_id", as: `${alias}_zone` });
@@ -127,6 +133,20 @@ ZonalOffice.hasMany(StateOfficeReconciliationMeeting, { foreignKey: "zone_id", a
 StateOfficeReconciliationMeeting.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
 StateOffice.hasMany(StateOfficeReconciliationMeeting, { foreignKey: "state_id", as: "state_reconciliation_meetings" });
 StateOfficeReconciliationMeeting.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+ZonalOffice.hasMany(IgrReport,   { foreignKey: "zone_id",  as: "igr_reports" });
+IgrReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(IgrReport,   { foreignKey: "state_id", as: "igr_reports" });
+IgrReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(SshiaFinancialReport,   { foreignKey: "zone_id",  as: "sshia_financial_reports" });
+SshiaFinancialReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(SshiaFinancialReport,   { foreignKey: "state_id", as: "sshia_financial_reports" });
+SshiaFinancialReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(ExpenditureProfileReport,   { foreignKey: "zone_id",  as: "expenditure_profile_reports" });
+ExpenditureProfileReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(ExpenditureProfileReport,   { foreignKey: "state_id", as: "expenditure_profile_reports" });
+ExpenditureProfileReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
 // ── SERVICOM M&E ──────────────────────────────────────────────────────────────
 ZonalOffice.hasMany(ServicomFacility,    { foreignKey: "zone_id",  as: "servicom_facilities" });
@@ -183,4 +203,7 @@ module.exports = {
   ChallengesReport,
   StateOfficeComplaint, StateOfficeComplianceVisit,
   StateOfficeReconciliationMeeting, NhiaAccreditedProvider,
+  IgrReport, IgrReportLine,
+  SshiaFinancialReport, SshiaFinancialReportLine,
+  ExpenditureProfileReport, ExpenditureProfileReportLine,
 };
