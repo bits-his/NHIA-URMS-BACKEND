@@ -25,8 +25,19 @@ const getZones = async (req, res, next) => {
 const getStates = async (req, res, next) => {
   try {
     const where = req.query.zone_id ? { zonal_id: req.query.zone_id } : {};
-    const states = await StateOffice.findAll({ where, order: [["description", "ASC"]] });
-    res.json({ success: true, data: states });
+    const states = await StateOffice.findAll({ where, order: [["description", "ASC"], ["code", "ASC"]] });
+    const isLegacyCode = (code) => /^SO-\d+$/i.test(code || "");
+    const byDescription = new Map();
+    for (const state of states) {
+      const key = state.description.trim().toLowerCase();
+      const existing = byDescription.get(key);
+      if (!existing || (isLegacyCode(existing.code) && !isLegacyCode(state.code))) {
+        byDescription.set(key, state);
+      }
+    }
+    const data = Array.from(byDescription.values())
+      .sort((a, b) => a.description.localeCompare(b.description));
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 };
 

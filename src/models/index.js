@@ -28,6 +28,26 @@ const MigrationReport             = require("./MigrationReport");
 const MigrationReportLine         = require("./MigrationReportLine");
 const CemoncReport                = require("./CemoncReport");
 const CemoncReportLine            = require("./CemoncReportLine");
+const ComplaintsComplianceReport  = require("./ComplaintsComplianceReport");
+require("./ComplaintsComplianceLines");
+const AccreditationReport         = require("./AccreditationReport");
+const AccreditationReportLine     = require("./AccreditationReportLine");
+const StakeholderReport           = require("./StakeholderReport");
+const StakeholderReportLine       = require("./StakeholderReportLine");
+const HmoSelectionReport          = require("./HmoSelectionReport");
+const HmoSelectionReportLine      = require("./HmoSelectionReportLine");
+const ChallengesReport            = require("./ChallengesReport");
+const StateOfficeComplaint        = require("./StateOfficeComplaint");
+const StateOfficeComplianceVisit  = require("./StateOfficeComplianceVisit");
+const StateOfficeReconciliationMeeting = require("./StateOfficeReconciliationMeeting");
+const NhiaAccreditedProvider          = require("./NhiaAccreditedProvider");
+
+const bindStateOfficeReport = (Model, alias) => {
+  ZonalOffice.hasMany(Model, { foreignKey: "zone_id", as: `${alias}_zone` });
+  Model.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+  StateOffice.hasMany(Model, { foreignKey: "state_id", as: `${alias}_state` });
+  Model.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+};
 
 // ── Zone ↔ State ──────────────────────────────────────────────────────────────
 ZonalOffice.hasMany(StateOffice,   { foreignKey: "zonal_id", as: "states" });
@@ -87,6 +107,27 @@ CemoncReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
 StateOffice.hasMany(CemoncReport,   { foreignKey: "state_id", as: "cemonc_reports" });
 CemoncReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+bindStateOfficeReport(ComplaintsComplianceReport, "complaints");
+bindStateOfficeReport(AccreditationReport, "accreditation");
+bindStateOfficeReport(StakeholderReport, "stakeholder");
+bindStateOfficeReport(HmoSelectionReport, "hmo_selection");
+bindStateOfficeReport(ChallengesReport, "challenges");
+
+ZonalOffice.hasMany(StateOfficeComplaint, { foreignKey: "zone_id", as: "state_office_complaints" });
+StateOfficeComplaint.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(StateOfficeComplaint, { foreignKey: "state_id", as: "state_office_complaints" });
+StateOfficeComplaint.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(StateOfficeComplianceVisit, { foreignKey: "zone_id", as: "state_compliance_visits" });
+StateOfficeComplianceVisit.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(StateOfficeComplianceVisit, { foreignKey: "state_id", as: "state_compliance_visits" });
+StateOfficeComplianceVisit.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(StateOfficeReconciliationMeeting, { foreignKey: "zone_id", as: "state_reconciliation_meetings" });
+StateOfficeReconciliationMeeting.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(StateOfficeReconciliationMeeting, { foreignKey: "state_id", as: "state_reconciliation_meetings" });
+StateOfficeReconciliationMeeting.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 // ── SERVICOM M&E ──────────────────────────────────────────────────────────────
 ZonalOffice.hasMany(ServicomFacility,    { foreignKey: "zone_id",  as: "servicom_facilities" });
 ServicomFacility.belongsTo(ZonalOffice,  { foreignKey: "zone_id",  as: "zone"                });
@@ -137,4 +178,9 @@ module.exports = {
   ServicomFinding, ServicomRecommendation, ServicomEvidence, ServicomAuditLog,
   EnrolmentReport, EnrolmentReportLine, MigrationReport, MigrationReportLine,
   CemoncReport, CemoncReportLine,
+  ComplaintsComplianceReport, AccreditationReport, AccreditationReportLine,
+  StakeholderReport, StakeholderReportLine, HmoSelectionReport, HmoSelectionReportLine,
+  ChallengesReport,
+  StateOfficeComplaint, StateOfficeComplianceVisit,
+  StateOfficeReconciliationMeeting, NhiaAccreditedProvider,
 };
