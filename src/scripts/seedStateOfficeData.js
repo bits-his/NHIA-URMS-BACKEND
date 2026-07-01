@@ -475,20 +475,23 @@ const ACCREDITED_PROVIDERS = [
   { provider_type: "hmo", provider_code: "HMO-AII", name: "AIICO Multishield Limited", address: "Victoria Island, Lagos", phone: "01 280 5000", email: "info@aiico.com" },
   { provider_type: "hmo", provider_code: "HMO-AVN", name: "Avon Healthcare Limited", address: "Victoria Island, Lagos", phone: "01 277 4000", email: "info@avonhealthcare.com" },
   { provider_type: "hmo", provider_code: "HMO-AXA", name: "AXA Mansard Health Limited", address: "Ilupeju, Lagos", phone: "01 280 1292", email: "health@axamansard.com" },
-  { provider_type: "hcp", provider_code: "HCP-LUTH", name: "Lagos University Teaching Hospital", address: "Idi-Araba, Lagos", facility_type: "Tertiary", phone: "01 295 0000" },
-  { provider_type: "hcp", provider_code: "HCP-AKTH", name: "Aminu Kano Teaching Hospital", address: "Zaria Road, Kano", facility_type: "Tertiary", phone: "064 600 000" },
-  { provider_type: "hcp", provider_code: "HCP-NHA", name: "National Hospital Abuja", address: "Abuja", facility_type: "Tertiary", phone: "09 460 4000" },
-  { provider_type: "hcp", provider_code: "HCP-UCH", name: "University College Hospital, Ibadan", address: "Ibadan, Oyo State", facility_type: "Tertiary", phone: "080 2311 000" },
-  { provider_type: "hcp", provider_code: "HCP-UPTH", name: "University of Port Harcourt Teaching Hospital", address: "Port Harcourt", facility_type: "Tertiary", phone: "084 230 500" },
+  // HCP codes use NHIA format STATE/NNN/P so state-scoped search works (e.g. OY/… for Oyo)
+  { provider_type: "hcp", provider_code: "LA/001/P", name: "Lagos University Teaching Hospital", address: "Idi-Araba, Lagos", facility_type: "Tertiary", phone: "01 295 0000" },
+  { provider_type: "hcp", provider_code: "KN/001/P", name: "Aminu Kano Teaching Hospital", address: "Zaria Road, Kano", facility_type: "Tertiary", phone: "064 600 000" },
+  { provider_type: "hcp", provider_code: "FCT/001/P", name: "National Hospital Abuja", address: "Abuja, FCT", facility_type: "Tertiary", phone: "09 460 4000" },
+  { provider_type: "hcp", provider_code: "OY/001/P", name: "University College Hospital, Ibadan", address: "Queen Elizabeth Road, Ibadan, Oyo State", facility_type: "Tertiary", phone: "080 2311 000" },
+  { provider_type: "hcp", provider_code: "OY/002/P", name: "Bowen Teaching Hospital", address: "Ogbomoso, Oyo State", facility_type: "Tertiary", phone: "080 3622 000" },
+  { provider_type: "hcp", provider_code: "OY/003/P", name: "State Hospital, Oyo", address: "Oyo Town, Oyo State", facility_type: "Secondary", phone: "080 1234 567" },
+  { provider_type: "hcp", provider_code: "RV/001/P", name: "University of Port Harcourt Teaching Hospital", address: "Port Harcourt, Rivers State", facility_type: "Tertiary", phone: "084 230 500" },
 ];
 
 const OYO_COMPLAINT_TEMPLATES = [
   { against_type: "against_hmo", entity_name: "Hygeia HMO", entity_code: "HMO-HYG", description: "Capitation delay affecting drug availability at UCH Ibadan.", status: "escalated", officer: "Mrs. Folake Adeyemi" },
-  { against_type: "against_hcp", entity_name: "University College Hospital, Ibadan", entity_code: "HCP-UCH", description: "NHIA desk closed during lunch hours; enrollees turned away.", status: "resolved", officer: "Mr. Tunde Oladipo", notes: "Desk hours extended.", resolved: "2026-02-10" },
+  { against_type: "against_hcp", entity_name: "University College Hospital, Ibadan", entity_code: "OY/001/P", description: "NHIA desk closed during lunch hours; enrollees turned away.", status: "resolved", officer: "Mr. Tunde Oladipo", notes: "Desk hours extended.", resolved: "2026-02-10" },
   { against_type: "against_hmo", entity_name: "Reliance HMO", entity_code: "HMO-REL", description: "Claim for surgical procedure pending beyond 14 days.", status: "pending", officer: "Mrs. Folake Adeyemi" },
-  { against_type: "against_hcp", entity_name: "Bowen Teaching Hospital", entity_code: "HCP-BTH", description: "Laboratory tests billed to enrollee despite NHIA coverage.", status: "unresolved", officer: "Dr. Kunle Adesina" },
+  { against_type: "against_hcp", entity_name: "Bowen Teaching Hospital", entity_code: "OY/002/P", description: "Laboratory tests billed to enrollee despite NHIA coverage.", status: "unresolved", officer: "Dr. Kunle Adesina" },
   { against_type: "against_hmo", entity_name: "AIICO Multishield", entity_code: "HMO-AII", description: "Pre-authorization for antenatal care delayed.", status: "resolved", officer: "Mrs. Folake Adeyemi", notes: "Authorization issued.", resolved: "2026-04-15" },
-  { against_type: "against_hcp", entity_name: "State Hospital, Oyo", entity_code: "HCP-SHO", description: "Long queue at NHIA verification desk.", status: "pending", officer: "Mr. Tunde Oladipo" },
+  { against_type: "against_hcp", entity_name: "State Hospital, Oyo", entity_code: "OY/003/P", description: "Long queue at NHIA verification desk.", status: "pending", officer: "Mr. Tunde Oladipo" },
 ];
 
 const OTHER_STATES = ["LAG", "KAN", "FCT", "RIV", "IMO", "KAD", "OND"];

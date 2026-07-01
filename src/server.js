@@ -3,6 +3,7 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const { corsOptions, isProduction } = require("./config/cors");
 
 const sequelize = require("./config/database");
 // Register all models & associations
@@ -22,19 +23,19 @@ const PORT = process.env.PORT || 3001;
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
-app.use(cors({
-  origin: (origin, cb) => {
-    const allowed = [
-      process.env.CLIENT_URL || "http://localhost:5173",
-      "http://localhost:3000",
-      "http://localhost:5173",
-    ];
-    if (!origin || allowed.includes(origin)) return cb(null, true);
-    cb(new Error("Not allowed by CORS"));
-  },
-  credentials: true,
-}));
-app.use(express.json());
+app.use(cors(corsOptions()));
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (isProduction) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+
+app.use(express.json({ limit: "2mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 app.use(morgan("dev"));
 

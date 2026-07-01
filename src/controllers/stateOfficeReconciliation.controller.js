@@ -1,5 +1,8 @@
 const sequelize = require("../config/database");
 const { ZonalOffice, StateOffice, StateOfficeReconciliationMeeting } = require("../models");
+const {
+  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+} = require("../utils/stateOfficeScope");
 
 const genRefId = async (t) => {
   const year = new Date().getFullYear();
@@ -12,19 +15,11 @@ const includeGeo = [
   { model: StateOffice, as: "state", attributes: ["id", "description"] },
 ];
 
-const buildWhere = (query) => {
-  const where = {};
-  if (query.zone_id) where.zone_id = query.zone_id;
-  if (query.state_id) where.state_id = query.state_id;
-  if (query.year) where.reporting_year = query.year;
-  if (query.month) where.reporting_month = query.month;
-  return where;
-};
-
 const listMeetings = async (req, res, next) => {
   try {
+    const where = await buildStateOfficeListWhere(req.user, req.query);
     const rows = await StateOfficeReconciliationMeeting.findAll({
-      where: buildWhere(req.query),
+      where,
       include: includeGeo,
       order: [["created_at", "DESC"]],
     });
@@ -35,11 +30,12 @@ const listMeetings = async (req, res, next) => {
 const createMeeting = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
+    const scoped = await applyScopeToBody(req.user, req.body);
     const {
       zone_id, state_id, hmo, hmo_code, facility, amount_owed,
       recon_status, comment, submitted_by, status = "submitted",
       reporting_year, reporting_month,
-    } = req.body;
+    } = scoped;
 
     const reference_id = await genRefId(t);
     const now = new Date();
@@ -66,8 +62,12 @@ const createMeeting = async (req, res, next) => {
 const updateMeeting = async (req, res, next) => {
   try {
     const row = await StateOfficeReconciliationMeeting.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Not found" });
-    await row.update(req.body);
+    const access = await assertRecordAccess(req.user, row);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
+    const scoped = await applyScopeToBody(req.user, req.body);
+    await row.update(scoped);
     const full = await StateOfficeReconciliationMeeting.findByPk(row.id, { include: includeGeo });
     res.json({ success: true, data: full });
   } catch (err) { next(err); }

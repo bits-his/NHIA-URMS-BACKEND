@@ -2,6 +2,9 @@ const sequelize = require("../config/database");
 const { ZonalOffice, StateOffice } = require("../models");
 const ComplaintsComplianceReport = require("../models/ComplaintsComplianceReport");
 const {
+  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+} = require("../utils/stateOfficeScope");
+const {
   ComplaintSummaryLine, ComplaintStatusLine, ComplianceVisitLine, ReconciliationLine,
 } = require("../models/ComplaintsComplianceLines");
 
@@ -86,10 +89,11 @@ const saveComplaintsChildren = async (reportId, body, t) => {
 const createReport = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
+    const scoped = await applyScopeToBody(req.user, req.body);
     const {
       zone_id, state_id, reporting_year, reporting_month,
       submission_date, submitted_by, status = "draft",
-    } = req.body;
+    } = scoped;
 
     const reference_id = await generateRefId(t);
     const report = await ComplaintsComplianceReport.create({
@@ -97,7 +101,7 @@ const createReport = async (req, res, next) => {
       submission_date, submitted_by, status,
     }, { transaction: t });
 
-    await saveComplaintsChildren(report.id, req.body, t);
+    await saveComplaintsChildren(report.id, scoped, t);
     await t.commit();
     const full = await findComplaintsReport(report.id);
     res.status(201).json({ success: true, data: full });
@@ -109,12 +113,7 @@ const createReport = async (req, res, next) => {
 
 const listReports = async (req, res, next) => {
   try {
-    const where = {};
-    if (req.query.zone_id)  where.zone_id  = req.query.zone_id;
-    if (req.query.state_id) where.state_id = req.query.state_id;
-    if (req.query.status)   where.status   = req.query.status;
-    if (req.query.year)     where.reporting_year  = req.query.year;
-    if (req.query.month)    where.reporting_month = req.query.month;
+    const where = await buildStateOfficeListWhere(req.user, req.query);
 
     const list = await ComplaintsComplianceReport.findAll({
       where,
@@ -128,7 +127,10 @@ const listReports = async (req, res, next) => {
 const getReport = async (req, res, next) => {
   try {
     const report = await findComplaintsReport(req.params.id);
-    if (!report) return res.status(404).json({ success: false, message: "Not found" });
+    const access = await assertRecordAccess(req.user, report);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
     res.json({ success: true, data: report });
   } catch (err) { next(err); }
 };
@@ -141,11 +143,17 @@ const updateReport = async (req, res, next) => {
       await t.rollback();
       return res.status(404).json({ success: false, message: "Not found" });
     }
+    const access = await assertRecordAccess(req.user, report);
+    if (!access.ok) {
+      await t.rollback();
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
 
+    const scoped = await applyScopeToBody(req.user, req.body);
     const {
       zone_id, state_id, reporting_year, reporting_month,
       submission_date, submitted_by, status,
-    } = req.body;
+    } = scoped;
 
     await report.update({
       zone_id, state_id, reporting_year, reporting_month,
@@ -153,7 +161,7 @@ const updateReport = async (req, res, next) => {
       ...(status && { status }),
     }, { transaction: t });
 
-    await saveComplaintsChildren(report.id, req.body, t);
+    await saveComplaintsChildren(report.id, scoped, t);
     await t.commit();
     const full = await findComplaintsReport(report.id);
     res.json({ success: true, data: full });
@@ -171,7 +179,10 @@ const updateStatus = async (req, res, next) => {
       return res.status(422).json({ success: false, message: "Invalid status" });
     }
     const report = await ComplaintsComplianceReport.findByPk(req.params.id);
-    if (!report) return res.status(404).json({ success: false, message: "Not found" });
+    const access = await assertRecordAccess(req.user, report);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
     await report.update({ status });
     res.json({ success: true, data: report });
   } catch (err) { next(err); }

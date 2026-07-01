@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
+const { authenticate } = require("../middleware/auth");
 const {
   getZones, getStates, getDepartments, getUnits,
   getAssets, createAsset, updateAsset, setAssetStatus,
@@ -9,6 +10,8 @@ const {
 } = require("../controllers/stockVerification.controller");
 
 const router = Router();
+
+router.use(authenticate);
 
 // ── Lookup routes ─────────────────────────────────────────────────────────────
 router.get("/zones",       getZones);

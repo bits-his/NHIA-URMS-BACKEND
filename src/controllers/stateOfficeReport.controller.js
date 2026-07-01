@@ -1,5 +1,8 @@
 const sequelize = require("../config/database");
 const { ZonalOffice, StateOffice } = require("../models");
+const {
+  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+} = require("../utils/stateOfficeScope");
 
 const quarterFromMonth = (month) => Math.ceil(Number(month) / 3);
 
@@ -22,10 +25,11 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
   const createReport = async (req, res, next) => {
     const t = await sequelize.transaction();
     try {
+      const scoped = await applyScopeToBody(req.user, req.body);
       const {
         zone_id, state_id, reporting_year, reporting_month,
         submission_date, submitted_by, status = "draft", lines = [],
-      } = req.body;
+      } = scoped;
 
       const reference_id = await generateRefId(t);
       const quarter = quarterFromMonth(reporting_month);
@@ -52,12 +56,7 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
 
   const listReports = async (req, res, next) => {
     try {
-      const where = {};
-      if (req.query.zone_id)  where.zone_id  = req.query.zone_id;
-      if (req.query.state_id) where.state_id = req.query.state_id;
-      if (req.query.status)   where.status   = req.query.status;
-      if (req.query.year)     where.reporting_year  = req.query.year;
-      if (req.query.month)    where.reporting_month = req.query.month;
+      const where = await buildStateOfficeListWhere(req.user, req.query);
 
       const list = await ReportModel.findAll({
         where,
@@ -75,7 +74,10 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
   const getReport = async (req, res, next) => {
     try {
       const report = await findReport(req.params.id);
-      if (!report) return res.status(404).json({ success: false, message: "Not found" });
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
       res.json({ success: true, data: report });
     } catch (err) { next(err); }
   };
@@ -88,11 +90,17 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
         await t.rollback();
         return res.status(404).json({ success: false, message: "Not found" });
       }
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        await t.rollback();
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
 
+      const scoped = await applyScopeToBody(req.user, req.body);
       const {
         zone_id, state_id, reporting_year, reporting_month,
         submission_date, submitted_by, status, lines = [],
-      } = req.body;
+      } = scoped;
 
       const quarter = quarterFromMonth(reporting_month);
 
@@ -126,7 +134,10 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
         return res.status(422).json({ success: false, message: "Invalid status" });
       }
       const report = await ReportModel.findByPk(req.params.id);
-      if (!report) return res.status(404).json({ success: false, message: "Not found" });
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
       await report.update({ status });
       res.json({ success: true, data: report });
     } catch (err) { next(err); }
@@ -238,17 +249,18 @@ const makeTextReportController = (ReportModel, refPrefix, textFields = []) => {
   const createReport = async (req, res, next) => {
     const t = await sequelize.transaction();
     try {
+      const scoped = await applyScopeToBody(req.user, req.body);
       const {
         zone_id, state_id, reporting_year, reporting_month,
         submission_date, submitted_by, status = "draft",
-      } = req.body;
+      } = scoped;
 
       const reference_id = await generateRefId(t);
       const report = await ReportModel.create({
         reference_id, zone_id, state_id,
         reporting_year, reporting_month,
         submission_date, submitted_by, status,
-        ...pickText(req.body),
+        ...pickText(scoped),
       }, { transaction: t });
 
       await t.commit();
@@ -262,12 +274,7 @@ const makeTextReportController = (ReportModel, refPrefix, textFields = []) => {
 
   const listReports = async (req, res, next) => {
     try {
-      const where = {};
-      if (req.query.zone_id)  where.zone_id  = req.query.zone_id;
-      if (req.query.state_id) where.state_id = req.query.state_id;
-      if (req.query.status)   where.status   = req.query.status;
-      if (req.query.year)     where.reporting_year  = req.query.year;
-      if (req.query.month)    where.reporting_month = req.query.month;
+      const where = await buildStateOfficeListWhere(req.user, req.query);
 
       const list = await ReportModel.findAll({
         where,
@@ -284,7 +291,10 @@ const makeTextReportController = (ReportModel, refPrefix, textFields = []) => {
   const getReport = async (req, res, next) => {
     try {
       const report = await findReport(req.params.id);
-      if (!report) return res.status(404).json({ success: false, message: "Not found" });
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
       res.json({ success: true, data: report });
     } catch (err) { next(err); }
   };
@@ -297,17 +307,23 @@ const makeTextReportController = (ReportModel, refPrefix, textFields = []) => {
         await t.rollback();
         return res.status(404).json({ success: false, message: "Not found" });
       }
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        await t.rollback();
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
 
+      const scoped = await applyScopeToBody(req.user, req.body);
       const {
         zone_id, state_id, reporting_year, reporting_month,
         submission_date, submitted_by, status,
-      } = req.body;
+      } = scoped;
 
       await report.update({
         zone_id, state_id, reporting_year, reporting_month,
         submission_date, submitted_by,
         ...(status && { status }),
-        ...pickText(req.body),
+        ...pickText(scoped),
       }, { transaction: t });
 
       await t.commit();
@@ -327,7 +343,10 @@ const makeTextReportController = (ReportModel, refPrefix, textFields = []) => {
         return res.status(422).json({ success: false, message: "Invalid status" });
       }
       const report = await ReportModel.findByPk(req.params.id);
-      if (!report) return res.status(404).json({ success: false, message: "Not found" });
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
       await report.update({ status });
       res.json({ success: true, data: report });
     } catch (err) { next(err); }

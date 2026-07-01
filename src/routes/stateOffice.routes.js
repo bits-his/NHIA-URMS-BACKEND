@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
+const { authenticate } = require("../middleware/auth");
 const {
   enrolment, migration, cemonc,
   accreditation, stakeholder, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile
@@ -11,6 +12,8 @@ const reconciliation = require("../controllers/stateOfficeReconciliation.control
 const nhiaAccreditation = require("../controllers/nhiaAccreditation.controller");
 
 const router = Router();
+
+router.use(authenticate);
 
 const headerRules = [
   body("zone_id").notEmpty().withMessage("Zone is required"),

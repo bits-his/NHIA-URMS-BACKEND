@@ -1,21 +1,13 @@
 const sequelize = require("../config/database");
 const { ZonalOffice, StateOffice, StateOfficeComplaint } = require("../models");
+const {
+  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+} = require("../utils/stateOfficeScope");
 
 const genRefId = async (t) => {
   const year = new Date().getFullYear();
   const count = await StateOfficeComplaint.count({ transaction: t });
   return `SOC-${year}-${String(count + 1).padStart(5, "0")}`;
-};
-
-const buildWhere = (query) => {
-  const where = {};
-  if (query.zone_id) where.zone_id = query.zone_id;
-  if (query.state_id) where.state_id = query.state_id;
-  if (query.year) where.reporting_year = query.year;
-  if (query.month) where.reporting_month = query.month;
-  if (query.against_type) where.against_type = query.against_type;
-  if (query.status) where.status = query.status;
-  return where;
 };
 
 const includeGeo = [
@@ -25,8 +17,9 @@ const includeGeo = [
 
 const listComplaints = async (req, res, next) => {
   try {
+    const where = await buildStateOfficeListWhere(req.user, req.query);
     const rows = await StateOfficeComplaint.findAll({
-      where: buildWhere(req.query),
+      where,
       include: includeGeo,
       order: [["complaint_date", "DESC"]],
     });
@@ -36,7 +29,7 @@ const listComplaints = async (req, res, next) => {
 
 const getSummary = async (req, res, next) => {
   try {
-    const where = buildWhere(req.query);
+    const where = await buildStateOfficeListWhere(req.user, req.query);
     const rows = await StateOfficeComplaint.findAll({ where, attributes: ["against_type", "status"] });
 
     const summaryMap = { against_hmo: 0, against_hcp: 0 };
@@ -64,12 +57,13 @@ const getSummary = async (req, res, next) => {
 const createComplaint = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
+    const scoped = await applyScopeToBody(req.user, req.body);
     const {
       zone_id, state_id, against_type, entity_name, entity_code,
       complaint_date, description, status = "pending",
       assigned_officer, resolution_notes, resolution_date,
       reporting_year, reporting_month, created_by,
-    } = req.body;
+    } = scoped;
 
     const date = complaint_date ? new Date(complaint_date) : new Date();
     const year = reporting_year || date.getFullYear();
@@ -97,8 +91,12 @@ const createComplaint = async (req, res, next) => {
 const updateComplaint = async (req, res, next) => {
   try {
     const row = await StateOfficeComplaint.findByPk(req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: "Not found" });
-    await row.update(req.body);
+    const access = await assertRecordAccess(req.user, row);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
+    const scoped = await applyScopeToBody(req.user, req.body);
+    await row.update(scoped);
     const full = await StateOfficeComplaint.findByPk(row.id, { include: includeGeo });
     res.json({ success: true, data: full });
   } catch (err) { next(err); }
@@ -107,7 +105,10 @@ const updateComplaint = async (req, res, next) => {
 const getComplaint = async (req, res, next) => {
   try {
     const row = await StateOfficeComplaint.findByPk(req.params.id, { include: includeGeo });
-    if (!row) return res.status(404).json({ success: false, message: "Not found" });
+    const access = await assertRecordAccess(req.user, row);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
     res.json({ success: true, data: row });
   } catch (err) { next(err); }
 };

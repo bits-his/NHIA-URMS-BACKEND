@@ -21,6 +21,7 @@
     "db:migrate-sshia-financial": "node src/scripts/addSshiaFinancialReports.js",
     "db:migrate-expenditure-profile": "node src/scripts/addExpenditureProfileReports.js",
     "db:seed-state-office": "node src/scripts/seedStateOfficeData.js",
+    "db:sync-accredited-providers": "node src/scripts/syncAccreditedProviders.js",
     "db:seed-servicom": "node src/scripts/seedServicomIndicators.js",
     "db:seed-servicom-data": "node src/scripts/seedServicomData.js",
     "db:seed-servicom-all": "node src/scripts/seedServicomIndicators.js && node src/scripts/seedServicomData.js",

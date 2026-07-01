@@ -1,6 +1,9 @@
 const sequelize = require("../config/database");
 const { Op } = require("sequelize");
 const {
+  buildZoneLookupWhere, buildStateLookupWhere,
+} = require("../utils/stateOfficeScope");
+const {
   StockVerification, StockVerificationItem, StockAsset,
   ZonalOffice, StateOffice, Department, Unit,
 } = require("../models");
@@ -17,14 +20,15 @@ const generateRefId = async (t) => {
 
 const getZones = async (req, res, next) => {
   try {
-    const zones = await ZonalOffice.findAll({ order: [["description", "ASC"]] });
+    const where = await buildZoneLookupWhere(req.user);
+    const zones = await ZonalOffice.findAll({ where, order: [["description", "ASC"]] });
     res.json({ success: true, data: zones });
   } catch (err) { next(err); }
 };
 
 const getStates = async (req, res, next) => {
   try {
-    const where = req.query.zone_id ? { zonal_id: req.query.zone_id } : {};
+    const where = await buildStateLookupWhere(req.user, req.query);
     const states = await StateOffice.findAll({ where, order: [["description", "ASC"], ["code", "ASC"]] });
     const isLegacyCode = (code) => /^SO-\d+$/i.test(code || "");
     const byDescription = new Map();
