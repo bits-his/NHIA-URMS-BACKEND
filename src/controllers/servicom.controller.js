@@ -489,8 +489,17 @@ module.exports = {
           stateMap[s.state_id].count += 1;
         }
       }
+      const stateIds = Object.keys(stateMap);
+      const stateRows = stateIds.length
+        ? await StateOffice.findAll({ where: { id: stateIds }, attributes: ["id", "description"] })
+        : [];
+      const stateNameById = Object.fromEntries(stateRows.map((st) => [st.id, st.description]));
       const state_satisfaction_rankings = Object.values(stateMap)
-        .map((s) => ({ ...s, avg_score: s.count ? Math.round((s.scoreSum / s.count) * 10) / 10 : 0 }))
+        .map((s) => ({
+          ...s,
+          state_name: stateNameById[s.state_id] ?? null,
+          avg_score: s.count ? Math.round((s.scoreSum / s.count) * 10) / 10 : 0,
+        }))
         .sort((a, b) => b.avg_score - a.avg_score);
 
       res.json({

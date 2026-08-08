@@ -11,7 +11,6 @@ const ROUTE_FUNCTIONALITY = {
   "compliance-visits": "Compliance Monitoring",
   "reconciliation-meetings": "Reconciliation Meetings",
   accreditation: "Accreditation / Reaccreditation",
-  "accredited-providers": "Accreditation / Reaccreditation",
   stakeholder: "Stakeholder Engagement",
   "hmo-selection": "HMO Selection Process",
   challenges: "Challenges & Recommendations",
@@ -19,6 +18,14 @@ const ROUTE_FUNCTIONALITY = {
   "sshia-financial": "SSHIA Financial Report",
   "expenditure-profile": "Expenditure Profile",
 };
+
+/** Legacy path — also allow these SOC/Zones sections to search NHIA lists */
+const ACCREDITED_PROVIDER_SECTIONS = [
+  "Enrollee Complaints",
+  "Accreditation / Reaccreditation",
+  "Reconciliation Meetings",
+  "Compliance Monitoring",
+];
 
 function parseAccess(raw) {
   if (Array.isArray(raw)) return raw;
@@ -57,6 +64,17 @@ function requireStateOfficeSection(requiredFunctionality) {
 /** Derive required section from the first path segment (e.g. /enrolment/reports → Enrolment) */
 function requireStateOfficeRoute(req, res, next) {
   const segment = req.path.split("/").filter(Boolean)[0];
+
+  if (segment === "accredited-providers" && req.method === "GET") {
+    if (req.user?.role === "admin") return next();
+    const access = parseAccess(req.user?.functionalities);
+    const entry = findSocZonesEntry(access);
+    if (entry && ACCREDITED_PROVIDER_SECTIONS.some((title) => hasFunctionality(entry, title))) {
+      return next();
+    }
+    return res.status(403).json({ success: false, message: "Access denied" });
+  }
+
   const required = ROUTE_FUNCTIONALITY[segment];
   if (!required) return next();
   return requireStateOfficeSection(required)(req, res, next);

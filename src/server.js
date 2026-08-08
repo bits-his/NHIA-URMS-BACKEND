@@ -16,6 +16,7 @@ const stockRoutes = require("./routes/stockVerification.routes");
 const monthlyRoutes = require("./routes/monthlyReport.routes");
 const servicomRoutes = require("./routes/servicom.routes");
 const stateOfficeRoutes = require("./routes/stateOffice.routes");
+const accreditedProvidersRoutes = require("./routes/accreditedProviders.routes");
 const complianceReportRoutes = require("./routes/complianceReport.routes");
 const { errorHandler } = require("./middleware/errorHandler");
 
@@ -49,6 +50,7 @@ app.use("/api/annual-reports", annualReportRoutes);
 app.use("/api/stock", stockRoutes);
 app.use("/api/monthly", monthlyRoutes);
 app.use("/api/servicom", servicomRoutes);
+app.use("/api/accredited-providers", accreditedProvidersRoutes);
 app.use("/api/state-office", stateOfficeRoutes);
 app.use("/api/sqa/compliance-reports", complianceReportRoutes);
 
