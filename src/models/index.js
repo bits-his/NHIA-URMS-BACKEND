@@ -22,6 +22,8 @@ const ServicomFinding             = require("./ServicomFinding");
 const ServicomRecommendation      = require("./ServicomRecommendation");
 const ServicomEvidence            = require("./ServicomEvidence");
 const ServicomAuditLog            = require("./ServicomAuditLog");
+const ServicomSatisfactionSurvey  = require("./ServicomSatisfactionSurvey");
+const ServicomCommentCard         = require("./ServicomCommentCard");
 const EnrolmentReport             = require("./EnrolmentReport");
 const EnrolmentReportLine         = require("./EnrolmentReportLine");
 const MigrationReport             = require("./MigrationReport");
@@ -185,6 +187,16 @@ ServicomComplaint.belongsTo(ServicomFacility, { foreignKey: "facility_id", as: "
 MonitoringVisit.hasMany(ServicomComplaint, { foreignKey: "visit_id", as: "complaints" });
 ServicomComplaint.belongsTo(MonitoringVisit, { foreignKey: "visit_id", as: "visit" });
 
+ZonalOffice.hasMany(ServicomSatisfactionSurvey,   { foreignKey: "zone_id",  as: "servicom_satisfaction_surveys" });
+ServicomSatisfactionSurvey.belongsTo(ZonalOffice,  { foreignKey: "zone_id",  as: "zone" });
+StateOffice.hasMany(ServicomSatisfactionSurvey,    { foreignKey: "state_id", as: "servicom_satisfaction_surveys" });
+ServicomSatisfactionSurvey.belongsTo(StateOffice,  { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(ServicomCommentCard,   { foreignKey: "zone_id",  as: "servicom_comment_cards" });
+ServicomCommentCard.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone" });
+StateOffice.hasMany(ServicomCommentCard,   { foreignKey: "state_id", as: "servicom_comment_cards" });
+ServicomCommentCard.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 // ── User ↔ Role (by key) ──────────────────────────────────────────────────────
 User.belongsTo(Role, { foreignKey: "role", targetKey: "key", as: "roleRecord", constraints: false });
 
@@ -196,6 +208,7 @@ module.exports = {
   ServicomAssessmentIndicator, ServicomFacility, MonitoringVisit,
   ServicomAssessmentScore, ServicomKpiRecord, ServicomComplaint,
   ServicomFinding, ServicomRecommendation, ServicomEvidence, ServicomAuditLog,
+  ServicomSatisfactionSurvey, ServicomCommentCard,
   EnrolmentReport, EnrolmentReportLine, MigrationReport, MigrationReportLine,
   CemoncReport, CemoncReportLine,
   ComplaintsComplianceReport, AccreditationReport, AccreditationReportLine,

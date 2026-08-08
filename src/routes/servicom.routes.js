@@ -35,12 +35,28 @@ router.patch("/visits/:id/return", authorize(...reviewers), body("reason").notEm
 router.post("/visits/:id/evidence", authorize(...submitters), upload.single("file"), ctrl.uploadEvidence);
 
 router.get("/complaints", ctrl.listComplaints);
+router.get("/complaints/:id", ctrl.getComplaint);
 router.post("/complaints", authorize(...submitters), [
-  body("facility_name").notEmpty(),
-  body("complaint_date").notEmpty(),
-  body("description").notEmpty(),
-  body("category").notEmpty(),
+  body("date_received").optional(),
+  body("complaint_date").optional(),
 ], validate, ctrl.createComplaint);
 router.put("/complaints/:id", authorize(...submitters), ctrl.updateComplaint);
+
+router.get("/satisfaction-surveys", ctrl.listSatisfactionSurveys);
+router.get("/satisfaction-surveys/:id", ctrl.getSatisfactionSurvey);
+router.post("/satisfaction-surveys", authorize(...submitters), [
+  body("provider_name").notEmpty(),
+  body("survey_date").notEmpty(),
+  body("responses").isArray(),
+], validate, ctrl.createSatisfactionSurvey);
+router.put("/satisfaction-surveys/:id", authorize(...submitters), ctrl.updateSatisfactionSurvey);
+
+router.get("/comment-cards", ctrl.listCommentCards);
+router.get("/comment-cards/:id", ctrl.getCommentCard);
+router.post("/comment-cards", authorize(...submitters), [
+  body("card_date").notEmpty(),
+  body("responses").isArray(),
+], validate, ctrl.createCommentCard);
+router.put("/comment-cards/:id", authorize(...submitters), ctrl.updateCommentCard);
 
 module.exports = router;

@@ -3,12 +3,14 @@ const fs = require("fs");
 const sequelize = require("../config/database");
 const {
   MonitoringVisit, ServicomAssessmentIndicator, ServicomAssessmentScore,
-  ServicomKpiRecord, ServicomComplaint, ServicomFinding, ServicomRecommendation,
+  ServicomKpiRecord, ServicomComplaint, ServicomSatisfactionSurvey, ServicomCommentCard,
+  ServicomFinding, ServicomRecommendation,
   ServicomEvidence, ServicomAuditLog, ServicomFacility,
   ZonalOffice, StateOffice,
 } = require("../models");
 const { buildServicomListWhere } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
+const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes } = require("../utils/complaintRegister");
 
 const VISIT_INCLUDES = [
   { model: ZonalOffice, as: "zone", attributes: ["id", "description", "zonal_code"] },
@@ -93,6 +95,69 @@ function pickVisitFields(body) {
   for (const k of fields) if (body[k] !== undefined) out[k] = body[k];
   return out;
 }
+
+function computeSatisfactionMetrics(responses) {
+  const rows = Array.isArray(responses) ? responses : [];
+  const total = rows.reduce((sum, r) => sum + (Number(r.score) || 0), 0);
+  const max = rows.length;
+  const percentage = max ? Math.round((total / max) * 1000) / 10 : 0;
+  return { total_score: total, max_score: max, percentage_score: percentage };
+}
+
+function computeCommentCardMetrics(responses) {
+  const rows = Array.isArray(responses) ? responses : [];
+  const scored = rows.filter((r) => r.score != null && r.score !== "");
+  const total = scored.reduce((sum, r) => sum + Number(r.score), 0);
+  const average = scored.length ? Math.round((total / scored.length) * 100) / 100 : 0;
+  return { total_score: total, average_score: average };
+}
+
+function normalizeSurveyResponses(raw, questions) {
+  const map = new Map((Array.isArray(raw) ? raw : []).map((r) => [r.question_id, r]));
+  return questions.map((q) => {
+    const existing = map.get(q.id) || {};
+    const response = existing.response ?? null;
+    let score = existing.score;
+    if (score == null && response === "yes") score = 1;
+    if (score == null && response === "no") score = 0;
+    if (score == null && response != null && response !== "") score = Number(response);
+    return { question_id: q.id, category: existing.category || q.category || q.section, question: existing.question || q.question || null, response, score: score ?? null };
+  });
+}
+
+function normalizeCommentResponses(raw, questions) {
+  const map = new Map((Array.isArray(raw) ? raw : []).map((r) => [r.question_id, r]));
+  return questions.map((q) => {
+    const existing = map.get(q.id) || {};
+    const response = existing.response ?? null;
+    const score = response != null && response !== "" ? Number(response) : null;
+    return { question_id: q.id, section: existing.section || q.section, question: existing.question || q.question || null, response, score };
+  });
+}
+
+const SATISFACTION_QUESTIONS = [
+  { id: "Q01", category: "SERVICE DELIVERY" },
+  { id: "Q02", category: "SERVICE DELIVERY" },
+  { id: "Q03", category: "SERVICE DELIVERY" },
+  { id: "Q04", category: "SERVICE DELIVERY" },
+  { id: "Q05", category: "SERVICE DELIVERY" },
+  { id: "Q06", category: "TIMELINESS" },
+  { id: "Q07", category: "TIMELINESS" },
+  { id: "Q08", category: "TIMELINESS" },
+  { id: "Q09", category: "TIMELINESS" },
+  { id: "Q10", category: "INFORMATION" },
+  { id: "Q11", category: "INFORMATION" },
+  { id: "Q12", category: "PROFESSIONALISM" },
+  { id: "Q13", category: "PROFESSIONALISM" },
+];
+
+const COMMENT_CARD_QUESTIONS = [
+  { id: "Q01", section: "Reception" },
+  { id: "Q02", section: "Front Desk Staff" },
+  { id: "Q03", section: "Front Desk Staff" },
+  { id: "Q04", section: "Front Desk Staff" },
+  { id: "Q05", section: "Overall" },
+];
 
 module.exports = {
   listIndicators: async (_req, res, next) => {
@@ -256,26 +321,56 @@ module.exports = {
       if (req.query.state_id) where.state_id = req.query.state_id;
       if (req.query.zone_id) where.zone_id = req.query.zone_id;
       if (req.query.status) where.status = req.query.status;
-      if (req.query.category) where.category = req.query.category;
+      if (req.query.category) where.complaint_category = req.query.category;
+      if (req.query.priority) where.priority_rating = req.query.priority;
       const rows = await ServicomComplaint.findAll({
         where,
         include: [
           { model: StateOffice, as: "state", attributes: ["id", "description"] },
           { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
         ],
-        order: [["complaint_date", "DESC"]],
+        order: [["date_received", "DESC"], ["complaint_date", "DESC"], ["created_at", "DESC"]],
       });
       res.json({ success: true, data: rows });
+    } catch (err) { next(err); }
+  },
+
+  getComplaint: async (req, res, next) => {
+    try {
+      const row = await ServicomComplaint.findByPk(req.params.id, {
+        include: [
+          { model: StateOffice, as: "state", attributes: ["id", "description"] },
+          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
+        ],
+      });
+      if (!row) return res.status(404).json({ success: false, message: "Complaint not found" });
+      res.json({ success: true, data: row });
     } catch (err) { next(err); }
   },
 
   createComplaint: async (req, res, next) => {
     const t = await sequelize.transaction();
     try {
-      const complaint_number = await genRefId(ServicomComplaint, "CMP", t);
+      let complaint_number = String(req.body.complaint_number || "").trim();
+      if (complaint_number) {
+        const existing = await ServicomComplaint.findOne({ where: { complaint_number }, transaction: t });
+        if (existing) {
+          await t.rollback();
+          return res.status(400).json({ success: false, message: "Complaint ID already exists" });
+        }
+      } else {
+        complaint_number = await genRefId(ServicomComplaint, "CMP", t);
+      }
+      const metrics = computeComplaintMetrics(req.body);
       const row = await ServicomComplaint.create({
         complaint_number,
-        ...req.body,
+        ...pickComplaintFields(req.body),
+        ...enrichComplaintCodes(req.body),
+        ...metrics,
+        zone_id: req.body.zone_id ?? req.user?.zone_id ?? null,
+        state_id: req.body.state_id ?? req.user?.state_id ?? null,
+        reporting_year: req.body.reporting_year ?? new Date().getFullYear(),
+        escalated: !!req.body.escalated,
         created_by: req.user?.name || null,
       }, { transaction: t });
       await logAudit("servicom_complaint", row.id, "created", req.user?.name, null, t);
@@ -288,7 +383,14 @@ module.exports = {
     try {
       const row = await ServicomComplaint.findByPk(req.params.id);
       if (!row) return res.status(404).json({ success: false, message: "Complaint not found" });
-      await row.update(req.body);
+      const merged = { ...row.toJSON(), ...req.body };
+      const metrics = computeComplaintMetrics(merged);
+      await row.update({
+        ...pickComplaintFields(req.body),
+        ...enrichComplaintCodes(merged),
+        ...metrics,
+        escalated: req.body.escalated !== undefined ? !!req.body.escalated : row.escalated,
+      });
       await logAudit("servicom_complaint", row.id, "updated", req.user?.name, req.body);
       res.json({ success: true, data: row });
     } catch (err) { next(err); }
@@ -296,97 +398,119 @@ module.exports = {
 
   dashboard: async (req, res, next) => {
     try {
-      const where = await buildServicomListWhere(req.user, req.query);
-      const visits = await MonitoringVisit.findAll({
-        where,
-        include: [
-          { model: StateOffice, as: "state", attributes: ["id", "description"] },
-          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
-          { model: ServicomKpiRecord, as: "kpi" },
-        ],
-      });
+      const geoWhere = {};
+      if (req.query.state_id) geoWhere.state_id = req.query.state_id;
+      if (req.query.zone_id) geoWhere.zone_id = req.query.zone_id;
 
-      const total = visits.length;
-      const approved = visits.filter((v) => v.status === "approved").length;
-      const compliant = visits.filter((v) =>
-        v.compliance_rating === "fully_compliant" || v.compliance_rating === "substantially_compliant",
-      ).length;
-      const national_compliance_rate = total
-        ? Math.round((compliant / total) * 1000) / 10
-        : 0;
+      const [satisfactionSurveys, commentCards, complaints] = await Promise.all([
+        ServicomSatisfactionSurvey.findAll({ where: geoWhere }),
+        ServicomCommentCard.findAll({ where: geoWhere }),
+        ServicomComplaint.findAll({ where: geoWhere }),
+      ]);
 
-      const stateMap = {};
-      const zoneMap = {};
-      for (const v of visits) {
-        const sid = v.state_id;
-        const zid = v.zone_id;
-        if (sid) {
-          if (!stateMap[sid]) stateMap[sid] = { state_id: sid, state: v.state?.description, total: 0, scoreSum: 0, count: 0 };
-          stateMap[sid].total += 1;
-          if (v.percentage_score != null) { stateMap[sid].scoreSum += Number(v.percentage_score); stateMap[sid].count += 1; }
-        }
-        if (zid) {
-          if (!zoneMap[zid]) zoneMap[zid] = { zone_id: zid, zone: v.zone?.description, total: 0, scoreSum: 0, count: 0 };
-          zoneMap[zid].total += 1;
-          if (v.percentage_score != null) { zoneMap[zid].scoreSum += Number(v.percentage_score); zoneMap[zid].count += 1; }
-        }
-      }
+      const surveyPctScores = satisfactionSurveys
+        .map((s) => Number(s.percentage_score))
+        .filter((n) => !Number.isNaN(n));
+      const commentAvgScores = commentCards
+        .map((c) => Number(c.average_score))
+        .filter((n) => !Number.isNaN(n));
 
-      const state_rankings = Object.values(stateMap)
-        .map((s) => ({ ...s, avg_score: s.count ? Math.round((s.scoreSum / s.count) * 10) / 10 : 0 }))
-        .sort((a, b) => b.avg_score - a.avg_score);
-
-      const zone_rankings = Object.values(zoneMap)
-        .map((z) => ({ ...z, avg_score: z.count ? Math.round((z.scoreSum / z.count) * 10) / 10 : 0 }))
-        .sort((a, b) => b.avg_score - a.avg_score);
-
-      const complaints = await ServicomComplaint.findAll({ where: req.query.state_id ? { state_id: req.query.state_id } : {} });
-      const complaints_received = complaints.length;
-      const complaints_resolved = complaints.filter((c) => ["resolved", "closed"].includes(c.status)).length;
-      const complaint_resolution_rate = complaints_received
-        ? Math.round((complaints_resolved / complaints_received) * 1000) / 10
-        : 0;
-
-      const satisfactionScores = visits
-        .map((v) => v.kpi?.beneficiary_satisfaction_rate)
-        .filter((n) => n != null)
-        .map(Number);
-      const avg_satisfaction = satisfactionScores.length
-        ? Math.round(satisfactionScores.reduce((a, b) => a + b, 0) / satisfactionScores.length * 10) / 10
+      const avg_satisfaction = surveyPctScores.length
+        ? Math.round(surveyPctScores.reduce((a, b) => a + b, 0) / surveyPctScores.length * 10) / 10
+        : null;
+      const avg_comment_card_score = commentAvgScores.length
+        ? Math.round(commentAvgScores.reduce((a, b) => a + b, 0) / commentAvgScores.length * 100) / 100
         : null;
 
-      const monthlyMap = {};
-      for (const v of visits) {
-        const m = v.visit_date ? String(v.visit_date).slice(0, 7) : "unknown";
-        monthlyMap[m] = (monthlyMap[m] || 0) + 1;
-      }
-      const monthly_assessments = Object.entries(monthlyMap)
-        .map(([month, count]) => ({ month, count }))
-        .sort((a, b) => a.month.localeCompare(b.month));
+      const complaints_received = complaints.length;
+      const complaints_closed = complaints.filter((c) =>
+        ["Closed", "Resolved", "closed", "resolved"].includes(c.status) || c.date_closed,
+      ).length;
+      const complaint_resolution_rate = complaints_received
+        ? Math.round((complaints_closed / complaints_received) * 1000) / 10
+        : 0;
 
-      const rating_distribution = ["fully_compliant", "substantially_compliant", "partially_compliant", "non_compliant"]
-        .map((rating) => ({
-          rating,
-          count: visits.filter((v) => v.compliance_rating === rating).length,
-        }));
+      const slaTracked = complaints.filter((c) => c.resolution_within_sla != null);
+      const sla_compliance_rate = slaTracked.length
+        ? Math.round((slaTracked.filter((c) => c.resolution_within_sla).length / slaTracked.length) * 1000) / 10
+        : null;
+
+      const monthKey = (dateStr) => (dateStr ? String(dateStr).slice(0, 7) : null);
+      const monthlyMap = {};
+      const bump = (key, field) => {
+        if (!key) return;
+        if (!monthlyMap[key]) monthlyMap[key] = { month: key, surveys: 0, comment_cards: 0, complaints: 0 };
+        monthlyMap[key][field] += 1;
+      };
+      satisfactionSurveys.forEach((s) => bump(monthKey(s.survey_date), "surveys"));
+      commentCards.forEach((c) => bump(monthKey(c.card_date), "comment_cards"));
+      complaints.forEach((c) => bump(monthKey(c.date_received || c.complaint_date), "complaints"));
+      const monthly_activity = Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month));
+
+      const complaint_by_status = Object.entries(
+        complaints.reduce((acc, c) => {
+          const k = c.status || "Unknown";
+          acc[k] = (acc[k] || 0) + 1;
+          return acc;
+        }, {}),
+      ).map(([status, count]) => ({ status, count }));
+
+      const complaint_by_category = Object.entries(
+        complaints.reduce((acc, c) => {
+          const k = c.complaint_category || c.category || "Uncategorised";
+          acc[k] = (acc[k] || 0) + 1;
+          return acc;
+        }, {}),
+      ).map(([category, count]) => ({ category, count }));
+
+      const complaint_by_domain = Object.entries(
+        complaints.reduce((acc, c) => {
+          const k = c.complaint_domain || "Unknown";
+          acc[k] = (acc[k] || 0) + 1;
+          return acc;
+        }, {}),
+      ).map(([domain, count]) => ({ domain, count }));
+
+      const complaint_by_priority = Object.entries(
+        complaints.reduce((acc, c) => {
+          const k = c.priority_rating || "Unrated";
+          acc[k] = (acc[k] || 0) + 1;
+          return acc;
+        }, {}),
+      ).map(([priority, count]) => ({ priority, count }));
+
+      const stateMap = {};
+      for (const s of satisfactionSurveys) {
+        if (!s.state_id) continue;
+        if (!stateMap[s.state_id]) stateMap[s.state_id] = { state_id: s.state_id, surveys: 0, scoreSum: 0, count: 0 };
+        stateMap[s.state_id].surveys += 1;
+        if (s.percentage_score != null) {
+          stateMap[s.state_id].scoreSum += Number(s.percentage_score);
+          stateMap[s.state_id].count += 1;
+        }
+      }
+      const state_satisfaction_rankings = Object.values(stateMap)
+        .map((s) => ({ ...s, avg_score: s.count ? Math.round((s.scoreSum / s.count) * 10) / 10 : 0 }))
+        .sort((a, b) => b.avg_score - a.avg_score);
 
       res.json({
         success: true,
         data: {
-          total_assessments: total,
-          approved_assessments: approved,
-          national_compliance_rate,
-          complaint_resolution_rate,
+          satisfaction_surveys: satisfactionSurveys.length,
+          comment_cards: commentCards.length,
+          complaints_received,
           avg_satisfaction,
-          state_rankings,
-          zone_rankings,
-          top_states: state_rankings.slice(0, 5),
-          low_states: [...state_rankings].reverse().slice(0, 5),
-          monthly_assessments,
-          rating_distribution,
-          complaint_categories: Object.entries(
-            complaints.reduce((acc, c) => { acc[c.category] = (acc[c.category] || 0) + 1; return acc; }, {}),
-          ).map(([category, count]) => ({ category, count })),
+          avg_comment_card_score,
+          complaint_resolution_rate,
+          sla_compliance_rate,
+          monthly_activity,
+          complaint_by_status,
+          complaint_by_category,
+          complaint_by_domain,
+          complaint_by_priority,
+          state_satisfaction_rankings,
+          top_states: state_satisfaction_rankings.slice(0, 5),
+          low_states: [...state_satisfaction_rankings].reverse().slice(0, 5),
         },
       });
     } catch (err) { next(err); }
@@ -406,6 +530,172 @@ module.exports = {
         order: [["name", "ASC"]],
       });
       res.json({ success: true, data: rows });
+    } catch (err) { next(err); }
+  },
+
+  listSatisfactionSurveys: async (req, res, next) => {
+    try {
+      const where = {};
+      if (req.query.state_id) where.state_id = req.query.state_id;
+      if (req.query.zone_id) where.zone_id = req.query.zone_id;
+      const rows = await ServicomSatisfactionSurvey.findAll({
+        where,
+        include: [
+          { model: StateOffice, as: "state", attributes: ["id", "description"] },
+          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
+        ],
+        order: [["survey_date", "DESC"], ["created_at", "DESC"]],
+      });
+      res.json({ success: true, data: rows });
+    } catch (err) { next(err); }
+  },
+
+  getSatisfactionSurvey: async (req, res, next) => {
+    try {
+      const row = await ServicomSatisfactionSurvey.findByPk(req.params.id, {
+        include: [
+          { model: StateOffice, as: "state", attributes: ["id", "description"] },
+          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
+        ],
+      });
+      if (!row) return res.status(404).json({ success: false, message: "Survey not found" });
+      res.json({ success: true, data: row });
+    } catch (err) { next(err); }
+  },
+
+  createSatisfactionSurvey: async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+      const responses = normalizeSurveyResponses(req.body.responses, SATISFACTION_QUESTIONS);
+      const metrics = computeSatisfactionMetrics(responses);
+      let reference_id = String(req.body.reference_id || "").trim();
+      if (reference_id) {
+        const existing = await ServicomSatisfactionSurvey.findOne({ where: { reference_id }, transaction: t });
+        if (existing) {
+          await t.rollback();
+          return res.status(400).json({ success: false, message: "Survey ID already exists" });
+        }
+      } else {
+        reference_id = await genRefId(ServicomSatisfactionSurvey, "SAT", t);
+      }
+      const row = await ServicomSatisfactionSurvey.create({
+        reference_id,
+        zone_id: req.body.zone_id ?? req.user?.zone_id ?? null,
+        state_id: req.body.state_id ?? req.user?.state_id ?? null,
+        provider_name: req.body.provider_name,
+        survey_date: req.body.survey_date,
+        survey_officers: req.body.survey_officers ?? null,
+        team: req.body.team ?? null,
+        responses,
+        ...metrics,
+        created_by: req.user?.name || null,
+      }, { transaction: t });
+      await logAudit("servicom_satisfaction_survey", row.id, "created", req.user?.name, null, t);
+      await t.commit();
+      res.status(201).json({ success: true, data: row });
+    } catch (err) { await t.rollback(); next(err); }
+  },
+
+  updateSatisfactionSurvey: async (req, res, next) => {
+    try {
+      const row = await ServicomSatisfactionSurvey.findByPk(req.params.id);
+      if (!row) return res.status(404).json({ success: false, message: "Survey not found" });
+      const responses = normalizeSurveyResponses(req.body.responses ?? row.responses, SATISFACTION_QUESTIONS);
+      const metrics = computeSatisfactionMetrics(responses);
+      await row.update({
+        zone_id: req.body.zone_id ?? row.zone_id,
+        state_id: req.body.state_id ?? row.state_id,
+        provider_name: req.body.provider_name ?? row.provider_name,
+        survey_date: req.body.survey_date ?? row.survey_date,
+        survey_officers: req.body.survey_officers ?? row.survey_officers,
+        team: req.body.team ?? row.team,
+        responses,
+        ...metrics,
+      });
+      await logAudit("servicom_satisfaction_survey", row.id, "updated", req.user?.name, req.body);
+      res.json({ success: true, data: row });
+    } catch (err) { next(err); }
+  },
+
+  listCommentCards: async (req, res, next) => {
+    try {
+      const where = {};
+      if (req.query.state_id) where.state_id = req.query.state_id;
+      if (req.query.zone_id) where.zone_id = req.query.zone_id;
+      const rows = await ServicomCommentCard.findAll({
+        where,
+        include: [
+          { model: StateOffice, as: "state", attributes: ["id", "description"] },
+          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
+        ],
+        order: [["card_date", "DESC"], ["created_at", "DESC"]],
+      });
+      res.json({ success: true, data: rows });
+    } catch (err) { next(err); }
+  },
+
+  getCommentCard: async (req, res, next) => {
+    try {
+      const row = await ServicomCommentCard.findByPk(req.params.id, {
+        include: [
+          { model: StateOffice, as: "state", attributes: ["id", "description"] },
+          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
+        ],
+      });
+      if (!row) return res.status(404).json({ success: false, message: "Comment card not found" });
+      res.json({ success: true, data: row });
+    } catch (err) { next(err); }
+  },
+
+  createCommentCard: async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+      const responses = normalizeCommentResponses(req.body.responses, COMMENT_CARD_QUESTIONS);
+      const metrics = computeCommentCardMetrics(responses);
+      let reference_id = String(req.body.reference_id || "").trim();
+      if (reference_id) {
+        const existing = await ServicomCommentCard.findOne({ where: { reference_id }, transaction: t });
+        if (existing) {
+          await t.rollback();
+          return res.status(400).json({ success: false, message: "Response ID already exists" });
+        }
+      } else {
+        reference_id = await genRefId(ServicomCommentCard, "CCC", t);
+      }
+      const row = await ServicomCommentCard.create({
+        reference_id,
+        zone_id: req.body.zone_id ?? req.user?.zone_id ?? null,
+        state_id: req.body.state_id ?? req.user?.state_id ?? null,
+        respondent_name: req.body.respondent_name ?? null,
+        organisation: req.body.organisation ?? null,
+        card_date: req.body.card_date,
+        responses,
+        ...metrics,
+        created_by: req.user?.name || null,
+      }, { transaction: t });
+      await logAudit("servicom_comment_card", row.id, "created", req.user?.name, null, t);
+      await t.commit();
+      res.status(201).json({ success: true, data: row });
+    } catch (err) { await t.rollback(); next(err); }
+  },
+
+  updateCommentCard: async (req, res, next) => {
+    try {
+      const row = await ServicomCommentCard.findByPk(req.params.id);
+      if (!row) return res.status(404).json({ success: false, message: "Comment card not found" });
+      const responses = normalizeCommentResponses(req.body.responses ?? row.responses, COMMENT_CARD_QUESTIONS);
+      const metrics = computeCommentCardMetrics(responses);
+      await row.update({
+        zone_id: req.body.zone_id ?? row.zone_id,
+        state_id: req.body.state_id ?? row.state_id,
+        respondent_name: req.body.respondent_name ?? row.respondent_name,
+        organisation: req.body.organisation ?? row.organisation,
+        card_date: req.body.card_date ?? row.card_date,
+        responses,
+        ...metrics,
+      });
+      await logAudit("servicom_comment_card", row.id, "updated", req.user?.name, req.body);
+      res.json({ success: true, data: row });
     } catch (err) { next(err); }
   },
 };

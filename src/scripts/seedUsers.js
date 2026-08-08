@@ -99,9 +99,14 @@ const sdoAccess = [
       "Stock Verification",
       "Asset Register",
       "Dashboard",
-      "Monitoring Visits",
-      "Complaints",
+      "Complaints Management",
+      "Customer Satisfaction Survey",
+      "Charter Performance",
     ],
+  },
+  {
+    access_to: "SOC/Zones",
+    functionalities: ["Monitoring Visits"],
   },
   ...notifications,
 ];
