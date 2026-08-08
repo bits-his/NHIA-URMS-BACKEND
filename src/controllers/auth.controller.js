@@ -1,5 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { Op } = require("sequelize");
+const sequelize = require("../config/database");
 const { User, Role } = require("../models");
 const { JWT_SECRET } = require("../middleware/auth");
 
@@ -24,8 +26,19 @@ const login = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "staff_id and password required" });
     }
 
+    const identifier = String(staff_id).trim();
+    const normalized = identifier.toLowerCase();
+
     const user = await User.findOne({
-      where: { staff_id },
+      where: {
+        [Op.or]: [
+          sequelize.where(
+            sequelize.fn("LOWER", sequelize.col("staff_id")),
+            normalized
+          ),
+          { email: normalized },
+        ],
+      },
       include: [
         { association: "zone",       attributes: ["id", "zonal_code", "description"] },
         { association: "state",      attributes: ["id", "code", "description"] },

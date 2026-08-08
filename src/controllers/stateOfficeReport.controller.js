@@ -153,6 +153,8 @@ const {
   IgrReport, IgrReportLine,
   SshiaFinancialReport, SshiaFinancialReportLine,
   ExpenditureProfileReport, ExpenditureProfileReportLine,
+  WeeklyActionableReport, WeeklyActionableReportLine,
+  ContractedServicesReport, ContractedServicesReportLine,
 } = require("../models");
 
 const enrolment = makeReportController(
@@ -406,10 +408,187 @@ const expenditureProfile = makeReportController(
   })
 );
 
+// ── Weekly Actionable ─────────────────────────────────────────────────────────
+// Custom controller: stores reporting_week on the header record
+const makeWeeklyActionableController = () => {
+  const refPrefix = "WKA";
+
+  const generateRefId = async (t) => {
+    const year = new Date().getFullYear();
+    const count = await WeeklyActionableReport.count({ transaction: t });
+    return `${refPrefix}-${year}-${String(count + 1).padStart(5, "0")}`;
+  };
+
+  const findReport = (id) =>
+    WeeklyActionableReport.findByPk(id, {
+      include: [
+        { model: ZonalOffice, as: "zone",  attributes: ["id", "description"] },
+        { model: StateOffice, as: "state", attributes: ["id", "description"] },
+        { model: WeeklyActionableReportLine, as: "lines" },
+      ],
+    });
+
+  const createReport = async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+      const scoped = await applyScopeToBody(req.user, req.body);
+      const {
+        zone_id, state_id, reporting_year, reporting_month,
+        reporting_week = 1, submission_date, submitted_by,
+        status = "draft", lines = [],
+      } = scoped;
+
+      const reference_id = await generateRefId(t);
+
+      const report = await WeeklyActionableReport.create({
+        reference_id, zone_id, state_id,
+        reporting_year, reporting_month,
+        reporting_week: Number(reporting_week) || 1,
+        submission_date, submitted_by, status,
+      }, { transaction: t });
+
+      if (lines.length > 0) {
+        const rows = lines.map((line) => ({
+          report_id:       report.id,
+          issue_request:   line.issue_request,
+          category:        line.category,
+          impact:          line.impact,
+          urgency:         line.urgency,
+          user_department: line.user_department,
+          priority_level:  line.priority_level || null,
+          status:          line.status,
+        }));
+        await WeeklyActionableReportLine.bulkCreate(rows, { transaction: t });
+      }
+
+      await t.commit();
+      const full = await findReport(report.id);
+      res.status(201).json({ success: true, data: full });
+    } catch (err) {
+      await t.rollback();
+      next(err);
+    }
+  };
+
+  const listReports = async (req, res, next) => {
+    try {
+      const where = await buildStateOfficeListWhere(req.user, req.query);
+      const list = await WeeklyActionableReport.findAll({
+        where,
+        include: [
+          { model: ZonalOffice, as: "zone",  attributes: ["id", "description"] },
+          { model: StateOffice, as: "state", attributes: ["id", "description"] },
+          { model: WeeklyActionableReportLine, as: "lines" },
+        ],
+        order: [["created_at", "DESC"]],
+      });
+      res.json({ success: true, data: list });
+    } catch (err) { next(err); }
+  };
+
+  const getReport = async (req, res, next) => {
+    try {
+      const report = await findReport(req.params.id);
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
+      res.json({ success: true, data: report });
+    } catch (err) { next(err); }
+  };
+
+  const updateReport = async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+      const report = await WeeklyActionableReport.findByPk(req.params.id, { transaction: t });
+      if (!report) {
+        await t.rollback();
+        return res.status(404).json({ success: false, message: "Not found" });
+      }
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        await t.rollback();
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
+
+      const scoped = await applyScopeToBody(req.user, req.body);
+      const {
+        zone_id, state_id, reporting_year, reporting_month,
+        reporting_week = report.reporting_week,
+        submission_date, submitted_by, status, lines = [],
+      } = scoped;
+
+      await report.update({
+        zone_id, state_id, reporting_year, reporting_month,
+        reporting_week: Number(reporting_week) || 1,
+        submission_date, submitted_by,
+        ...(status && { status }),
+      }, { transaction: t });
+
+      await WeeklyActionableReportLine.destroy({ where: { report_id: report.id }, transaction: t });
+
+      if (lines.length > 0) {
+        const rows = lines.map((line) => ({
+          report_id:       report.id,
+          issue_request:   line.issue_request,
+          category:        line.category,
+          impact:          line.impact,
+          urgency:         line.urgency,
+          user_department: line.user_department,
+          priority_level:  line.priority_level || null,
+          status:          line.status,
+        }));
+        await WeeklyActionableReportLine.bulkCreate(rows, { transaction: t });
+      }
+
+      await t.commit();
+      const full = await findReport(report.id);
+      res.json({ success: true, data: full });
+    } catch (err) {
+      await t.rollback();
+      next(err);
+    }
+  };
+
+  const updateStatus = async (req, res, next) => {
+    try {
+      const allowed = ["draft", "submitted", "approved"];
+      const { status } = req.body;
+      if (!allowed.includes(status)) {
+        return res.status(422).json({ success: false, message: "Invalid status" });
+      }
+      const report = await WeeklyActionableReport.findByPk(req.params.id);
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
+      await report.update({ status });
+      res.json({ success: true, data: report });
+    } catch (err) { next(err); }
+  };
+
+  return { createReport, listReports, getReport, updateReport, updateStatus };
+};
+
+const weeklyActionable = makeWeeklyActionableController();
+
+// ── Contracted Services ───────────────────────────────────────────────────────
+const contractedServices = makeReportController(
+  ContractedServicesReport, ContractedServicesReportLine, "CSR",
+  (line, reportId) => ({
+    report_id:   reportId,
+    service:     line.service,
+    month:       Number(line.month) || 1,
+    beneficiary: line.beneficiary,
+    amount:      Number(line.amount) || 0,
+  })
+);
+
 const complaints = require("./complaintsCompliance.controller");
 
 module.exports = {
   enrolment, migration, cemonc,
   accreditation, stakeholder, hmoSelection, challenges,
   complaints, igr, sshiaFinancial, expenditureProfile,
+  weeklyActionable, contractedServices,
 };
