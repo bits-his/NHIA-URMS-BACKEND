@@ -5,7 +5,8 @@ const { authenticate } = require("../middleware/auth");
 const { requireStateOfficeRoute } = require("../middleware/stateOfficeAccess");
 const {
   enrolment, migration, cemonc,
-  accreditation, stakeholder, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile
+  accreditation, stakeholder, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile,
+  weeklyActionable, contractedServices,
 } = require("../controllers/stateOfficeReport.controller");
 const enrolleeComplaints = require("../controllers/stateOfficeComplaint.controller");
 const complianceVisits = require("../controllers/stateOfficeComplianceVisit.controller");
@@ -45,6 +46,8 @@ mount("challenges", challenges);
 mount("igr", igr);
 mount("sshia-financial", sshiaFinancial);
 mount("expenditure-profile", expenditureProfile);
+mount("weekly-actionable", weeklyActionable);
+mount("contracted-services", contractedServices);
 
 router.get("/enrollee-complaints/summary", enrolleeComplaints.getSummary);
 router.get("/enrollee-complaints", enrolleeComplaints.listComplaints);

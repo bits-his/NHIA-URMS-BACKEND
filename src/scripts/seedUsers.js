@@ -58,18 +58,27 @@ const programmesMonthly = [{
 
 const sqaMonthly = [{
   access_to: "Standards & Quality Assurance",
-  functionalities: ["Monthly Report"],
+  functionalities: ["Monthly Report", "Compliance Management"],
 }];
 
 const stateOfficeAccess = [{
-  access_to: "State Offices",
+  access_to: "SOC/Zones",
   functionalities: [
     "Enrolment",
     "Migration / Update Requests",
     "CEmONC & FFP Beneficiaries",
+    "Enrollee Complaints",
+    "Compliance Monitoring",
+    "Reconciliation Meetings",
+    "Accreditation / Reaccreditation",
+    "Stakeholder Engagement",
+    "HMO Selection Process",
+    "Challenges & Recommendations",
     "IGR",
     "SSHIA Financial Report",
     "Expenditure Profile",
+    "Weekly Actionable",
+    "Contracted Services",
   ],
 }];
 
