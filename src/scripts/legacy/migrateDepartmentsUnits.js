@@ -3,10 +3,10 @@
  * Run: node src/scripts/migrateDepartmentsUnits.js
  */
 require("dotenv").config();
-const sequelize = require("../config/database");
-require("../models/index");
-const Department = require("../models/Department");
-const Unit = require("../models/Unit");
+const sequelize = require("../../config/database");
+require("../../models/index");
+const Department = require("../../models/Department");
+const Unit = require("../../models/Unit");
 
 const DEPARTMENTS = [
   {

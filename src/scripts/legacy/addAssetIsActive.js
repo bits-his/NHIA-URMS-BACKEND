@@ -3,7 +3,7 @@
  * Run: npm run db:migrate-asset-is-active
  */
 require("dotenv").config();
-const sequelize = require("../config/database");
+const sequelize = require("../../config/database");
 
 (async () => {
   try {

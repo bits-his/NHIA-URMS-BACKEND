@@ -6,17 +6,17 @@
  */
 
 require("dotenv").config();
-const sequelize = require("../config/database");
+const sequelize = require("../../config/database");
 
 // Register models & associations so Sequelize knows the table shapes
-require("../models/index");
+require("../../models/index");
 
 const {
   WeeklyActionableReport,
   WeeklyActionableReportLine,
   ContractedServicesReport,
   ContractedServicesReportLine,
-} = require("../models");
+} = require("../../models");
 
 (async () => {
   try {

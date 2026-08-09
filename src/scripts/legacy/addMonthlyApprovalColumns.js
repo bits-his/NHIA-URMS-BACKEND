@@ -3,7 +3,7 @@
  * Run: node src/scripts/addMonthlyApprovalColumns.js
  */
 require("dotenv").config();
-const sequelize = require("../config/database");
+const sequelize = require("../../config/database");
 
 const TABLES = [
   "finance_monthly_reports",

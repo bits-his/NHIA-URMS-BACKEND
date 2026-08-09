@@ -4,8 +4,8 @@
  * Run: npm run db:migrate-igr-privileges
  */
 require("dotenv").config();
-const sequelize = require("../config/database");
-const { User } = require("../models/User");
+const sequelize = require("../../config/database");
+const { User } = require("../../models/User");
 
 const STATE_OFFICE_MODULE = "State Offices";
 const ALL_STATE_OFFICE_FUNCS = [

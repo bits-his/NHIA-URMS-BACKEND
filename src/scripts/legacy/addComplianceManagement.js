@@ -3,15 +3,15 @@
  * Run: npm run db:migrate-compliance
  */
 require("dotenv").config();
-const sequelize = require("../config/database");
-require("../models/index");
+const sequelize = require("../../config/database");
+require("../../models/index");
 
 const {
   ComplianceReport,
   ComplianceFinding,
   ComplianceViolation,
   ComplianceEnforcementAction,
-} = require("../models");
+} = require("../../models");
 
 (async () => {
   try {
