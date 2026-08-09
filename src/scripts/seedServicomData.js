@@ -15,6 +15,7 @@ const {
   ServicomComplaint,
 } = require("../models");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
+const { anyExists, logSkip } = require("../utils/seedUtils");
 
 /** Seed state codes → DB description (works when DB uses SO-XX codes instead of LAG/KAN) */
 const STATE_LABELS = {
@@ -556,6 +557,11 @@ async function seedComplaint(c, facilityMap) {
   try {
     await sequelize.authenticate();
     console.log("✅  DB connected");
+
+    if (await anyExists(MonitoringVisit, { reference_id: "MV-2026-00001" })) {
+      logSkip("SERVICOM sample data (monitoring visits)");
+      process.exit(0);
+    }
 
     const states = await StateOffice.findAll();
     if (!states.length) {

@@ -24,17 +24,27 @@ npm run db:sync
 
 ## Seed data (run in this order on a fresh database)
 
+All JS seed scripts are **idempotent** — they skip records already in the database and do not reset passwords.
+
 ```bash
 npm run db:migrate-monthly
 npm run db:migrate-roles
 npm run db:migrate-depts
 npm run db:migrate-participating-institutions
-npm run db:seed-zones-states    # 6 zones + 37 states (required before users)
-npm run db:seed-depts             # departments & units (optional, links officers to depts)
-npm run db:seed-users             # SDO, zonal coordinators, state users (password: Nhia@2025)
+npm run db:seed-all              # runs zones, depts, users, servicom, state office (skips if present)
 ```
 
-Alternatively import `seed_data.sql` if you have monthly report history from Excel.
+Or step-by-step:
+
+```bash
+npm run db:seed-zones-states    # 6 zones + 37 states (required before users)
+npm run db:seed-depts             # departments & units
+npm run db:seed-users             # SDO, zonal coordinators, state users (password: 123456 for new users)
+```
+
+**Do not** import `sql/seed_data.sql` on a database that already has JS seed data — it TRUNCATES zones/states and creates duplicate legacy `SO-XX` state rows.
+
+Alternatively import `seed_data.sql` only on a **fresh** database if you need monthly report history from Excel.
 
 ## Run (development)
 

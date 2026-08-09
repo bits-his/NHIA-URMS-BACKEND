@@ -29,6 +29,7 @@ const {
   ComplianceVisitLine, ReconciliationLine,
 } = require("../models/ComplaintsComplianceLines");
 const { syncStateOfficeTables } = require("./stateOfficeTableSync");
+const { anyExists, logSkip } = require("../utils/seedUtils");
 
 const STATE_ID_TABLES = [
   "users",
@@ -523,6 +524,11 @@ async function seedStateMonths(geo, months, counts) {
     if (!(await StateOffice.count())) {
       console.error("❌  No states found. Run: npm run db:seed-zones-states");
       process.exit(1);
+    }
+
+    if (await anyExists(EnrolmentReport, { reference_id: "ENR-2026-OYO-01" })) {
+      logSkip("State Office sample reports");
+      process.exit(0);
     }
 
     console.log("📦  Ensuring State Office tables exist...");

@@ -5,11 +5,17 @@ require("../models/index");
 const { User } = require("../models/User");
 const Department = require("../models/Department");
 const Unit = require("../models/Unit");
+const { anyExists, logSkip } = require("../utils/seedUtils");
 
 (async () => {
   try {
     await sequelize.authenticate();
     console.log("✅  DB connected");
+
+    if (await anyExists(User, { staff_id: "DO-0001" })) {
+      logSkip("Department officer (DO-0001)");
+      process.exit(0);
+    }
 
     // Find Finance department
     const financeDept = await Department.findOne({ where: { department_code: "FIN" } });
@@ -23,8 +29,7 @@ const Unit = require("../models/Unit");
 
     const hashedPassword = await bcrypt.hash("password123", 10);
 
-    // Create department officer
-    const [deptOfficer, created] = await User.upsert({
+    await User.create({
       name: "Finance Department Officer",
       staff_id: "DO-0001",
       email: "do@nhia.gov.ng",
@@ -45,15 +50,11 @@ const Unit = require("../models/Unit");
       ]
     });
 
-    if (created) {
-      console.log("✅  Department Officer created:");
-      console.log(`   Staff ID: DO-0001`);
-      console.log(`   Password: password123`);
-      console.log(`   Department: ${financeDept.name}`);
-      console.log(`   Unit: ${revenueUnit?.name || "None"}`);
-    } else {
-      console.log("✅  Department Officer updated");
-    }
+    console.log("✅  Department Officer created:");
+    console.log(`   Staff ID: DO-0001`);
+    console.log(`   Password: password123`);
+    console.log(`   Department: ${financeDept.name}`);
+    console.log(`   Unit: ${revenueUnit?.name || "None"}`);
 
     process.exit(0);
   } catch (err) {

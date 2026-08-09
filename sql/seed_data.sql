@@ -1,5 +1,9 @@
 -- ============================================================
 -- NHIA URMS — Seed Data (2025)
+-- WARNING: This file TRUNCATES tables before insert — destructive.
+-- Prefer idempotent JS seeds on an existing database:
+--   npm run db:seed-all
+-- Do NOT run this SQL if you already seeded via seedZonesStates.js / seedUsers.js.
 -- Monthly reports generated from DGO Excel (quarter-end months Mar/Jun/Sep/Dec).
 -- Regenerate: python3 scripts/generate_seed_monthly_from_excel.py
 -- ============================================================

@@ -3,6 +3,7 @@ const sequelize  = require("../config/database");
 require("../models/index");
 const Department = require("../models/Department");
 const Unit       = require("../models/Unit");
+const { allExist, logSkip, logPartial } = require("../utils/seedUtils");
 
 // ─── NHIA Departments & Units ─────────────────────────────────────────────────
 const DEPARTMENTS = [
@@ -128,31 +129,47 @@ const DEPARTMENTS = [
     await sequelize.authenticate();
     console.log("✅  DB connected");
 
-    await sequelize.sync({ alter: true });
-    console.log("✅  Tables synced");
+    const deptCodes = DEPARTMENTS.map((d) => d.department_code);
+    const unitCodes = DEPARTMENTS.flatMap((d) => d.units.map((u) => u.unit_code));
+    const deptsReady = await allExist(Department, "department_code", deptCodes);
+    const unitsReady = await allExist(Unit, "unit_code", unitCodes);
 
-    let deptCount = 0;
-    let unitCount = 0;
+    if (deptsReady && unitsReady) {
+      logSkip("Departments & units");
+      process.exit(0);
+    }
+
+    let deptCreated = 0;
+    let deptSkipped = 0;
+    let unitCreated = 0;
+    let unitSkipped = 0;
 
     for (const dept of DEPARTMENTS) {
       const { units, ...deptData } = dept;
 
-      // Upsert department
-      const [deptRecord] = await Department.upsert(deptData);
-      const deptId = deptRecord.id;
-      deptCount++;
+      const [deptRecord, deptWasCreated] = await Department.findOrCreate({
+        where: { department_code: dept.department_code },
+        defaults: deptData,
+      });
+      if (deptWasCreated) deptCreated++;
+      else deptSkipped++;
 
-      // Upsert each unit
+      const deptId = deptRecord.id;
+
       for (const unit of units) {
-        await Unit.upsert({ ...unit, department_id: deptId });
-        unitCount++;
+        const [, unitWasCreated] = await Unit.findOrCreate({
+          where: { unit_code: unit.unit_code },
+          defaults: { ...unit, department_id: deptId },
+        });
+        if (unitWasCreated) unitCreated++;
+        else unitSkipped++;
       }
 
       console.log(`  ✔  ${dept.name} (${units.length} units)`);
     }
 
-    console.log(`\n✅  ${deptCount} departments seeded`);
-    console.log(`✅  ${unitCount} units seeded`);
+    logPartial("Departments", deptCreated, deptSkipped);
+    logPartial("Units", unitCreated, unitSkipped);
     console.log("\n🎉  Seed complete!");
     process.exit(0);
   } catch (err) {

@@ -60,6 +60,19 @@ function mapNested(reportId, { findings = [], violations = [], enforcement_actio
   };
 }
 
+function normalizeCategories(raw) {
+  if (Array.isArray(raw)) return raw.filter(Boolean).map(String);
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter(Boolean).map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function headerFields(body, defaults = {}) {
   const reportingWeek = Number(body.reporting_week) || defaults.reporting_week || isoWeekNow();
   const reportingYear = Number(body.reporting_year) || defaults.reporting_year || new Date().getFullYear();
@@ -82,7 +95,7 @@ function headerFields(body, defaults = {}) {
     ownership: body.ownership || null,
     facility_address: body.facility_address || null,
     complaints_received: Number(body.complaints_received) || 0,
-    complaint_categories: Array.isArray(body.complaint_categories) ? body.complaint_categories : [],
+    complaint_categories: normalizeCategories(body.complaint_categories),
     resolved_at_facility: Number(body.resolved_at_facility) || 0,
     escalated_to: body.escalated_to || "none",
     complaint_summary: body.complaint_summary || null,
@@ -94,6 +107,13 @@ function headerFields(body, defaults = {}) {
 
 const findReport = (id) => ComplianceReport.findByPk(id, { include: includeAll });
 
+function serializeReport(report) {
+  if (!report) return report;
+  const plain = report.toJSON ? report.toJSON() : { ...report };
+  plain.complaint_categories = normalizeCategories(plain.complaint_categories);
+  return plain;
+}
+
 const listReports = async (req, res, next) => {
   try {
     const where = await buildStateOfficeListWhere(req.user, req.query);
@@ -102,7 +122,7 @@ const listReports = async (req, res, next) => {
       include: includeAll,
       order: [["created_at", "DESC"]],
     });
-    res.json({ success: true, data: list });
+    res.json({ success: true, data: list.map(serializeReport) });
   } catch (err) { next(err); }
 };
 
@@ -116,7 +136,7 @@ const getReport = async (req, res, next) => {
     if (!access.ok) {
       return res.status(access.status).json({ success: false, message: access.message });
     }
-    res.json({ success: true, data: report });
+    res.json({ success: true, data: serializeReport(report) });
   } catch (err) { next(err); }
 };
 
@@ -146,7 +166,7 @@ const createReport = async (req, res, next) => {
     }
 
     await t.commit();
-    res.status(201).json({ success: true, data: await findReport(report.id) });
+    res.status(201).json({ success: true, data: serializeReport(await findReport(report.id)) });
   } catch (err) {
     await t.rollback();
     next(err);
@@ -186,7 +206,7 @@ const updateReport = async (req, res, next) => {
     }
 
     await t.commit();
-    res.json({ success: true, data: await findReport(report.id) });
+    res.json({ success: true, data: serializeReport(await findReport(report.id)) });
   } catch (err) {
     await t.rollback();
     next(err);

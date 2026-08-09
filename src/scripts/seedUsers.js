@@ -19,6 +19,7 @@
  */
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
+const { Op } = require("sequelize");
 const sequelize = require("../config/database");
 require("../models/index");
 const { User } = require("../models/User");
@@ -27,6 +28,7 @@ const StateOffice = require("../models/StateOffice");
 const Department = require("../models/Department");
 const Unit = require("../models/Unit");
 const { seedDefaultRoles } = require("../utils/roleService");
+const { logSkip, logPartial } = require("../utils/seedUtils");
 
 const LEGACY_STAFF_IDS = [
   "SC-LAGOS", "DO-FIN-LAGOS", "DO-PROG-LAGOS", "DO-SQA-LAGOS",
@@ -142,8 +144,14 @@ async function removeLegacyPilotUsers() {
 }
 
 async function upsertUser(spec) {
+  const existing = await User.findOne({ where: { staff_id: spec.staff_id } });
+  if (existing) {
+    return { user: existing, created: false, skipped: true };
+  }
+
   const hashed = await bcrypt.hash(spec.password || DEMO_PASSWORD, 12);
-  const payload = {
+  const user = await User.create({
+    staff_id: spec.staff_id,
     name: spec.name,
     email: spec.email,
     password: hashed,
@@ -154,16 +162,8 @@ async function upsertUser(spec) {
     unit_id: spec.unit_id ?? null,
     is_active: true,
     functionalities: spec.functionalities,
-  };
-
-  const existing = await User.findOne({ where: { staff_id: spec.staff_id } });
-  if (existing) {
-    await existing.update(payload);
-    return { user: existing, created: false };
-  }
-
-  const user = await User.create({ staff_id: spec.staff_id, ...payload });
-  return { user, created: true };
+  });
+  return { user, created: true, skipped: false };
 }
 
 // ─── User definitions ────────────────────────────────────────────────────────
@@ -295,8 +295,17 @@ async function buildUserSpecs(deptMap, unitMap) {
     const unitMap = Object.fromEntries(units.map((u) => [u.unit_code, u.id]));
 
     const specs = await buildUserSpecs(deptMap, unitMap);
+    const staffIds = specs.map((s) => s.staff_id);
+    const existingCount = await User.count({ where: { staff_id: { [Op.in]: staffIds } } });
+
+    if (existingCount >= specs.length) {
+      logSkip(`Demo users (${existingCount}/${specs.length} staff IDs present)`);
+      console.log(`🔑  Existing users kept unchanged (password not reset)`);
+      process.exit(0);
+    }
+
     let created = 0;
-    let updated = 0;
+    let skipped = 0;
 
     const nationalAndZonal = specs.filter((s) => !s.state_id);
     const stateUsers = specs.filter((s) => s.state_id);
@@ -308,9 +317,9 @@ async function buildUserSpecs(deptMap, unitMap) {
     console.log("-".repeat(90));
 
     for (const spec of nationalAndZonal) {
-      const { created: isNew } = await upsertUser(spec);
+      const { created: isNew, skipped: wasSkipped } = await upsertUser(spec);
       if (isNew) created++;
-      else updated++;
+      else if (wasSkipped) skipped++;
 
       let location = "National";
       if (spec.zone_id) {
@@ -337,9 +346,9 @@ async function buildUserSpecs(deptMap, unitMap) {
 
     for (const [, { label, users }] of byState) {
       for (const spec of users) {
-        const { created: isNew } = await upsertUser(spec);
+        const { created: isNew, skipped: wasSkipped } = await upsertUser(spec);
         if (isNew) created++;
-        else updated++;
+        else if (wasSkipped) skipped++;
       }
 
       const sc = users.find((u) => u.role === "state-coordinator");
@@ -353,8 +362,8 @@ async function buildUserSpecs(deptMap, unitMap) {
     }
 
     console.log("\n" + "=".repeat(90));
-    console.log(`✅  Done — ${created} created, ${updated} updated (${specs.length} total users)`);
-    console.log(`🔑  Password for all seeded users: ${DEMO_PASSWORD}`);
+    logPartial("Demo users", created, skipped);
+    console.log(`🔑  Password for newly created users: ${DEMO_PASSWORD}`);
     console.log("\nHow to use:");
     console.log("  • DO-FIN-*     → Finance & Admin monthly report only");
     console.log("  • DO-PROG-*    → Programmes (enrolment + outreach) monthly only");

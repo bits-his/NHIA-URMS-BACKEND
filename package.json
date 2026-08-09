@@ -13,6 +13,7 @@
     "db:migrate-roles": "node src/scripts/migrateRoles.js",
     "db:migrate-depts": "node src/scripts/migrateDepartmentsUnits.js",
     "db:seed-users": "node src/scripts/seedUsers.js",
+    "db:seed-all": "node src/scripts/seedAll.js",
     "db:migrate-participating-institutions": "node src/scripts/addParticipatingInstitutions.js",
     "db:migrate-asset-is-active": "node src/scripts/addAssetIsActive.js",
     "db:migrate-igr": "node src/scripts/addIgrReports.js",
