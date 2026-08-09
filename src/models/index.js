@@ -57,6 +57,14 @@ const ComplianceReport            = require("./ComplianceReport");
 const ComplianceFinding           = require("./ComplianceFinding");
 const ComplianceViolation         = require("./ComplianceViolation");
 const ComplianceEnforcementAction = require("./ComplianceEnforcementAction");
+const StoreAsset                  = require("./StoreAsset");
+const StoreInventoryItem          = require("./StoreInventoryItem");
+const GoodsReceiptNote            = require("./GoodsReceiptNote");
+const StockIssueVoucher           = require("./StockIssueVoucher");
+const AssetTransfer               = require("./AssetTransfer");
+const SupplyVerification          = require("./SupplyVerification");
+const AssetMaintenance            = require("./AssetMaintenance");
+const AssetDisposal               = require("./AssetDisposal");
 
 const bindStateOfficeReport = (Model, alias) => {
   ZonalOffice.hasMany(Model, { foreignKey: "zone_id", as: `${alias}_zone` });
@@ -242,4 +250,5 @@ module.exports = {
   WeeklyActionableReport, WeeklyActionableReportLine,
   ContractedServicesReport, ContractedServicesReportLine,
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
+  StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, AssetMaintenance, AssetDisposal,
 };

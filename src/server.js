@@ -18,6 +18,7 @@ const servicomRoutes = require("./routes/servicom.routes");
 const stateOfficeRoutes = require("./routes/stateOffice.routes");
 const accreditedProvidersRoutes = require("./routes/accreditedProviders.routes");
 const complianceReportRoutes = require("./routes/complianceReport.routes");
+const storeManagementRoutes = require("./routes/storeManagementRoutes");
 const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -53,6 +54,7 @@ app.use("/api/servicom", servicomRoutes);
 app.use("/api/accredited-providers", accreditedProvidersRoutes);
 app.use("/api/state-office", stateOfficeRoutes);
 app.use("/api/sqa/compliance-reports", complianceReportRoutes);
+app.use("/api/store-management", storeManagementRoutes);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 
