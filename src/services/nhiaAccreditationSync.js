@@ -1,7 +1,7 @@
 const https = require("https");
 const { Op } = require("sequelize");
 const { NhiaAccreditedProvider } = require("../models");
-const { applyStateFilter } = require("../utils/nhiaStateFilter");
+const { applyStateFilter, applyStateAddressFallback } = require("../utils/nhiaStateFilter");
 
 const UA = "Mozilla/5.0 (compatible; NHIA-URMS/1.0)";
 const HCP_TABLE_ID = 1722;
@@ -192,9 +192,10 @@ const ensureSynced = async () => {
 
 const searchProviders = async ({ type, q, limit = 50, state_id }) => {
   const where = { provider_type: type };
-  await applyStateFilter(where, type, state_id);
+  const resolved = await applyStateFilter(where, type, state_id);
 
-  if (q && q.trim()) {
+  const applyTextFilter = (target) => {
+    if (!q?.trim()) return;
     const term = `%${q.trim()}%`;
     const textFilter = {
       [Op.or]: [
@@ -203,21 +204,37 @@ const searchProviders = async ({ type, q, limit = 50, state_id }) => {
         { address: { [Op.like]: term } },
       ],
     };
-    if (where[Op.and]) where[Op.and].push(textFilter);
-    else if (where.provider_code || where[Op.or]) {
-      const existing = { ...where };
-      Object.keys(where).forEach((k) => delete where[k]);
-      where[Op.and] = [existing, textFilter];
+    if (target[Op.and]) target[Op.and].push(textFilter);
+    else if (target.provider_code || target[Op.or]) {
+      const existing = { ...target };
+      Object.keys(target).forEach((k) => delete target[k]);
+      target[Op.and] = [existing, textFilter];
     } else {
-      Object.assign(where, textFilter);
+      Object.assign(target, textFilter);
     }
-  }
+  };
 
-  return NhiaAccreditedProvider.findAll({
+  applyTextFilter(where);
+
+  const queryLimit = Math.min(Number(limit) || 50, 200);
+  let rows = await NhiaAccreditedProvider.findAll({
     where,
     order: [["name", "ASC"]],
-    limit: Math.min(Number(limit) || 50, 200),
+    limit: queryLimit,
   });
+
+  if (state_id && type === "hcp" && rows.length === 0 && resolved) {
+    const fallbackWhere = { provider_type: "hcp" };
+    applyStateAddressFallback(fallbackWhere, resolved);
+    applyTextFilter(fallbackWhere);
+    rows = await NhiaAccreditedProvider.findAll({
+      where: fallbackWhere,
+      order: [["name", "ASC"]],
+      limit: queryLimit,
+    });
+  }
+
+  return rows;
 };
 
 module.exports = {

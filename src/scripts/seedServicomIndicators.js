@@ -4,7 +4,7 @@
 require("dotenv").config();
 const sequelize = require("../config/database");
 const ServicomAssessmentIndicator = require("../models/ServicomAssessmentIndicator");
-const { allExist, logSkip, logPartial } = require("../utils/seedUtils");
+const { logPartial } = require("../utils/seedUtils");
 
 const DEFAULT_INDICATORS = [
   { key: "servicom_charter",              label: "Availability of SERVICOM Charter",              sort_order: 1 },
@@ -27,12 +27,6 @@ const DEFAULT_INDICATORS = [
 (async () => {
   try {
     await sequelize.authenticate();
-
-    const keys = DEFAULT_INDICATORS.map((i) => i.key);
-    if (await allExist(ServicomAssessmentIndicator, "key", keys)) {
-      logSkip("SERVICOM indicators");
-      process.exit(0);
-    }
 
     let created = 0;
     let skipped = 0;

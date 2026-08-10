@@ -23,7 +23,7 @@ That is it. It creates all tables and loads everything you need to use the app.
 | `npm run db:setup` | **New database** — same as `db:seed-all` |
 | `npm run db:seed-all` | **Sync + migrations + seeds** — update schema and load all data |
 | `npm run db:sync` | **Schema only** — update tables to match models (no demo data) |
-| `npm run db:seed` | **Seeds only** — load reference + demo data after sync |
+| `npm run db:seed` | **Incremental seeds** — idempotent migrations + insert missing reference/demo rows |
 | `npm run db:fix-servicom-fks` | **Repair only** — clears bad state/zone IDs before sync on old data |
 
 You do **not** need individual `db:migrate-*` scripts on a fresh database — use `db:seed-all`.
@@ -32,7 +32,7 @@ You do **not** need individual `db:migrate-*` scripts on a fresh database — us
 
 ## What `db:seed-all` runs
 
-Runs in this order (each step skips if data already exists):
+Runs in this order. Each seed step **always runs** and uses `findOrCreate` (or equivalent) so only **missing** rows are inserted — existing data is never overwritten.
 
 | Phase | Script | What it does |
 |-------|--------|--------------|
@@ -48,6 +48,7 @@ Runs in this order (each step skips if data already exists):
 | Seed | `seedServicomIndicators.js` | SERVICOM assessment indicators |
 | Seed | `seedServicomData.js` | Sample facilities, visits, complaints |
 | Seed | `seedStateOfficeData.js` | Sample state office monthly reports |
+| Seed | `seedAccreditedProviders.js` | **HMO + HCF** — synced from [nhia.gov.ng](https://www.nhia.gov.ng) (~94 HMO, ~6500+ HCP) |
 
 ---
 
@@ -75,11 +76,13 @@ npm run db:fix-servicom-fks
 npm run db:sync
 ```
 
-To add demo data without touching schema:
+To add any missing demo/reference data (and idempotent privilege/table migrations) without a full schema sync:
 
 ```bash
 npm run db:seed
 ```
+
+Safe to run on production-like databases — only rows that are not already present are inserted.
 
 ---
 
@@ -91,10 +94,24 @@ Do **not** import `sql/seed_data.sql` on a database that already ran JS seeds �
 
 ---
 
-## Optional: accredited providers sync
+## Accredited HMO & HCF (nhia.gov.ng)
 
-Pulls HMO/HCP data from the external NHIA API (not part of normal setup):
+`db:seed` and `db:seed-all` pull the official NHIA lists:
+
+- HMO: https://www.nhia.gov.ng/hmo/
+- HCP: https://www.nhia.gov.ng/hcps/
+
+Requires outbound HTTPS (~30 seconds). Rows are upserted by `(provider_type, provider_code)`.
+
+To refresh only providers (force re-download):
 
 ```bash
-node src/scripts/syncAccreditedProviders.js
+npm run db:sync-accredited-providers -- --force
+```
+
+Offline / skip network fetch during seed:
+
+```bash
+set NHIA_SKIP_PROVIDER_SYNC=1
+npm run db:seed
 ```

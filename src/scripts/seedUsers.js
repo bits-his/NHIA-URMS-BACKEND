@@ -19,7 +19,6 @@
  */
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
-const { Op } = require("sequelize");
 const sequelize = require("../config/database");
 require("../models/index");
 const { User } = require("../models/User");
@@ -28,7 +27,7 @@ const StateOffice = require("../models/StateOffice");
 const Department = require("../models/Department");
 const Unit = require("../models/Unit");
 const { seedDefaultRoles } = require("../utils/roleService");
-const { logSkip, logPartial } = require("../utils/seedUtils");
+const { logPartial } = require("../utils/seedUtils");
 
 const LEGACY_STAFF_IDS = [
   "SC-LAGOS", "DO-FIN-LAGOS", "DO-PROG-LAGOS", "DO-SQA-LAGOS",
@@ -295,14 +294,6 @@ async function buildUserSpecs(deptMap, unitMap) {
     const unitMap = Object.fromEntries(units.map((u) => [u.unit_code, u.id]));
 
     const specs = await buildUserSpecs(deptMap, unitMap);
-    const staffIds = specs.map((s) => s.staff_id);
-    const existingCount = await User.count({ where: { staff_id: { [Op.in]: staffIds } } });
-
-    if (existingCount >= specs.length) {
-      logSkip(`Demo users (${existingCount}/${specs.length} staff IDs present)`);
-      console.log(`🔑  Existing users kept unchanged (password not reset)`);
-      process.exit(0);
-    }
 
     let created = 0;
     let skipped = 0;
@@ -363,7 +354,11 @@ async function buildUserSpecs(deptMap, unitMap) {
 
     console.log("\n" + "=".repeat(90));
     logPartial("Demo users", created, skipped);
-    console.log(`🔑  Password for newly created users: ${DEMO_PASSWORD}`);
+    if (created > 0) {
+      console.log(`🔑  Password for newly created users: ${DEMO_PASSWORD}`);
+    } else {
+      console.log("🔑  Existing users kept unchanged (password not reset)");
+    }
     console.log("\nHow to use:");
     console.log("  • DO-FIN-*     → Finance & Admin monthly report only");
     console.log("  • DO-PROG-*    → Programmes (enrolment + outreach) monthly only");

@@ -2,10 +2,10 @@
  * Run schema sync, idempotent migrations, and all reference/demo seeds.
  *
  *   npm run db:seed-all     — sync + migrations + seeds (existing DBs)
- *   npm run db:seed         — seeds only (after db:sync)
+ *   npm run db:seed         — idempotent migrations + seeds (adds missing rows only)
  *   npm run db:setup        — same as db:seed-all (fresh install)
  *
- * All steps are idempotent — existing rows are left unchanged.
+ * All steps are idempotent — existing rows are left unchanged; only missing seed data is inserted.
  */
 require("dotenv").config();
 const { spawnSync } = require("child_process");
@@ -31,10 +31,19 @@ const SEED_STEPS = [
   { script: "src/scripts/seedServicomIndicators.js", label: "SERVICOM indicators" },
   { script: "src/scripts/seedServicomData.js", label: "SERVICOM sample data" },
   { script: "src/scripts/seedStateOfficeData.js", label: "State Office sample data" },
+  { script: "src/scripts/seedAccreditedProviders.js", label: "Accredited HMO & HCF (from nhia.gov.ng)" },
+];
+
+const INCREMENTAL_MIGRATE_STEPS = [
+  { script: "src/scripts/migrateRoles.js", label: "Roles" },
+  { script: "src/scripts/legacy/addComplianceManagement.js", label: "Compliance tables" },
+  { script: "src/scripts/legacy/migrateStateOfficeReports.js", label: "State Office tables" },
+  { script: "src/scripts/legacy/migrateCompliancePrivileges.js", label: "Compliance privileges" },
+  { script: "src/scripts/legacy/migrateSocZonesPrivileges.js", label: "SOC/Zones privileges" },
 ];
 
 const steps = seedsOnly
-  ? [{ script: "src/scripts/migrateRoles.js", label: "Roles" }, ...SEED_STEPS]
+  ? [...INCREMENTAL_MIGRATE_STEPS, ...SEED_STEPS]
   : [...MIGRATE_STEPS, ...SEED_STEPS];
 
 function runStep(step) {
@@ -51,7 +60,7 @@ function runStep(step) {
 }
 
 console.log(seedsOnly
-  ? "🌱  NHIA URMS — seed run (data only)\n"
+  ? "🌱  NHIA URMS — incremental seed run (migrations + missing data only)\n"
   : "🌱  NHIA URMS — sync, migrate & seed\n");
 
 for (const step of steps) {
@@ -61,6 +70,7 @@ for (const step of steps) {
 console.log("\n🎉  All steps completed (existing data was left unchanged)\n");
 if (!seedsOnly) {
   console.log("  Admin login:  staff_id ADMIN001  /  password Admin@1234");
-  console.log("  Demo users:   password Nhia@2025  (see docs/DATABASE.md)\n");
+  console.log("  Demo users:   password Nhia@2025  (see docs/DATABASE.md)");
+  console.log("  HCF dropdown: accredited facilities seeded per state (Compliance & Complaints)\n");
 }
 process.exit(0);

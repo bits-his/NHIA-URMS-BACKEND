@@ -29,7 +29,6 @@ const {
   ComplianceVisitLine, ReconciliationLine,
 } = require("../models/ComplaintsComplianceLines");
 const { syncStateOfficeTables } = require("./stateOfficeTableSync");
-const { anyExists, logSkip } = require("../utils/seedUtils");
 
 const STATE_ID_TABLES = [
   "users",
@@ -470,22 +469,6 @@ async function seedReconciliation(geo, year, month, seq, hmo, facility, amount, 
   return created ? 1 : 0;
 }
 
-const ACCREDITED_PROVIDERS = [
-  { provider_type: "hmo", provider_code: "HMO-HYG", name: "Hygeia HMO Limited", address: "Victoria Island, Lagos", phone: "0700 434 9342", email: "info@hygeia.com" },
-  { provider_type: "hmo", provider_code: "HMO-REL", name: "Reliance HMO Limited", address: "Marina, Lagos", phone: "01 280 6000", email: "contact@reliancehmo.com" },
-  { provider_type: "hmo", provider_code: "HMO-AII", name: "AIICO Multishield Limited", address: "Victoria Island, Lagos", phone: "01 280 5000", email: "info@aiico.com" },
-  { provider_type: "hmo", provider_code: "HMO-AVN", name: "Avon Healthcare Limited", address: "Victoria Island, Lagos", phone: "01 277 4000", email: "info@avonhealthcare.com" },
-  { provider_type: "hmo", provider_code: "HMO-AXA", name: "AXA Mansard Health Limited", address: "Ilupeju, Lagos", phone: "01 280 1292", email: "health@axamansard.com" },
-  // HCP codes use NHIA format STATE/NNN/P so state-scoped search works (e.g. OY/… for Oyo)
-  { provider_type: "hcp", provider_code: "LA/001/P", name: "Lagos University Teaching Hospital", address: "Idi-Araba, Lagos", facility_type: "Tertiary", phone: "01 295 0000" },
-  { provider_type: "hcp", provider_code: "KN/001/P", name: "Aminu Kano Teaching Hospital", address: "Zaria Road, Kano", facility_type: "Tertiary", phone: "064 600 000" },
-  { provider_type: "hcp", provider_code: "FCT/001/P", name: "National Hospital Abuja", address: "Abuja, FCT", facility_type: "Tertiary", phone: "09 460 4000" },
-  { provider_type: "hcp", provider_code: "OY/001/P", name: "University College Hospital, Ibadan", address: "Queen Elizabeth Road, Ibadan, Oyo State", facility_type: "Tertiary", phone: "080 2311 000" },
-  { provider_type: "hcp", provider_code: "OY/002/P", name: "Bowen Teaching Hospital", address: "Ogbomoso, Oyo State", facility_type: "Tertiary", phone: "080 3622 000" },
-  { provider_type: "hcp", provider_code: "OY/003/P", name: "State Hospital, Oyo", address: "Oyo Town, Oyo State", facility_type: "Secondary", phone: "080 1234 567" },
-  { provider_type: "hcp", provider_code: "RV/001/P", name: "University of Port Harcourt Teaching Hospital", address: "Port Harcourt, Rivers State", facility_type: "Tertiary", phone: "084 230 500" },
-];
-
 const OYO_COMPLAINT_TEMPLATES = [
   { against_type: "against_hmo", entity_name: "Hygeia HMO", entity_code: "HMO-HYG", description: "Capitation delay affecting drug availability at UCH Ibadan.", status: "escalated", officer: "Mrs. Folake Adeyemi" },
   { against_type: "against_hcp", entity_name: "University College Hospital, Ibadan", entity_code: "OY/001/P", description: "NHIA desk closed during lunch hours; enrollees turned away.", status: "resolved", officer: "Mr. Tunde Oladipo", notes: "Desk hours extended.", resolved: "2026-02-10" },
@@ -526,11 +509,6 @@ async function seedStateMonths(geo, months, counts) {
       process.exit(1);
     }
 
-    if (await anyExists(EnrolmentReport, { reference_id: "ENR-2026-OYO-01" })) {
-      logSkip("State Office sample reports");
-      process.exit(0);
-    }
-
     console.log("📦  Ensuring State Office tables exist...");
     await syncStateOfficeTables(sequelize, {
       StateOffice, User,
@@ -560,8 +538,7 @@ async function seedStateMonths(geo, months, counts) {
     const counts = {
       enrolment: 0, migration: 0, cemonc: 0, igr: 0, sshia: 0, expenditure: 0,
       complaintsReport: 0, accreditation: 0, stakeholder: 0, hmoSelection: 0,
-      challenges: 0, enrolleeComplaints: 0, complianceVisits: 0, reconciliation: 0,
-      providers: 0,
+      challenges: 0, enrolleeComplaints: 0, complianceVisits: 0,       reconciliation: 0,
     };
 
     // ── Oyo: full 12 months, rich transactional data ──
@@ -597,14 +574,6 @@ async function seedStateMonths(geo, months, counts) {
       await seedStateMonths(geo, MONTHS.slice(0, 6), counts);
     }
 
-    for (const p of ACCREDITED_PROVIDERS) {
-      const [, created] = await NhiaAccreditedProvider.findOrCreate({
-        where: { provider_type: p.provider_type, provider_code: p.provider_code },
-        defaults: p,
-      });
-      if (created) counts.providers++;
-    }
-
     console.log("\n✅  State Office seed complete (new records only):");
     console.log(`   Enrolment reports:        ${counts.enrolment}`);
     console.log(`   Migration reports:        ${counts.migration}`);
@@ -620,7 +589,7 @@ async function seedStateMonths(geo, months, counts) {
     console.log(`   Enrollee complaints:      ${counts.enrolleeComplaints}`);
     console.log(`   Compliance visits:        ${counts.complianceVisits}`);
     console.log(`   Reconciliation meetings:  ${counts.reconciliation}`);
-    console.log(`   Accredited providers:     ${counts.providers}`);
+    console.log("   (HMO/HCF providers — see seedAccreditedProviders step in db:seed-all)");
     process.exit(0);
   } catch (err) {
     console.error("❌  Seed failed:", err.message);

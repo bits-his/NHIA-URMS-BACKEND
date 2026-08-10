@@ -3,7 +3,7 @@ const sequelize  = require("../config/database");
 require("../models/index");
 const ZonalOffice = require("../models/ZonalOffice");
 const StateOffice = require("../models/StateOffice");
-const { allExist, logSkip, logPartial } = require("../utils/seedUtils");
+const { logPartial } = require("../utils/seedUtils");
 
 const ZONES = [
   { zonal_code: "NW",  description: "North West"   },
@@ -64,16 +64,6 @@ const STATES = [
   try {
     await sequelize.authenticate();
     console.log("✅  DB connected");
-
-    const zoneCodes = ZONES.map((z) => z.zonal_code);
-    const stateCodes = STATES.map((s) => s.code);
-    const zonesReady = await allExist(ZonalOffice, "zonal_code", zoneCodes);
-    const statesReady = await allExist(StateOffice, "code", stateCodes);
-
-    if (zonesReady && statesReady) {
-      logSkip("Zones & states");
-      process.exit(0);
-    }
 
     let zonesCreated = 0;
     let zonesSkipped = 0;

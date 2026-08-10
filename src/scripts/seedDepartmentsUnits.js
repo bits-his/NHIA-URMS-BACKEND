@@ -3,7 +3,7 @@ const sequelize  = require("../config/database");
 require("../models/index");
 const Department = require("../models/Department");
 const Unit       = require("../models/Unit");
-const { allExist, logSkip, logPartial } = require("../utils/seedUtils");
+const { logPartial } = require("../utils/seedUtils");
 
 // ─── NHIA Departments & Units ─────────────────────────────────────────────────
 const DEPARTMENTS = [
@@ -128,16 +128,6 @@ const DEPARTMENTS = [
   try {
     await sequelize.authenticate();
     console.log("✅  DB connected");
-
-    const deptCodes = DEPARTMENTS.map((d) => d.department_code);
-    const unitCodes = DEPARTMENTS.flatMap((d) => d.units.map((u) => u.unit_code));
-    const deptsReady = await allExist(Department, "department_code", deptCodes);
-    const unitsReady = await allExist(Unit, "unit_code", unitCodes);
-
-    if (deptsReady && unitsReady) {
-      logSkip("Departments & units");
-      process.exit(0);
-    }
 
     let deptCreated = 0;
     let deptSkipped = 0;
