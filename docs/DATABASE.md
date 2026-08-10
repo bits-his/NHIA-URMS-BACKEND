@@ -20,29 +20,34 @@ That is it. It creates all tables and loads everything you need to use the app.
 
 | Command | When to use |
 |---------|-------------|
-| `npm run db:setup` | **New database** — sync schema + seed all data |
-| `npm run db:sync` | **Existing database** — update tables to match models (no demo data) |
-| `npm run db:seed` | **After sync** — load reference + demo data (skips what already exists) |
+| `npm run db:setup` | **New database** — same as `db:seed-all` |
+| `npm run db:seed-all` | **Sync + migrations + seeds** — update schema and load all data |
+| `npm run db:sync` | **Schema only** — update tables to match models (no demo data) |
+| `npm run db:seed` | **Seeds only** — load reference + demo data after sync |
 | `npm run db:fix-servicom-fks` | **Repair only** — clears bad state/zone IDs before sync on old data |
 
-You do **not** need any `db:migrate-*` scripts on a fresh database.
+You do **not** need individual `db:migrate-*` scripts on a fresh database — use `db:seed-all`.
 
 ---
 
-## What `db:setup` loads
+## What `db:seed-all` runs
 
 Runs in this order (each step skips if data already exists):
 
-| Step | Script | What it adds |
-|------|--------|--------------|
-| 1 | `syncDb.js` | All tables + default admin user |
-| 2 | `migrateRoles.js` | Role definitions |
-| 3 | `seedZonesStates.js` | 6 zones + 37 states |
-| 4 | `seedDepartmentsUnits.js` | Departments & units |
-| 5 | `seedUsers.js` | Demo coordinators & officers |
-| 6 | `seedServicomIndicators.js` | SERVICOM assessment indicators |
-| 7 | `seedServicomData.js` | Sample facilities, visits, complaints |
-| 8 | `seedStateOfficeData.js` | Sample state office monthly reports |
+| Phase | Script | What it does |
+|-------|--------|--------------|
+| Migrate | `syncDb.js` | All tables + default admin user |
+| Migrate | `migrateRoles.js` | Role definitions |
+| Migrate | `legacy/addComplianceManagement.js` | Compliance report tables |
+| Migrate | `legacy/migrateStateOfficeReports.js` | State Office report tables |
+| Migrate | `legacy/migrateCompliancePrivileges.js` | SQA Compliance Management access |
+| Migrate | `legacy/migrateSocZonesPrivileges.js` | SOC/Zones privilege updates |
+| Seed | `seedZonesStates.js` | 6 zones + 37 states |
+| Seed | `seedDepartmentsUnits.js` | Departments & units |
+| Seed | `seedUsers.js` | Demo coordinators & officers |
+| Seed | `seedServicomIndicators.js` | SERVICOM assessment indicators |
+| Seed | `seedServicomData.js` | Sample facilities, visits, complaints |
+| Seed | `seedStateOfficeData.js` | Sample state office monthly reports |
 
 ---
 

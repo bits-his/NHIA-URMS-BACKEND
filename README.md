@@ -36,6 +36,8 @@ Full details: **[docs/DATABASE.md](docs/DATABASE.md)**
 
 | Command | Purpose |
 |---------|---------|
+| `npm run db:setup` | New database — sync, migrate & seed (same as `db:seed-all`) |
+| `npm run db:seed-all` | Sync schema, run migrations, load all demo data |
 | `npm run db:sync` | Update schema on an existing database |
 | `npm run db:seed` | Load demo data only (skips existing rows) |
 | `npm run db:fix-servicom-fks` | Repair orphan FKs before sync (old data only) |

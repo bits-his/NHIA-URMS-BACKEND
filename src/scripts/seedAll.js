@@ -1,10 +1,11 @@
 /**
- * Seed all reference + demo data (idempotent — skips existing rows).
+ * Run schema sync, idempotent migrations, and all reference/demo seeds.
  *
- * Prefer: npm run db:setup   (sync + seed in one step)
- * Or:     npm run db:seed    (seed only, after db:sync)
+ *   npm run db:seed-all     — sync + migrations + seeds (existing DBs)
+ *   npm run db:seed         — seeds only (after db:sync)
+ *   npm run db:setup        — same as db:seed-all (fresh install)
  *
- * See docs/DATABASE.md for the full list of what each step loads.
+ * All steps are idempotent — existing rows are left unchanged.
  */
 require("dotenv").config();
 const { spawnSync } = require("child_process");
@@ -12,9 +13,18 @@ const path = require("path");
 
 const ROOT = path.join(__dirname, "../..");
 const node = process.execPath;
+const seedsOnly = process.argv.includes("--seeds-only");
 
-const STEPS = [
+const MIGRATE_STEPS = [
+  { script: "src/scripts/syncDb.js", label: "Sync schema (tables)" },
   { script: "src/scripts/migrateRoles.js", label: "Roles" },
+  { script: "src/scripts/legacy/addComplianceManagement.js", label: "Compliance tables" },
+  { script: "src/scripts/legacy/migrateStateOfficeReports.js", label: "State Office tables" },
+  { script: "src/scripts/legacy/migrateCompliancePrivileges.js", label: "Compliance privileges" },
+  { script: "src/scripts/legacy/migrateSocZonesPrivileges.js", label: "SOC/Zones privileges" },
+];
+
+const SEED_STEPS = [
   { script: "src/scripts/seedZonesStates.js", label: "Zones & states" },
   { script: "src/scripts/seedDepartmentsUnits.js", label: "Departments & units" },
   { script: "src/scripts/seedUsers.js", label: "Demo users" },
@@ -23,9 +33,11 @@ const STEPS = [
   { script: "src/scripts/seedStateOfficeData.js", label: "State Office sample data" },
 ];
 
-console.log("🌱  NHIA URMS — idempotent seed run\n");
+const steps = seedsOnly
+  ? [{ script: "src/scripts/migrateRoles.js", label: "Roles" }, ...SEED_STEPS]
+  : [...MIGRATE_STEPS, ...SEED_STEPS];
 
-for (const step of STEPS) {
+function runStep(step) {
   console.log(`\n── ${step.label} ──`);
   const result = spawnSync(node, [step.script], {
     cwd: ROOT,
@@ -33,10 +45,22 @@ for (const step of STEPS) {
     env: process.env,
   });
   if (result.status !== 0) {
-    console.error(`\n❌  Seed stopped at: ${step.label}`);
+    console.error(`\n❌  Stopped at: ${step.label}`);
     process.exit(result.status || 1);
   }
 }
 
-console.log("\n🎉  All seed steps completed (existing data was left unchanged)\n");
+console.log(seedsOnly
+  ? "🌱  NHIA URMS — seed run (data only)\n"
+  : "🌱  NHIA URMS — sync, migrate & seed\n");
+
+for (const step of steps) {
+  runStep(step);
+}
+
+console.log("\n🎉  All steps completed (existing data was left unchanged)\n");
+if (!seedsOnly) {
+  console.log("  Admin login:  staff_id ADMIN001  /  password Admin@1234");
+  console.log("  Demo users:   password Nhia@2025  (see docs/DATABASE.md)\n");
+}
 process.exit(0);
