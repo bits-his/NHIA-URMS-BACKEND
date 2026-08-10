@@ -3,8 +3,8 @@
  * Run: npm run db:migrate-compliance-privileges
  */
 require("dotenv").config();
-const sequelize = require("../config/database");
-const { User } = require("../models/User");
+const sequelize = require("../../config/database");
+const { User } = require("../../models/User");
 
 const SQA_MODULE = "Standards & Quality Assurance";
 const FUNC = "Compliance Management";

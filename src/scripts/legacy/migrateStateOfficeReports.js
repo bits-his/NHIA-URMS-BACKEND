@@ -3,9 +3,9 @@
  * Run: npm run db:migrate-state-office
  */
 require("dotenv").config();
-const sequelize = require("../config/database");
-const models = require("../models");
-const { syncStateOfficeTables } = require("./stateOfficeTableSync");
+const sequelize = require("../../config/database");
+const models = require("../../models");
+const { syncStateOfficeTables } = require("../stateOfficeTableSync");
 
 (async () => {
   try {

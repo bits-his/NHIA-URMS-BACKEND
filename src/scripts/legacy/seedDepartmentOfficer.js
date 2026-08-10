@@ -1,11 +1,11 @@
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
-const sequelize = require("../config/database");
-require("../models/index");
-const { User } = require("../models/User");
-const Department = require("../models/Department");
-const Unit = require("../models/Unit");
-const { anyExists, logSkip } = require("../utils/seedUtils");
+const sequelize = require("../../config/database");
+require("../../models/index");
+const { User } = require("../../models/User");
+const Department = require("../../models/Department");
+const Unit = require("../../models/Unit");
+const { anyExists, logSkip } = require("../../utils/seedUtils");
 
 (async () => {
   try {

@@ -3,15 +3,15 @@
  * Kept for backwards compatibility — create-only sync (no ALTER).
  */
 require("dotenv").config();
-const sequelize = require("../config/database");
-require("../models/index");
+const sequelize = require("../../config/database");
+require("../../models/index");
 
 (async () => {
   try {
     await sequelize.authenticate();
     console.log("✅  DB connection OK");
     console.log("ℹ️   Prefer: npm run db:migrate-state-office");
-    const { IgrReport, IgrReportLine } = require("../models");
+    const { IgrReport, IgrReportLine } = require("../../models");
     await IgrReport.sync();
     await IgrReportLine.sync();
     console.log("✅  IGR report tables synced");

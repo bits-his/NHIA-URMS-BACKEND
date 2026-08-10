@@ -1,8 +1,10 @@
 /**
- * Run all idempotent seeds in dependency order.
- * Each step skips when its data is already in the database.
+ * Seed all reference + demo data (idempotent — skips existing rows).
  *
- *   npm run db:seed-all
+ * Prefer: npm run db:setup   (sync + seed in one step)
+ * Or:     npm run db:seed    (seed only, after db:sync)
+ *
+ * See docs/DATABASE.md for the full list of what each step loads.
  */
 require("dotenv").config();
 const { spawnSync } = require("child_process");

@@ -5,8 +5,8 @@
  * Run: npm run db:migrate-soc-zones-privileges
  */
 require("dotenv").config();
-const sequelize = require("../config/database");
-const { User } = require("../models/User");
+const sequelize = require("../../config/database");
+const { User } = require("../../models/User");
 
 const SOC_ZONES_MODULE = "SOC/Zones";
 const LEGACY_MODULE = "State Offices";

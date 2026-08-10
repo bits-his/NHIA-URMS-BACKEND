@@ -1,50 +1,44 @@
 # NHIA Backend API
 
-Node.js + Express + MySQL + Sequelize backend for the NHIA Annual Report system.
+Node.js + Express + MySQL + Sequelize backend for the NHIA URMS.
 
 ## Setup
 
 ```bash
-cd nhia-backend
 npm install
 cp .env.example .env   # fill in your DB credentials
 ```
 
-## Create the database
+Create the database:
 
 ```sql
 CREATE DATABASE nhia_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-## Sync tables
+## Database (new install)
+
+**One command** — creates tables and loads all reference + demo data:
 
 ```bash
-npm run db:sync
+npm run db:setup
 ```
 
-## Seed data (run in this order on a fresh database)
+Default logins after setup:
 
-All JS seed scripts are **idempotent** — they skip records already in the database and do not reset passwords.
+| User | Staff ID | Password |
+|------|----------|----------|
+| Admin | `ADMIN001` | `Admin@1234` |
+| Demo users | see terminal output | `Nhia@2025` |
 
-```bash
-npm run db:migrate-monthly
-npm run db:migrate-roles
-npm run db:migrate-depts
-npm run db:migrate-participating-institutions
-npm run db:seed-all              # runs zones, depts, users, servicom, state office (skips if present)
-```
+Full details: **[docs/DATABASE.md](docs/DATABASE.md)**
 
-Or step-by-step:
+### Other database commands
 
-```bash
-npm run db:seed-zones-states    # 6 zones + 37 states (required before users)
-npm run db:seed-depts             # departments & units
-npm run db:seed-users             # SDO, zonal coordinators, state users (password: 123456 for new users)
-```
-
-**Do not** import `sql/seed_data.sql` on a database that already has JS seed data — it TRUNCATES zones/states and creates duplicate legacy `SO-XX` state rows.
-
-Alternatively import `seed_data.sql` only on a **fresh** database if you need monthly report history from Excel.
+| Command | Purpose |
+|---------|---------|
+| `npm run db:sync` | Update schema on an existing database |
+| `npm run db:seed` | Load demo data only (skips existing rows) |
+| `npm run db:fix-servicom-fks` | Repair orphan FKs before sync (old data only) |
 
 ## Run (development)
 
@@ -108,4 +102,3 @@ Server starts on `http://localhost:3001`
   "submitted_by": "SO · Lagos"
 }
 ```
-# NHIA-URMS-BACKEND
