@@ -14,6 +14,7 @@ router.delete("/assets/:id", storeCtrl.deleteAsset);
 
 // Inventory Items
 router.get("/inventory/items", storeCtrl.getInventoryItems);
+router.get("/inventory/items/:id", storeCtrl.getInventoryItemById);
 router.post("/inventory/items", storeCtrl.createInventoryItem);
 
 // Goods Receipts (GRN)

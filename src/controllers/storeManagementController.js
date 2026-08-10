@@ -92,6 +92,18 @@ exports.getInventoryItems = async (req, res) => {
   }
 };
 
+exports.getInventoryItemById = async (req, res) => {
+  try {
+    const item = await StoreInventoryItem.findByPk(req.params.id);
+    if (!item) {
+      return res.status(404).json({ success: false, error: "Inventory item not found" });
+    }
+    res.json({ success: true, data: item });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 exports.createInventoryItem = async (req, res) => {
   try {
     const item = await StoreInventoryItem.create(req.body);
