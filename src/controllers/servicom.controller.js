@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const { Op } = require("sequelize");
 const sequelize = require("../config/database");
 const {
   MonitoringVisit, ServicomAssessmentIndicator, ServicomAssessmentScore,
@@ -705,6 +706,188 @@ module.exports = {
       });
       await logAudit("servicom_comment_card", row.id, "updated", req.user?.name, req.body);
       res.json({ success: true, data: row });
+    } catch (err) { next(err); }
+  },
+
+  dashboardDrill: async (req, res, next) => {
+    try {
+      const { buildZoneBreakdown, buildStateBreakdownInZone } = require("../utils/dashboardDrillGeo");
+      const segment = String(req.query.segment || "complaints");
+      const recordSegment = req.query.record_segment || "complaints";
+      const geoInclude = [
+        { model: StateOffice, as: "state", attributes: ["id", "description"] },
+        { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
+      ];
+
+      const countServicomDrillRecord = async (query, rs) => {
+        const q = { ...query };
+        delete q.segment;
+        delete q.record_segment;
+        const where = await buildServicomListWhere(req.user, q);
+        if (rs === "surveys") return ServicomSatisfactionSurvey.count({ where });
+        if (rs === "comment_cards") return ServicomCommentCard.count({ where });
+        if (rs === "visits") return MonitoringVisit.count({ where });
+        if (query.status) where.status = query.status;
+        if (query.category) where.complaint_category = query.category;
+        if (query.domain) where.complaint_domain = query.domain;
+        if (query.priority) where.priority_rating = query.priority;
+        if (query.month) {
+          where[Op.or] = [
+            { date_received: { [Op.like]: `${query.month}%` } },
+            { complaint_date: { [Op.like]: `${query.month}%` } },
+          ];
+        }
+        return ServicomComplaint.count({ where });
+      };
+
+      if (segment === "zone_breakdown") {
+        const data = await buildZoneBreakdown((zoneId) =>
+          countServicomDrillRecord({ ...req.query, zone_id: String(zoneId) }, recordSegment),
+        );
+        return res.json({ success: true, data });
+      }
+
+      if (segment === "state_breakdown") {
+        const stateId = req.query.state_id;
+        const zoneId = req.query.zone_id;
+        if (!stateId && zoneId) {
+          const data = await buildStateBreakdownInZone(zoneId, (stId) =>
+            countServicomDrillRecord({ ...req.query, zone_id: String(zoneId), state_id: String(stId) }, recordSegment),
+          );
+          return res.json({ success: true, data });
+        }
+        if (!stateId) {
+          return res.status(422).json({ success: false, message: "state_id or zone_id required" });
+        }
+      }
+
+      const mapRow = (row, fields) => ({
+        id: row.id,
+        reference: fields.reference?.(row) ?? null,
+        title: fields.title(row),
+        subtitle: fields.subtitle?.(row) ?? null,
+        status: fields.status?.(row) ?? null,
+        date: fields.date?.(row) ?? null,
+        state_name: row.state?.description ?? null,
+        zone_name: row.zone?.description ?? null,
+        state_id: row.state_id ?? row.state?.id ?? null,
+        zone_id: row.zone_id ?? row.zone?.id ?? null,
+        meta: fields.meta?.(row) ?? null,
+      });
+
+      if (segment === "surveys") {
+        const where = await buildServicomListWhere(req.user, req.query);
+        const rows = await ServicomSatisfactionSurvey.findAll({
+          where,
+          include: geoInclude,
+          order: [["survey_date", "DESC"]],
+          limit: 200,
+        });
+        return res.json({
+          success: true,
+          data: rows.map((r) => mapRow(r, {
+            reference: (x) => x.reference_id,
+            title: (x) => x.provider_name || "Satisfaction Survey",
+            subtitle: (x) => x.team || x.survey_officers,
+            status: (x) => (x.percentage_score != null ? `${x.percentage_score}% score` : null),
+            date: (x) => x.survey_date,
+            meta: (x) => x.survey_officers,
+          })),
+        });
+      }
+
+      if (segment === "comment_cards") {
+        const where = await buildServicomListWhere(req.user, req.query);
+        const rows = await ServicomCommentCard.findAll({
+          where,
+          include: geoInclude,
+          order: [["card_date", "DESC"]],
+          limit: 200,
+        });
+        return res.json({
+          success: true,
+          data: rows.map((r) => mapRow(r, {
+            reference: (x) => x.reference_id,
+            title: (x) => x.respondent_name || x.organisation || "Charter Comment Card",
+            subtitle: (x) => x.organisation,
+            status: (x) => (x.average_score != null ? `Score ${x.average_score}` : null),
+            date: (x) => x.card_date,
+          })),
+        });
+      }
+
+      if (segment === "visits") {
+        const where = await buildServicomListWhere(req.user, req.query);
+        const rows = await MonitoringVisit.findAll({
+          where,
+          include: geoInclude,
+          order: [["visit_date", "DESC"]],
+          limit: 200,
+        });
+        return res.json({
+          success: true,
+          data: rows.map((r) => mapRow(r, {
+            reference: (x) => x.reference_id,
+            title: (x) => x.facility_name || "Monitoring Visit",
+            subtitle: (x) => x.monitoring_type,
+            status: (x) => x.status,
+            date: (x) => x.visit_date,
+            meta: (x) => x.compliance_rating,
+          })),
+        });
+      }
+
+      if (segment === "state_breakdown" && req.query.state_id) {
+        const stateId = req.query.state_id;
+        const q = { ...req.query, state_id: stateId };
+        const [surveys, cards, complaints] = await Promise.all([
+          ServicomSatisfactionSurvey.count({ where: await buildServicomListWhere(req.user, q) }),
+          ServicomCommentCard.count({ where: await buildServicomListWhere(req.user, q) }),
+          ServicomComplaint.count({ where: await buildServicomListWhere(req.user, q) }),
+        ]);
+        const state = await StateOffice.findByPk(stateId, {
+          attributes: ["description"],
+          include: [{ model: ZonalOffice, as: "zone", attributes: ["description"] }],
+        });
+        return res.json({
+          success: true,
+          data: [
+            { id: "surveys", reference: null, title: "Satisfaction Surveys", subtitle: state?.description, status: String(surveys), date: null, state_name: state?.description, zone_name: state?.zone?.description ?? null, meta: "segment:surveys" },
+            { id: "cards", reference: null, title: "Charter Comment Cards", subtitle: state?.description, status: String(cards), date: null, state_name: state?.description, zone_name: state?.zone?.description ?? null, meta: "segment:comment_cards" },
+            { id: "complaints", reference: null, title: "Complaints", subtitle: state?.description, status: String(complaints), date: null, state_name: state?.description, zone_name: state?.zone?.description ?? null, meta: "segment:complaints" },
+          ],
+        });
+      }
+
+      // default: complaints
+      const where = await buildServicomListWhere(req.user, req.query);
+      if (req.query.status) where.status = req.query.status;
+      if (req.query.category) where.complaint_category = req.query.category;
+      if (req.query.domain) where.complaint_domain = req.query.domain;
+      if (req.query.priority) where.priority_rating = req.query.priority;
+      if (req.query.month) {
+        where[Op.or] = [
+          { date_received: { [Op.like]: `${req.query.month}%` } },
+          { complaint_date: { [Op.like]: `${req.query.month}%` } },
+        ];
+      }
+      const rows = await ServicomComplaint.findAll({
+        where,
+        include: geoInclude,
+        order: [["date_received", "DESC"], ["complaint_date", "DESC"]],
+        limit: 200,
+      });
+      res.json({
+        success: true,
+        data: rows.map((r) => mapRow(r, {
+          reference: (x) => x.complaint_number,
+          title: (x) => x.complainant_name || x.facility_name || x.complaint_category || "Complaint",
+          subtitle: (x) => x.complaint_category || x.category,
+          status: (x) => x.status,
+          date: (x) => x.date_received || x.complaint_date,
+          meta: (x) => x.complaint_domain,
+        })),
+      });
     } catch (err) { next(err); }
   },
 };

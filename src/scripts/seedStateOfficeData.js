@@ -19,6 +19,8 @@ const {
   StakeholderReport, StakeholderReportLine,
   HmoSelectionReport, HmoSelectionReportLine,
   ChallengesReport,
+  WeeklyActionableReport, WeeklyActionableReportLine,
+  ContractedServicesReport, ContractedServicesReportLine,
   StateOfficeComplaint,
   StateOfficeComplianceVisit,
   StateOfficeReconciliationMeeting,
@@ -446,6 +448,61 @@ async function seedComplianceVisit(geo, year, month, seq, facility, purpose, out
   return created ? 1 : 0;
 }
 
+async function seedWeeklyActionableMonth(geo, year, month) {
+  const ref = refId("WKA", geo.code, year, month);
+  const [report, created] = await WeeklyActionableReport.findOrCreate({
+    where: { reference_id: ref },
+    defaults: {
+      ...reportHeader(geo, year, month),
+      reference_id: ref,
+      reporting_week: ((month - 1) % 4) + 1,
+    },
+  });
+  if (created) {
+    const statuses = ["escalated", "awaiting_response", "awaiting_further_info", "resolved"];
+    await WeeklyActionableReportLine.bulkCreate([
+      {
+        report_id: report.id,
+        issue_request: `Delayed capitation remittance affecting ${geo.label} facilities`,
+        category: "budgetary",
+        impact: "high",
+        urgency: "high",
+        user_department: "Finance",
+        priority_level: "P1",
+        status: statuses[month % statuses.length],
+      },
+      {
+        report_id: report.id,
+        issue_request: `NHIA desk staffing gap at ${geo.label} state hospital`,
+        category: "operational",
+        impact: "medium",
+        urgency: "medium",
+        user_department: "Operations",
+        priority_level: "P2",
+        status: statuses[(month + 1) % statuses.length],
+      },
+    ]);
+  }
+  return created ? 1 : 0;
+}
+
+async function seedContractedServicesMonth(geo, year, month) {
+  const ref = refId("CSR", geo.code, year, month);
+  const [report, created] = await ContractedServicesReport.findOrCreate({
+    where: { reference_id: ref },
+    defaults: { ...reportHeader(geo, year, month), reference_id: ref },
+  });
+  if (created) {
+    const base = 150000 + month * 12000;
+    await ContractedServicesReportLine.bulkCreate([
+      { report_id: report.id, service: "security", month, beneficiary: `${geo.label} Guard Services Ltd`, amount: base },
+      { report_id: report.id, service: "cleaning", month, beneficiary: `${geo.label} Hygiene Co.`, amount: Math.round(base * 0.6) },
+      { report_id: report.id, service: "generator", month, beneficiary: `${geo.label} Power Maint.`, amount: Math.round(base * 0.45) },
+    ]);
+  }
+  return created ? 1 : 0;
+}
+
 async function seedReconciliation(geo, year, month, seq, hmo, facility, amount, reconStatus) {
   const ref = refId("SRM", geo.code, year, month * 10 + seq);
   const [, created] = await StateOfficeReconciliationMeeting.findOrCreate({
@@ -496,6 +553,8 @@ async function seedStateMonths(geo, months, counts) {
       counts.expenditure += await seedExpenditureQuarter(geo, YEAR, month);
       counts.challenges += await seedChallengesQuarter(geo, YEAR, month);
     }
+    counts.weeklyActionable += await seedWeeklyActionableMonth(geo, YEAR, month);
+    counts.contractedServices += await seedContractedServicesMonth(geo, YEAR, month);
   }
 }
 
@@ -527,6 +586,10 @@ async function seedStateMonths(geo, months, counts) {
       StateOfficeComplianceVisit,
       StateOfficeReconciliationMeeting,
       NhiaAccreditedProvider,
+      WeeklyActionableReport,
+      WeeklyActionableReportLine,
+      ContractedServicesReport,
+      ContractedServicesReportLine,
     });
 
     const purged = await purgeLegacySeedRefs();
@@ -538,7 +601,8 @@ async function seedStateMonths(geo, months, counts) {
     const counts = {
       enrolment: 0, migration: 0, cemonc: 0, igr: 0, sshia: 0, expenditure: 0,
       complaintsReport: 0, accreditation: 0, stakeholder: 0, hmoSelection: 0,
-      challenges: 0, enrolleeComplaints: 0, complianceVisits: 0,       reconciliation: 0,
+      challenges: 0, enrolleeComplaints: 0, complianceVisits: 0, reconciliation: 0,
+      weeklyActionable: 0, contractedServices: 0,
     };
 
     // ── Oyo: full 12 months, rich transactional data ──
@@ -589,6 +653,8 @@ async function seedStateMonths(geo, months, counts) {
     console.log(`   Enrollee complaints:      ${counts.enrolleeComplaints}`);
     console.log(`   Compliance visits:        ${counts.complianceVisits}`);
     console.log(`   Reconciliation meetings:  ${counts.reconciliation}`);
+    console.log(`   Weekly actionable reports: ${counts.weeklyActionable}`);
+    console.log(`   Contracted services reports: ${counts.contractedServices}`);
     console.log("   (HMO/HCF providers — see seedAccreditedProviders step in db:seed-all)");
     process.exit(0);
   } catch (err) {

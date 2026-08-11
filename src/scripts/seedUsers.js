@@ -62,15 +62,13 @@ const sqaMonthly = [{
   functionalities: ["Monthly Report", "Compliance Management"],
 }];
 
-const stateOfficeAccess = [{
-  access_to: "SOC/Zones",
+const zonalAccess = [{
+  access_to: "Zonal",
   functionalities: [
     "Enrolment",
     "Migration / Update Requests",
     "CEmONC & FFP Beneficiaries",
-    "Enrollee Complaints",
-    "Compliance Monitoring",
-    "Reconciliation Meetings",
+    "Monitoring Visits",
     "Accreditation / Reaccreditation",
     "Stakeholder Engagement",
     "HMO Selection Process",
@@ -78,8 +76,17 @@ const stateOfficeAccess = [{
     "IGR",
     "SSHIA Financial Report",
     "Expenditure Profile",
+  ],
+}];
+
+const stateOfficeAccess = [{
+  access_to: "SOC/Zones",
+  functionalities: [
+    "SOC/Zones Dashboard",
     "Weekly Actionable",
     "Contracted Services",
+    "Operation Monitoring Visit",
+    "Spot Check Visit",
   ],
 }];
 
@@ -90,6 +97,7 @@ const allMonthlyModules = [
   ...financeMonthly,
   ...programmesMonthly,
   ...sqaMonthly,
+  ...zonalAccess,
   ...stateOfficeAccess,
   ...notifications,
 ];
@@ -106,16 +114,18 @@ const sdoAccess = [
   {
     access_to: "SDO",
     functionalities: [
-      "Stock Verification",
-      "Asset Register",
-      "Dashboard",
+      "SERVICOM Dashboard",
+      "Stock Verification Dashboard",
+      "Charter Performance",
       "Complaints Management",
       "Customer Satisfaction Survey",
-      "Charter Performance",
+      "Physical Asset Verification",
+      "Verification of Supply",
+      "Special Project",
     ],
   },
   {
-    access_to: "SOC/Zones",
+    access_to: "Zonal",
     functionalities: ["Monitoring Visits"],
   },
   ...notifications,

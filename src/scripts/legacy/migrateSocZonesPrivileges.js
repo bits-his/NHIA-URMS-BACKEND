@@ -12,21 +12,11 @@ const SOC_ZONES_MODULE = "SOC/Zones";
 const LEGACY_MODULE = "State Offices";
 
 const ALL_SOC_ZONES_FUNCS = [
-  "Enrolment",
-  "Migration / Update Requests",
-  "CEmONC & FFP Beneficiaries",
-  "Enrollee Complaints",
-  "Compliance Monitoring",
-  "Reconciliation Meetings",
-  "Accreditation / Reaccreditation",
-  "Stakeholder Engagement",
-  "HMO Selection Process",
-  "Challenges & Recommendations",
-  "IGR",
-  "SSHIA Financial Report",
-  "Expenditure Profile",
+  "SOC/Zones Dashboard",
   "Weekly Actionable",
   "Contracted Services",
+  "Operation Monitoring Visit",
+  "Spot Check Visit",
 ];
 
 function parseAccess(raw) {

@@ -12,11 +12,15 @@ const enrolleeComplaints = require("../controllers/stateOfficeComplaint.controll
 const complianceVisits = require("../controllers/stateOfficeComplianceVisit.controller");
 const reconciliation = require("../controllers/stateOfficeReconciliation.controller");
 const nhiaAccreditation = require("../controllers/nhiaAccreditation.controller");
+const stateOfficeDashboard = require("../controllers/stateOfficeDashboard.controller");
 
 const router = Router();
 
 router.use(authenticate);
 router.use(requireStateOfficeRoute);
+
+router.get("/dashboard", stateOfficeDashboard.dashboard);
+router.get("/dashboard/drill", stateOfficeDashboard.dashboardDrill);
 
 const headerRules = [
   body("zone_id").notEmpty().withMessage("Zone is required"),

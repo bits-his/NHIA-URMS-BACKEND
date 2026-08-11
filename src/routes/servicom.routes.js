@@ -22,6 +22,7 @@ const submitters = [...SUBMITTERS];
 
 router.get("/indicators", ctrl.listIndicators);
 router.get("/dashboard", ctrl.dashboard);
+router.get("/dashboard/drill", ctrl.dashboardDrill);
 router.get("/facilities", ctrl.listFacilities);
 router.get("/accredited-providers", require("../controllers/nhiaAccreditation.controller").listProviders);
 

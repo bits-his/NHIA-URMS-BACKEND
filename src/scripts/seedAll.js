@@ -22,6 +22,8 @@ const MIGRATE_STEPS = [
   { script: "src/scripts/legacy/migrateStateOfficeReports.js", label: "State Office tables" },
   { script: "src/scripts/legacy/migrateCompliancePrivileges.js", label: "Compliance privileges" },
   { script: "src/scripts/legacy/migrateSocZonesPrivileges.js", label: "SOC/Zones privileges" },
+  { script: "src/scripts/legacy/migrateOthersPrivileges.js", label: "Zonal module privileges" },
+  { script: "src/scripts/legacy/migrateSectionDashboards.js", label: "Section dashboards privileges" },
 ];
 
 const SEED_STEPS = [
@@ -40,6 +42,8 @@ const INCREMENTAL_MIGRATE_STEPS = [
   { script: "src/scripts/legacy/migrateStateOfficeReports.js", label: "State Office tables" },
   { script: "src/scripts/legacy/migrateCompliancePrivileges.js", label: "Compliance privileges" },
   { script: "src/scripts/legacy/migrateSocZonesPrivileges.js", label: "SOC/Zones privileges" },
+  { script: "src/scripts/legacy/migrateOthersPrivileges.js", label: "Zonal module privileges" },
+  { script: "src/scripts/legacy/migrateSectionDashboards.js", label: "Section dashboards privileges" },
 ];
 
 const steps = seedsOnly
