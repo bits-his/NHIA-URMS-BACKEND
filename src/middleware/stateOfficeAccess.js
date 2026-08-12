@@ -32,6 +32,39 @@ const SOC_ONLY_FUNCTIONALITIES = new Set([
   "Spot Check Visit",
 ]);
 
+/** Canonical title → legacy names stored in older user.functionalities rows */
+const FUNCTIONALITY_ALIASES = {
+  "Migration / Update Requests": [
+    "Migration",
+    "Migration/Update Requests",
+    "Migration & Update Requests",
+  ],
+  "CEmONC & FFP Beneficiaries": [
+    "CEmONC",
+    "CEmONC & FFP",
+    "CEmONC and FFP Beneficiaries",
+  ],
+  "Monitoring Visits": [
+    "Compliance Monitoring",
+    "Enrollee Complaints",
+    "Compliance Visits",
+  ],
+  "Accreditation / Reaccreditation": [
+    "Accreditation",
+    "Reaccreditation",
+  ],
+  "Stakeholder Engagement": ["Stakeholder"],
+  "HMO Selection Process": ["HMO Selection", "HMO Selection Process"],
+  "Challenges & Recommendations": ["Challenges"],
+  "SSHIA Financial Report": ["SSHIA Financial", "SSHIA Financial Reports"],
+  "Complaints & Compliance Monitoring": [
+    "Complaints",
+    "Compliance Monitoring",
+  ],
+  "Enrollee Complaints": ["Complaints Register", "Complaints"],
+  "Reconciliation Meetings": ["Reconciliation"],
+};
+
 /** Legacy path — also allow these sections to search NHIA lists */
 const ACCREDITED_PROVIDER_SECTIONS = [
   "Enrollee Complaints",
@@ -41,12 +74,23 @@ const ACCREDITED_PROVIDER_SECTIONS = [
   "Monitoring Visits",
 ];
 
+const STATE_OFFICE_ACCESS_MODULES = new Set([
+  SOC_ZONES_MODULE,
+  ZONAL_MODULE,
+  LEGACY_MODULE,
+  ZONAL_LEGACY,
+]);
+
 function parseAccess(raw) {
   if (Array.isArray(raw)) return raw;
   if (typeof raw === "string") {
     try { return JSON.parse(raw); } catch { return []; }
   }
   return [];
+}
+
+function acceptedFunctionalityNames(title) {
+  return new Set([title, ...(FUNCTIONALITY_ALIASES[title] || [])]);
 }
 
 function findSocZonesEntry(access) {
@@ -63,22 +107,28 @@ function findZonalEntry(access) {
 
 function hasFunctionality(entry, title) {
   const funcs = Array.isArray(entry?.functionalities) ? entry.functionalities : [];
-  if (funcs.includes(title)) return true;
-  if (title === "Monitoring Visits" && funcs.includes("Compliance Monitoring")) return true;
-  return false;
+  const accepted = acceptedFunctionalityNames(title);
+  return funcs.some((f) => accepted.has(f));
 }
 
 function grantForFunctionality(access, requiredFunctionality) {
-  const socEntry = findSocZonesEntry(access);
-  const zonalEntry = findZonalEntry(access);
-
   if (SOC_ONLY_FUNCTIONALITIES.has(requiredFunctionality)) {
-    return socEntry && hasFunctionality(socEntry, requiredFunctionality);
+    const socEntry = findSocZonesEntry(access);
+    return !!socEntry && hasFunctionality(socEntry, requiredFunctionality);
   }
 
+  // Prefer Zonal / SOC entries, then any state-office-related module row
+  const zonalEntry = findZonalEntry(access);
   if (zonalEntry && hasFunctionality(zonalEntry, requiredFunctionality)) return true;
-  // Legacy users may still have zonal funcs under SOC/Zones
+
+  const socEntry = findSocZonesEntry(access);
   if (socEntry && hasFunctionality(socEntry, requiredFunctionality)) return true;
+
+  for (const entry of access) {
+    if (!entry?.access_to || !STATE_OFFICE_ACCESS_MODULES.has(entry.access_to)) continue;
+    if (hasFunctionality(entry, requiredFunctionality)) return true;
+  }
+
   return false;
 }
 
@@ -90,7 +140,11 @@ function requireStateOfficeSection(requiredFunctionality) {
     const access = parseAccess(req.user?.functionalities);
     if (grantForFunctionality(access, requiredFunctionality)) return next();
 
-    return res.status(403).json({ success: false, message: "Access denied" });
+    return res.status(403).json({
+      success: false,
+      message: "Access denied",
+      required: requiredFunctionality,
+    });
   };
 }
 
@@ -115,4 +169,10 @@ function requireStateOfficeRoute(req, res, next) {
   return requireStateOfficeSection(required)(req, res, next);
 }
 
-module.exports = { requireStateOfficeRoute, requireStateOfficeSection, ROUTE_FUNCTIONALITY };
+module.exports = {
+  requireStateOfficeRoute,
+  requireStateOfficeSection,
+  ROUTE_FUNCTIONALITY,
+  grantForFunctionality,
+  hasFunctionality,
+};

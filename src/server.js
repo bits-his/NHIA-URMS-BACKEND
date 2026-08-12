@@ -44,7 +44,18 @@ app.use(morgan("dev"));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
-app.get("/health", (req, res) => res.json({ status: "ok" }));
+app.get("/health", (req, res) =>
+  res.json({
+    status: "ok",
+    version: require("../package.json").version,
+    endpoints: {
+      stockDashboard: "/api/stock/dashboard",
+      socDashboard: "/api/state-office/dashboard",
+      stateOfficeReports: "/api/state-office/{section}/reports",
+      servicomDashboard: "/api/servicom/dashboard",
+    },
+  }),
+);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/annual-reports", annualReportRoutes);
