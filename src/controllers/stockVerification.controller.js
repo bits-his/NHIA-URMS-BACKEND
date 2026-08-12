@@ -8,6 +8,7 @@ const {
   ZonalOffice, StateOffice, Department, Unit,
   StoreAsset, StoreInventoryItem, SupplyVerification,
   AssetTransfer, AssetMaintenance, AssetDisposal,
+  StockIssueVoucher, StockConversion, PhysicalAssetVerification,
 } = require("../models");
 
 // ─── Reference ID generator ───────────────────────────────────────────────────
@@ -341,6 +342,7 @@ const getDashboard = async (req, res, next) => {
     const [
       verifications, stockAssets, items, supplyVerifications,
       svoAssets, inventoryItems, transfers, disposals, maintenance,
+      stockIssues, conversions, physicalInspections,
     ] = await Promise.all([
       StockVerification.findAll({
         where,
@@ -364,11 +366,14 @@ const getDashboard = async (req, res, next) => {
         where,
         attributes: ["id", "verdict", "certificateDate", "state_id", "zone_id", "supplyRefNo"],
       }),
-      StoreAsset.findAll({ attributes: ["id", "status", "operationalStatus"] }),
-      StoreInventoryItem.findAll({ attributes: ["id", "category", "quantityInStock"] }),
+      StoreAsset.findAll({ attributes: ["id", "status", "operationalStatus", "verificationStatus", "lastVerificationDate"] }),
+      StoreInventoryItem.findAll({ attributes: ["id", "category", "quantityInStock", "status", "reorderLevel"] }),
       AssetTransfer.findAll({ attributes: ["id", "status", "created_at"] }),
       AssetDisposal.findAll({ attributes: ["id", "reason", "disposalDate"] }),
       AssetMaintenance.findAll({ attributes: ["id", "type", "startDate", "completionDate"] }),
+      StockIssueVoucher.findAll({ attributes: ["id", "status", "issueDate"] }).catch(() => []),
+      StockConversion.findAll({ attributes: ["id", "conversionDate"] }).catch(() => []),
+      PhysicalAssetVerification.findAll({ attributes: ["id", "status", "verificationDate"] }).catch(() => []),
     ]);
 
     const monthlyMap = {};
@@ -404,7 +409,20 @@ const getDashboard = async (req, res, next) => {
     const itemsWithVariance = items.filter((i) => i.variance !== 0).length;
     const itemsBadCondition = items.filter((i) => i.condition === "bad").length;
     const supplyFailed = supplyVerifications.filter((s) => s.verdict === "FAILED").length;
-    const storeOperations = transfers.length + disposals.length + maintenance.length + inventoryItems.length;
+    const inventoryLow = inventoryItems.filter((i) => {
+      const qty = Number(i.quantityInStock || 0);
+      const reorder = Number(i.reorderLevel || 10);
+      const status = String(i.status || "");
+      return status === "LOW_STOCK" || (qty > 0 && qty <= reorder);
+    }).length;
+    const inventoryOut = inventoryItems.filter((i) => {
+      const qty = Number(i.quantityInStock || 0);
+      return String(i.status || "") === "OUT_OF_STOCK" || qty <= 0;
+    }).length;
+    const assetsNeverVerified = svoAssets.filter((a) => !a.lastVerificationDate).length;
+    const assetsException = svoAssets.filter((a) => /exception|missing|failed/i.test(String(a.verificationStatus || ""))).length;
+    const capitalisationIssuance = (stockIssues?.length || 0) + (conversions?.length || 0);
+    const storeOperations = capitalisationIssuance + inventoryItems.length;
 
     const stateIds = [...new Set([
       ...verifications.map((v) => v.state_id),
@@ -436,21 +454,27 @@ const getDashboard = async (req, res, next) => {
       .slice(0, 15);
 
     const module_breakdown = [
-      { module: "Physical Asset Verification", count: verifications.length },
-      { module: "Verification of Supply", count: supplyVerifications.length },
-      { module: "SVO Assets", count: svoAssets.length },
-      { module: "Inventory Catalog", count: inventoryItems.length },
-      { module: "Transfers & Movements", count: transfers.length },
-      { module: "Board Disposal", count: disposals.length },
-      { module: "Maintenance & Servicing", count: maintenance.length },
+      { module: "Physical Asset Verification", count: svoAssets.length, path: "/store-management/verification/verify" },
+      { module: "Verification of Supply", count: supplyVerifications.length, path: "/store-management/verification/supply" },
+      { module: "Inventory Register", count: inventoryItems.length, path: "/store-management/inventory/items" },
+      { module: "Capitalisation & Issuance", count: capitalisationIssuance, path: "/store-management/transfers/requests" },
     ].filter((row) => row.count > 0);
 
     res.json({
       success: true,
       data: {
-        physical_asset_verifications: verifications.length,
+        physical_asset_verifications: physicalInspections?.length || verifications.length,
+        tagged_assets: svoAssets.length,
+        assets_never_verified: assetsNeverVerified,
+        assets_exception: assetsException,
         supply_verifications: supplyVerifications.length,
         svo_assets: svoAssets.length,
+        inventory_items: inventoryItems.length,
+        inventory_low: inventoryLow,
+        inventory_out: inventoryOut,
+        stock_issues: stockIssues?.length || 0,
+        capitalisations: conversions?.length || 0,
+        capitalisation_issuance: capitalisationIssuance,
         store_operations: storeOperations,
         inventory_catalog: inventoryItems.length,
         total_verifications: verifications.length,

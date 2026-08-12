@@ -24,6 +24,7 @@ const MIGRATE_STEPS = [
   { script: "src/scripts/legacy/migrateSocZonesPrivileges.js", label: "SOC/Zones privileges" },
   { script: "src/scripts/legacy/migrateOthersPrivileges.js", label: "Zonal module privileges" },
   { script: "src/scripts/legacy/migrateSectionDashboards.js", label: "Section dashboards privileges" },
+  { script: "src/scripts/updateStoreDb.js", label: "Store / Asset Management schema" },
 ];
 
 const SEED_STEPS = [
@@ -35,6 +36,7 @@ const SEED_STEPS = [
   { script: "src/scripts/seedComplaintSla.js", label: "Complaint SLA rules + demo complaints" },
   { script: "src/scripts/seedStateOfficeData.js", label: "State Office sample data" },
   { script: "src/scripts/seedAccreditedProviders.js", label: "Accredited HMO & HCF (from nhia.gov.ng)" },
+  { script: "src/scripts/seedStoreManagement.js", label: "Store / Asset Management sample data" },
 ];
 
 const INCREMENTAL_MIGRATE_STEPS = [
@@ -45,6 +47,7 @@ const INCREMENTAL_MIGRATE_STEPS = [
   { script: "src/scripts/legacy/migrateSocZonesPrivileges.js", label: "SOC/Zones privileges" },
   { script: "src/scripts/legacy/migrateOthersPrivileges.js", label: "Zonal module privileges" },
   { script: "src/scripts/legacy/migrateSectionDashboards.js", label: "Section dashboards privileges" },
+  { script: "src/scripts/updateStoreDb.js", label: "Store / Asset Management schema" },
 ];
 
 const steps = seedsOnly

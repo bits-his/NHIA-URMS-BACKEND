@@ -40,7 +40,7 @@ const StoreInventoryItem = sequelize.define("StoreInventoryItem", {
   storeLocation: {
     type: DataTypes.STRING,
     allowNull: true,
-    defaultValue: "Main Depot",
+    defaultValue: "HQ Main Depot Store",
   },
   status: {
     type: DataTypes.ENUM("IN_STOCK", "LOW_STOCK", "OUT_OF_STOCK"),

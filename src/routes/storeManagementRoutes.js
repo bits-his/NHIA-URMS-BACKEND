@@ -14,8 +14,11 @@ router.delete("/assets/:id", storeCtrl.deleteAsset);
 
 // Inventory Items
 router.get("/inventory/items", storeCtrl.getInventoryItems);
+router.get("/inventory/items/:id/movements", storeCtrl.getInventoryMovements);
 router.get("/inventory/items/:id", storeCtrl.getInventoryItemById);
 router.post("/inventory/items", storeCtrl.createInventoryItem);
+router.get("/inventory/conversions", storeCtrl.getConversions);
+router.post("/inventory/capitalise", storeCtrl.capitaliseInventory);
 
 // Goods Receipts (GRN)
 router.get("/inventory/receipts", storeCtrl.getGoodsReceipts);
@@ -34,6 +37,12 @@ router.put("/transfers/:id", storeCtrl.updateTransfer);
 router.get("/verification/supply", storeCtrl.getSupplyVerifications);
 router.get("/verification/supply/:id", storeCtrl.getSupplyVerificationById);
 router.post("/verification/supply", storeCtrl.createSupplyVerification);
+
+// Physical Asset Verification (audit of Master Register assets)
+router.get("/verification/physical", storeCtrl.getPhysicalVerifications);
+router.get("/verification/physical/:id", storeCtrl.getPhysicalVerificationById);
+router.post("/verification/physical", storeCtrl.createPhysicalVerification);
+router.put("/verification/physical/:id", storeCtrl.updatePhysicalVerification);
 
 // Maintenance & Disposal
 router.get("/maintenance", storeCtrl.getMaintenance);

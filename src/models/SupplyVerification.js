@@ -25,6 +25,15 @@ const SupplyVerification = sequelize.define("SupplyVerification", {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  supplyNature: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: "Goods",
+  },
+  storeLocation: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   // Transaction & contract
   procurementInstrument: {
     type: DataTypes.STRING,
@@ -107,6 +116,22 @@ const SupplyVerification = sequelize.define("SupplyVerification", {
   },
   unit_id: {
     type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  zone_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  state_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  department_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  unit_name: {
+    type: DataTypes.STRING,
     allowNull: true,
   },
   // Line items [{ description, quantityDelivered, unitPrice }]
