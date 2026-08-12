@@ -44,7 +44,7 @@ const PhysicalAssetVerificationItem = sequelize.define("PhysicalAssetVerificatio
     defaultValue: 0,
   },
   condition: {
-    type: DataTypes.ENUM("GOOD", "FAIR", "POOR", "MISSING", "DAMAGED"),
+    type: DataTypes.ENUM("GOOD", "FAIR", "POOR", "MISSING", "DAMAGED", "DEFECTIVE", "OBSOLETE", "RETIRED"),
     defaultValue: "GOOD",
   },
   remarks: {

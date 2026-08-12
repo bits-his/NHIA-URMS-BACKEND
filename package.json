@@ -8,6 +8,8 @@
     "start": "node src/server.js",
     "db:setup": "node src/scripts/dbSetup.js",
     "db:sync": "node src/scripts/syncDb.js",
+    "db:update-store": "node src/scripts/updateStoreDb.js",
+    "db:seed-store": "node src/scripts/seedStoreManagement.js",
     "db:seed-all": "node src/scripts/seedAll.js",
     "db:seed": "node src/scripts/seedAll.js --seeds-only",
     "db:fix-servicom-fks": "node src/scripts/fixServicomForeignKeys.js",

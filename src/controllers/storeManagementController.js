@@ -692,12 +692,32 @@ async function nextPhysicalRef() {
   return `PAV-${year}-${String(count + 1).padStart(4, "0")}`;
 }
 
+function mapPhysicalCondition(raw) {
+  const u = String(raw || "GOOD").toUpperCase();
+  const labels = {
+    GOOD: "Good",
+    FAIR: "Fair",
+    POOR: "Poor",
+    DAMAGED: "Damaged",
+    DEFECTIVE: "Defective",
+    MISSING: "Missing",
+    OBSOLETE: "Obsolete",
+    RETIRED: "Retired",
+    EXCELLENT: "Good",
+  };
+  return labels[u] || "Good";
+}
+
 function mapPhysicalItems(verificationId, items = []) {
+  const allowed = new Set(["GOOD", "FAIR", "POOR", "MISSING", "DAMAGED", "DEFECTIVE", "OBSOLETE", "RETIRED"]);
   return (items || [])
     .filter((item) => item.assetName || item.assetNumber)
     .map((item) => {
       const book = Number(item.bookBalance ?? 1) || 0;
       const physical = Number(item.physicalCount ?? 0) || 0;
+      let condition = String(item.condition || "GOOD").toUpperCase();
+      if (condition === "EXCELLENT") condition = "GOOD";
+      if (!allowed.has(condition)) condition = "GOOD";
       return {
         verification_id: verificationId,
         assetId: item.assetId || null,
@@ -708,7 +728,7 @@ function mapPhysicalItems(verificationId, items = []) {
         bookBalance: book,
         physicalCount: physical,
         variance: book - physical,
-        condition: String(item.condition || "GOOD").toUpperCase(),
+        condition,
         remarks: item.remarks || null,
       };
     });
@@ -789,14 +809,7 @@ exports.createPhysicalVerification = async (req, res) => {
               row.variance === 0 && row.condition !== "MISSING"
                 ? "Verified & Passed"
                 : "Exception",
-            physicalCondition:
-              row.condition === "GOOD"
-                ? "Good"
-                : row.condition === "FAIR"
-                  ? "Fair"
-                  : row.condition === "POOR" || row.condition === "DAMAGED"
-                    ? "Poor"
-                    : undefined,
+            physicalCondition: mapPhysicalCondition(row.condition),
           },
           { where: { id: row.assetId } }
         );
@@ -858,6 +871,7 @@ exports.updatePhysicalVerification = async (req, res) => {
               row.variance === 0 && row.condition !== "MISSING"
                 ? "Verified & Passed"
                 : "Exception",
+            physicalCondition: mapPhysicalCondition(row.condition),
           },
           { where: { id: row.assetId } }
         );
