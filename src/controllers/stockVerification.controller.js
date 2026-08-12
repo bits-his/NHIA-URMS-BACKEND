@@ -6,6 +6,8 @@ const {
 const {
   StockVerification, StockVerificationItem, StockAsset,
   ZonalOffice, StateOffice, Department, Unit,
+  StoreAsset, StoreInventoryItem, SupplyVerification,
+  AssetTransfer, AssetMaintenance, AssetDisposal,
 } = require("../models");
 
 // ─── Reference ID generator ───────────────────────────────────────────────────
@@ -302,20 +304,50 @@ const countByField = (rows, field) =>
     }, {}),
   ).map(([name, count]) => ({ [field]: name, count }));
 
+const monthKey = (dateStr) => (dateStr ? String(dateStr).slice(0, 7) : null);
+
+const buildStockAssetWhere = async (user, query) => {
+  const scoped = await require("../utils/stateOfficeScope").buildStateOfficeListWhere(user, query);
+  const assetWhere = {};
+  if (scoped.state_id) assetWhere.state_id = scoped.state_id;
+  else if (scoped.zone_id) {
+    const states = await StateOffice.findAll({ where: { zonal_id: scoped.zone_id }, attributes: ["id"] });
+    if (!states.length) assetWhere.state_id = -1;
+    else assetWhere.state_id = { [Op.in]: states.map((s) => s.id) };
+  }
+  return assetWhere;
+};
+
+const mapDrillRow = (row, fields) => ({
+  id: row.id,
+  reference: fields.reference?.(row) ?? null,
+  title: fields.title(row),
+  subtitle: fields.subtitle?.(row) ?? null,
+  status: fields.status?.(row) ?? null,
+  date: fields.date?.(row) ?? null,
+  state_name: row.state?.description ?? fields.state_name?.(row) ?? null,
+  zone_name: row.zone?.description ?? row.state?.zone?.description ?? fields.zone_name?.(row) ?? null,
+  state_id: row.state_id ?? row.state?.id ?? fields.state_id?.(row) ?? null,
+  zone_id: row.zone_id ?? row.zone?.id ?? row.state?.zonal_id ?? fields.zone_id?.(row) ?? null,
+  meta: fields.meta?.(row) ?? null,
+});
+
 const getDashboard = async (req, res, next) => {
   try {
     const { buildStateOfficeListWhere } = require("../utils/stateOfficeScope");
     const where = await buildStateOfficeListWhere(req.user, req.query);
+    const assetWhere = await buildStockAssetWhere(req.user, req.query);
 
-    const [verifications, assets, items] = await Promise.all([
+    const [
+      verifications, stockAssets, items, supplyVerifications,
+      svoAssets, inventoryItems, transfers, disposals, maintenance,
+    ] = await Promise.all([
       StockVerification.findAll({
         where,
         attributes: ["id", "status", "stocktaking_type", "verification_date", "state_id", "zone_id"],
       }),
       StockAsset.findAll({
-        where: {
-          ...(where.state_id ? { state_id: where.state_id } : {}),
-        },
+        where: assetWhere,
         attributes: ["id", "is_active", "state_id"],
       }),
       StockVerificationItem.findAll({
@@ -328,55 +360,112 @@ const getDashboard = async (req, res, next) => {
           required: true,
         }],
       }),
+      SupplyVerification.findAll({
+        where,
+        attributes: ["id", "verdict", "certificateDate", "state_id", "zone_id", "supplyRefNo"],
+      }),
+      StoreAsset.findAll({ attributes: ["id", "status", "operationalStatus"] }),
+      StoreInventoryItem.findAll({ attributes: ["id", "category", "quantityInStock"] }),
+      AssetTransfer.findAll({ attributes: ["id", "status", "created_at"] }),
+      AssetDisposal.findAll({ attributes: ["id", "reason", "disposalDate"] }),
+      AssetMaintenance.findAll({ attributes: ["id", "type", "startDate", "completionDate"] }),
     ]);
 
-    const monthKey = (dateStr) => (dateStr ? String(dateStr).slice(0, 7) : null);
     const monthlyMap = {};
+    const bumpMonth = (key, field) => {
+      if (!key) return;
+      if (!monthlyMap[key]) {
+        monthlyMap[key] = {
+          month: key,
+          physical_verifications: 0,
+          supply_verifications: 0,
+          verifications: 0,
+          approved: 0,
+        };
+      }
+      monthlyMap[key][field] += 1;
+      if (field === "physical_verifications") monthlyMap[key].verifications += 1;
+    };
+
     verifications.forEach((v) => {
       const key = monthKey(v.verification_date);
-      if (!key) return;
-      if (!monthlyMap[key]) monthlyMap[key] = { month: key, verifications: 0, approved: 0 };
-      monthlyMap[key].verifications += 1;
-      if (v.status === "approved") monthlyMap[key].approved += 1;
+      bumpMonth(key, "physical_verifications");
+      if (v.status === "approved" && key) monthlyMap[key].approved += 1;
+    });
+    supplyVerifications.forEach((s) => {
+      bumpMonth(monthKey(s.certificateDate), "supply_verifications");
     });
 
-    const assetsActive = assets.filter((a) => a.is_active === true || a.is_active === 1).length;
+    const stockAssetsActive = stockAssets.filter((a) => a.is_active === true || a.is_active === 1).length;
+    const svoAssetsActive = svoAssets.filter(
+      (a) => String(a.status || "").toUpperCase() === "ACTIVE"
+        || String(a.operationalStatus || "").toLowerCase().includes("active"),
+    ).length;
     const itemsWithVariance = items.filter((i) => i.variance !== 0).length;
     const itemsBadCondition = items.filter((i) => i.condition === "bad").length;
+    const supplyFailed = supplyVerifications.filter((s) => s.verdict === "FAILED").length;
+    const storeOperations = transfers.length + disposals.length + maintenance.length + inventoryItems.length;
 
-    const stateIds = [...new Set(verifications.map((v) => v.state_id).filter(Boolean))];
+    const stateIds = [...new Set([
+      ...verifications.map((v) => v.state_id),
+      ...supplyVerifications.map((s) => s.state_id),
+    ].filter(Boolean))];
     const stateRows = stateIds.length
       ? await StateOffice.findAll({ where: { id: stateIds }, attributes: ["id", "description"] })
       : [];
     const stateNameById = Object.fromEntries(stateRows.map((s) => [s.id, s.description]));
 
     const stateCounts = {};
-    verifications.forEach((v) => {
-      if (!v.state_id) return;
-      if (!stateCounts[v.state_id]) stateCounts[v.state_id] = 0;
-      stateCounts[v.state_id] += 1;
-    });
+    const bumpState = (stateId) => {
+      if (!stateId) return;
+      if (!stateCounts[stateId]) stateCounts[stateId] = { physical: 0, supply: 0 };
+      return stateCounts[stateId];
+    };
+    verifications.forEach((v) => { if (v.state_id) bumpState(v.state_id).physical += 1; });
+    supplyVerifications.forEach((s) => { if (s.state_id) bumpState(s.state_id).supply += 1; });
+
     const state_activity = Object.entries(stateCounts)
-      .map(([state_id, count]) => ({
+      .map(([state_id, counts]) => ({
         state_id: Number(state_id),
         state_name: stateNameById[state_id] ?? null,
-        verification_count: count,
+        verification_count: counts.physical + counts.supply,
+        physical_count: counts.physical,
+        supply_count: counts.supply,
       }))
       .sort((a, b) => b.verification_count - a.verification_count)
       .slice(0, 15);
 
+    const module_breakdown = [
+      { module: "Physical Asset Verification", count: verifications.length },
+      { module: "Verification of Supply", count: supplyVerifications.length },
+      { module: "SVO Assets", count: svoAssets.length },
+      { module: "Inventory Catalog", count: inventoryItems.length },
+      { module: "Transfers & Movements", count: transfers.length },
+      { module: "Board Disposal", count: disposals.length },
+      { module: "Maintenance & Servicing", count: maintenance.length },
+    ].filter((row) => row.count > 0);
+
     res.json({
       success: true,
       data: {
+        physical_asset_verifications: verifications.length,
+        supply_verifications: supplyVerifications.length,
+        svo_assets: svoAssets.length,
+        store_operations: storeOperations,
+        inventory_catalog: inventoryItems.length,
         total_verifications: verifications.length,
-        total_assets: assets.length,
-        assets_active: assetsActive,
-        assets_inactive: assets.length - assetsActive,
+        total_assets: stockAssets.length,
+        assets_active: stockAssetsActive,
+        assets_inactive: stockAssets.length - stockAssetsActive,
+        svo_assets_active: svoAssetsActive,
         items_verified: items.length,
         items_with_variance: itemsWithVariance,
         items_bad_condition: itemsBadCondition,
+        supply_failed: supplyFailed,
         verification_by_status: countByField(verifications, "status"),
         verification_by_type: countByField(verifications, "stocktaking_type"),
+        supply_by_verdict: countByField(supplyVerifications, "verdict"),
+        module_breakdown,
         monthly_activity: Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month)),
         state_activity,
       },
@@ -391,7 +480,7 @@ const getDashboardDrill = async (req, res, next) => {
     const { buildStateOfficeListWhere } = require("../utils/stateOfficeScope");
     const { buildZoneBreakdown, buildStateBreakdownInZone } = require("../utils/dashboardDrillGeo");
     const segment = String(req.query.segment || "verifications");
-    const recordSegment = req.query.record_segment || "verifications";
+    const recordSegment = req.query.record_segment || segment;
     const where = await buildStateOfficeListWhere(req.user, req.query);
     const geoInclude = [
       { model: ZonalOffice, as: "zone", attributes: ["description"] },
@@ -402,28 +491,51 @@ const getDashboardDrill = async (req, res, next) => {
       model: StateOffice, as: "state", attributes: ["description"],
       include: [{ model: ZonalOffice, as: "zone", attributes: ["description"] }],
     }];
+    const supplyGeoInclude = [
+      { model: ZonalOffice, as: "zone", attributes: ["description"] },
+      { model: StateOffice, as: "state", attributes: ["description"] },
+    ];
+
+    const GEO_SCOPED = new Set(["verifications", "supply_verifications", "variance_items", "assets"]);
 
     const countStockDrillRecord = async (query, rs) => {
       const q = { ...query };
       delete q.segment;
       delete q.record_segment;
       const scoped = await buildStateOfficeListWhere(req.user, q);
+      const assetWhere = await buildStockAssetWhere(req.user, q);
+
+      if (rs === "svo_assets") return StoreAsset.count();
+      if (rs === "inventory_items") return StoreInventoryItem.count();
+      if (rs === "transfers") return AssetTransfer.count();
+      if (rs === "disposals") return AssetDisposal.count();
+      if (rs === "maintenance") return AssetMaintenance.count();
+      if (rs === "store_operations") {
+        const [t, d, m, inv] = await Promise.all([
+          AssetTransfer.count(),
+          AssetDisposal.count(),
+          AssetMaintenance.count(),
+          StoreInventoryItem.count(),
+        ]);
+        return t + d + m + inv;
+      }
+
       if (rs === "assets") {
-        const assetWhere = {};
-        if (scoped.state_id) assetWhere.state_id = scoped.state_id;
-        else if (scoped.zone_id) {
-          const states = await StateOffice.findAll({ where: { zonal_id: scoped.zone_id }, attributes: ["id"] });
-          if (!states.length) return 0;
-          assetWhere.state_id = { [Op.in]: states.map((s) => s.id) };
-        }
-        if (query.active === "1") assetWhere.is_active = { [Op.eq]: 1 };
-        if (query.active === "0") assetWhere.is_active = { [Op.eq]: 0 };
+        if (q.active === "1") assetWhere.is_active = { [Op.eq]: 1 };
+        if (q.active === "0") assetWhere.is_active = { [Op.eq]: 0 };
         return StockAsset.count({ where: assetWhere });
       }
+
+      if (rs === "supply_verifications") {
+        if (q.verdict) scoped.verdict = q.verdict;
+        if (q.month) scoped.certificateDate = { [Op.like]: `${q.month}%` };
+        return SupplyVerification.count({ where: scoped });
+      }
+
       if (rs === "variance_items") {
         const itemWhere = {};
-        if (query.has_variance === "1") itemWhere.variance = { [Op.ne]: 0 };
-        if (query.condition === "bad") itemWhere.condition = "bad";
+        if (q.has_variance === "1") itemWhere.variance = { [Op.ne]: 0 };
+        if (q.condition === "bad") itemWhere.condition = "bad";
         return StockVerificationItem.count({
           where: itemWhere,
           include: [{
@@ -434,15 +546,17 @@ const getDashboardDrill = async (req, res, next) => {
           }],
         });
       }
-      if (query.status) scoped.status = query.status;
-      if (query.type) scoped.stocktaking_type = query.type;
-      if (query.month) scoped.verification_date = { [Op.like]: `${query.month}%` };
+
+      if (q.status) scoped.status = q.status;
+      if (q.type) scoped.stocktaking_type = q.type;
+      if (q.month) scoped.verification_date = { [Op.like]: `${q.month}%` };
       return StockVerification.count({ where: scoped });
     };
 
     if (segment === "zone_breakdown") {
+      const rs = GEO_SCOPED.has(recordSegment) ? recordSegment : "verifications";
       const data = await buildZoneBreakdown((zoneId) =>
-        countStockDrillRecord({ ...req.query, zone_id: String(zoneId) }, recordSegment),
+        countStockDrillRecord({ ...req.query, zone_id: String(zoneId) }, rs),
       );
       return res.json({ success: true, data });
     }
@@ -450,46 +564,210 @@ const getDashboardDrill = async (req, res, next) => {
     if (segment === "state_breakdown") {
       const stateId = req.query.state_id;
       const zoneId = req.query.zone_id;
+      const rs = GEO_SCOPED.has(recordSegment) ? recordSegment : "verifications";
+
       if (!stateId && zoneId) {
         const data = await buildStateBreakdownInZone(zoneId, (stId) =>
-          countStockDrillRecord({ ...req.query, zone_id: String(zoneId), state_id: String(stId) }, recordSegment),
+          countStockDrillRecord({ ...req.query, zone_id: String(zoneId), state_id: String(stId) }, rs),
         );
         return res.json({ success: true, data });
       }
-      if (stateId && !req.query.record_segment) {
+
+      if (stateId && !req.query.record_segment && segment === "state_breakdown") {
         const stWhere = { ...where, state_id: stateId };
-        const count = await StockVerification.count({ where: stWhere });
+        const [physical, supply] = await Promise.all([
+          StockVerification.count({ where: stWhere }),
+          SupplyVerification.count({ where: stWhere }),
+        ]);
         const state = await StateOffice.findByPk(stateId, {
           attributes: ["description"],
           include: [{ model: ZonalOffice, as: "zone", attributes: ["description"] }],
         });
         return res.json({
           success: true,
-          data: [{
-            id: stateId,
-            reference: null,
-            title: `${state?.description || "State"} — Verifications`,
-            subtitle: "All stocktaking sessions",
-            status: String(count),
-            state_name: state?.description,
-            zone_name: state?.zone?.description ?? null,
-            meta: "segment:verifications",
-          }],
+          data: [
+            {
+              id: "physical",
+              reference: null,
+              title: "Physical Asset Verifications",
+              subtitle: state?.description,
+              status: String(physical),
+              state_name: state?.description,
+              zone_name: state?.zone?.description ?? null,
+              meta: "segment:verifications",
+            },
+            {
+              id: "supply",
+              reference: null,
+              title: "Verification of Supply",
+              subtitle: state?.description,
+              status: String(supply),
+              state_name: state?.description,
+              zone_name: state?.zone?.description ?? null,
+              meta: "segment:supply_verifications",
+            },
+          ],
         });
       }
+
       if (!stateId && !zoneId) {
         return res.status(422).json({ success: false, message: "state_id or zone_id required" });
       }
     }
 
-    if (segment === "assets") {
+    if (segment === "store_operations") {
+      const [transferRows, disposalRows, maintenanceRows, inventoryRows] = await Promise.all([
+        AssetTransfer.findAll({ order: [["created_at", "DESC"]], limit: 60 }),
+        AssetDisposal.findAll({ order: [["disposalDate", "DESC"]], limit: 60 }),
+        AssetMaintenance.findAll({ order: [["startDate", "DESC"]], limit: 60 }),
+        StoreInventoryItem.findAll({ order: [["name", "ASC"]], limit: 60 }),
+      ]);
+      const data = [
+        ...transferRows.map((r) => mapDrillRow(r, {
+          reference: (x) => x.transferNumber,
+          title: (x) => x.assetName || "Asset Transfer",
+          subtitle: (x) => `${x.fromOffice} → ${x.toOffice}`,
+          status: (x) => x.status,
+          date: (x) => x.created_at,
+          meta: () => "segment:transfers",
+        })),
+        ...disposalRows.map((r) => mapDrillRow(r, {
+          reference: (x) => x.disposalNumber,
+          title: (x) => x.assetName || "Asset Disposal",
+          subtitle: (x) => x.reason,
+          status: (x) => x.reason,
+          date: (x) => x.disposalDate,
+          meta: () => "segment:disposals",
+        })),
+        ...maintenanceRows.map((r) => mapDrillRow(r, {
+          reference: (x) => x.maintenanceNo,
+          title: (x) => x.assetName || "Maintenance Record",
+          subtitle: (x) => x.type,
+          status: (x) => (x.completionDate ? "Completed" : "In Progress"),
+          date: (x) => x.startDate,
+          meta: () => "segment:maintenance",
+        })),
+        ...inventoryRows.map((r) => mapDrillRow(r, {
+          reference: (x) => x.itemCode,
+          title: (x) => x.name,
+          subtitle: (x) => x.category,
+          status: (x) => `${x.quantityInStock ?? 0} in stock`,
+          meta: () => "segment:inventory_items",
+        })),
+      ].slice(0, 200);
+      return res.json({ success: true, data });
+    }
+
+    if (segment === "svo_assets") {
       const assetWhere = {};
-      if (where.state_id) assetWhere.state_id = where.state_id;
-      else if (where.zone_id) {
-        const states = await StateOffice.findAll({ where: { zonal_id: where.zone_id }, attributes: ["id"] });
-        if (!states.length) return res.json({ success: true, data: [] });
-        assetWhere.state_id = { [Op.in]: states.map((s) => s.id) };
+      if (req.query.active === "1") {
+        assetWhere[Op.or] = [
+          { status: "ACTIVE" },
+          { operationalStatus: { [Op.like]: "%Active%" } },
+        ];
       }
+      const rows = await StoreAsset.findAll({
+        where: assetWhere,
+        order: [["assetNumber", "ASC"]],
+        limit: 200,
+      });
+      return res.json({
+        success: true,
+        data: rows.map((r) => mapDrillRow(r, {
+          reference: (x) => x.assetNumber || x.assetId,
+          title: (x) => x.name,
+          subtitle: (x) => x.category,
+          status: (x) => x.status || x.operationalStatus,
+          date: (x) => x.acquisitionDate,
+          meta: (x) => x.nhiaTagNumber,
+        })),
+      });
+    }
+
+    if (segment === "inventory_items") {
+      const rows = await StoreInventoryItem.findAll({
+        order: [["name", "ASC"]],
+        limit: 200,
+      });
+      return res.json({
+        success: true,
+        data: rows.map((r) => mapDrillRow(r, {
+          reference: (x) => x.itemCode,
+          title: (x) => x.name,
+          subtitle: (x) => x.category,
+          status: (x) => `${x.quantityInStock ?? 0} in stock`,
+          meta: (x) => x.storeLocation,
+        })),
+      });
+    }
+
+    if (segment === "transfers") {
+      const rows = await AssetTransfer.findAll({ order: [["created_at", "DESC"]], limit: 200 });
+      return res.json({
+        success: true,
+        data: rows.map((r) => mapDrillRow(r, {
+          reference: (x) => x.transferNumber,
+          title: (x) => x.assetName || "Asset Transfer",
+          subtitle: (x) => `${x.fromOffice} → ${x.toOffice}`,
+          status: (x) => x.status,
+          date: (x) => x.created_at,
+        })),
+      });
+    }
+
+    if (segment === "disposals") {
+      const rows = await AssetDisposal.findAll({ order: [["disposalDate", "DESC"]], limit: 200 });
+      return res.json({
+        success: true,
+        data: rows.map((r) => mapDrillRow(r, {
+          reference: (x) => x.disposalNumber,
+          title: (x) => x.assetName || "Asset Disposal",
+          subtitle: (x) => x.reason,
+          status: (x) => x.reason,
+          date: (x) => x.disposalDate,
+        })),
+      });
+    }
+
+    if (segment === "maintenance") {
+      const rows = await AssetMaintenance.findAll({ order: [["startDate", "DESC"]], limit: 200 });
+      return res.json({
+        success: true,
+        data: rows.map((r) => mapDrillRow(r, {
+          reference: (x) => x.maintenanceNo,
+          title: (x) => x.assetName || "Maintenance",
+          subtitle: (x) => x.type,
+          status: (x) => (x.completionDate ? "Completed" : "In Progress"),
+          date: (x) => x.startDate,
+        })),
+      });
+    }
+
+    if (segment === "supply_verifications") {
+      const supplyWhere = { ...where };
+      if (req.query.verdict) supplyWhere.verdict = req.query.verdict;
+      if (req.query.month) supplyWhere.certificateDate = { [Op.like]: `${req.query.month}%` };
+      const rows = await SupplyVerification.findAll({
+        where: supplyWhere,
+        include: supplyGeoInclude,
+        order: [["certificateDate", "DESC"]],
+        limit: 200,
+      });
+      return res.json({
+        success: true,
+        data: rows.map((r) => mapDrillRow(r, {
+          reference: (x) => x.supplyRefNo,
+          title: (x) => x.suppliedItemName || x.expectedItemName || "Supply Verification",
+          subtitle: (x) => x.supplierName,
+          status: (x) => x.verdict,
+          date: (x) => x.certificateDate,
+          meta: (x) => x.goodsCategory,
+        })),
+      });
+    }
+
+    if (segment === "assets") {
+      const assetWhere = await buildStockAssetWhere(req.user, req.query);
       if (req.query.active === "1") assetWhere.is_active = { [Op.eq]: 1 };
       if (req.query.active === "0") assetWhere.is_active = { [Op.eq]: 0 };
       const rows = await StockAsset.findAll({

@@ -113,6 +113,125 @@ function computeCommentCardMetrics(responses) {
   return { total_score: total, average_score: average };
 }
 
+function emptyStatePerformanceBucket(stateId) {
+  return {
+    state_id: stateId,
+    surveys: 0,
+    surveyScoreSum: 0,
+    surveyCount: 0,
+    comment_cards: 0,
+    cardScoreSum: 0,
+    cardCount: 0,
+    complaints: 0,
+    complaintsClosed: 0,
+  };
+}
+
+function computeStatePerformanceScore(bucket) {
+  // Rankings require at least one survey or charter card (service-quality input)
+  if (bucket.surveyCount === 0 && bucket.cardCount === 0) return null;
+
+  const parts = [];
+  if (bucket.surveyCount > 0) {
+    parts.push({ value: bucket.surveyScoreSum / bucket.surveyCount, weight: 0.55 });
+  }
+  if (bucket.cardCount > 0) {
+    parts.push({ value: (bucket.cardScoreSum / bucket.cardCount / 5) * 100, weight: 0.35 });
+  }
+  if (bucket.complaints > 0) {
+    parts.push({
+      value: (bucket.complaintsClosed / bucket.complaints) * 100,
+      weight: 0.1,
+    });
+  }
+  const weightSum = parts.reduce((sum, part) => sum + part.weight, 0);
+  const score = parts.reduce((sum, part) => sum + part.value * part.weight, 0) / weightSum;
+  return Math.round(score * 10) / 10;
+}
+
+function normalizeComplaintStatus(raw) {
+  const key = String(raw || "unknown").trim().toLowerCase().replace(/\s+/g, "_");
+  const map = {
+    resolved: "Resolved",
+    closed: "Closed",
+    open: "Open",
+    in_progress: "In Progress",
+    assigned: "Assigned",
+    escalated: "Escalated",
+    "new/acknowledged": "New/Acknowledged",
+    new_acknowledged: "New/Acknowledged",
+  };
+  return map[key] || String(raw || "Unknown").trim() || "Unknown";
+}
+
+function isComplaintClosed(c) {
+  const status = String(c.status || "").toLowerCase();
+  return status === "closed" || status === "resolved" || !!c.date_closed || !!c.resolution_date;
+}
+
+/** Top half = best performers; bottom half = low performers (no overlap). */
+function splitTopLowPerformingStates(ranked) {
+  const withScores = ranked.filter((s) => s.avg_score != null);
+  if (!withScores.length) return { top_states: [], low_states: [] };
+  if (withScores.length === 1) {
+    return { top_states: [withScores[0]], low_states: [] };
+  }
+  const splitAt = Math.ceil(withScores.length / 2);
+  const top_states = withScores.slice(0, Math.min(5, splitAt));
+  const low_states = [...withScores.slice(splitAt)]
+    .sort((a, b) => a.avg_score - b.avg_score)
+    .slice(0, 5);
+  return { top_states, low_states };
+}
+
+function buildStatePerformanceRankings(satisfactionSurveys, commentCards, complaints, stateNameById) {
+  const stateMap = {};
+
+  for (const s of satisfactionSurveys) {
+    if (!s.state_id) continue;
+    if (!stateMap[s.state_id]) stateMap[s.state_id] = emptyStatePerformanceBucket(s.state_id);
+    stateMap[s.state_id].surveys += 1;
+    if (s.percentage_score != null && !Number.isNaN(Number(s.percentage_score))) {
+      stateMap[s.state_id].surveyScoreSum += Number(s.percentage_score);
+      stateMap[s.state_id].surveyCount += 1;
+    }
+  }
+
+  for (const c of commentCards) {
+    if (!c.state_id) continue;
+    if (!stateMap[c.state_id]) stateMap[c.state_id] = emptyStatePerformanceBucket(c.state_id);
+    stateMap[c.state_id].comment_cards += 1;
+    if (c.average_score != null && !Number.isNaN(Number(c.average_score))) {
+      stateMap[c.state_id].cardScoreSum += Number(c.average_score);
+      stateMap[c.state_id].cardCount += 1;
+    }
+  }
+
+  for (const c of complaints) {
+    if (!c.state_id) continue;
+    if (!stateMap[c.state_id]) stateMap[c.state_id] = emptyStatePerformanceBucket(c.state_id);
+    stateMap[c.state_id].complaints += 1;
+    if (isComplaintClosed(c)) {
+      stateMap[c.state_id].complaintsClosed += 1;
+    }
+  }
+
+  return Object.values(stateMap)
+    .map((bucket) => {
+      const avg_score = computeStatePerformanceScore(bucket);
+      return {
+        state_id: bucket.state_id,
+        state_name: stateNameById[bucket.state_id] ?? null,
+        surveys: bucket.surveys,
+        comment_cards: bucket.comment_cards,
+        complaints: bucket.complaints,
+        avg_score,
+      };
+    })
+    .filter((s) => s.avg_score != null && (s.surveys > 0 || s.comment_cards > 0))
+    .sort((a, b) => b.avg_score - a.avg_score);
+}
+
 function normalizeSurveyResponses(raw, questions) {
   const map = new Map((Array.isArray(raw) ? raw : []).map((r) => [r.question_id, r]));
   return questions.map((q) => {
@@ -424,9 +543,7 @@ module.exports = {
         : null;
 
       const complaints_received = complaints.length;
-      const complaints_closed = complaints.filter((c) =>
-        ["Closed", "Resolved", "closed", "resolved"].includes(c.status) || c.date_closed,
-      ).length;
+      const complaints_closed = complaints.filter(isComplaintClosed).length;
       const complaint_resolution_rate = complaints_received
         ? Math.round((complaints_closed / complaints_received) * 1000) / 10
         : 0;
@@ -450,27 +567,35 @@ module.exports = {
 
       const complaint_by_status = Object.entries(
         complaints.reduce((acc, c) => {
-          const k = c.status || "Unknown";
+          const k = normalizeComplaintStatus(c.status);
           acc[k] = (acc[k] || 0) + 1;
           return acc;
         }, {}),
-      ).map(([status, count]) => ({ status, count }));
+      )
+        .map(([status, count]) => ({ status, count }))
+        .sort((a, b) => b.count - a.count);
 
       const complaint_by_category = Object.entries(
         complaints.reduce((acc, c) => {
-          const k = c.complaint_category || c.category || "Uncategorised";
+          const k = (c.complaint_category || c.category || "Uncategorised")
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (ch) => ch.toUpperCase());
           acc[k] = (acc[k] || 0) + 1;
           return acc;
         }, {}),
-      ).map(([category, count]) => ({ category, count }));
+      )
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count);
 
       const complaint_by_domain = Object.entries(
         complaints.reduce((acc, c) => {
-          const k = c.complaint_domain || "Unknown";
+          const k = c.complaint_domain || c.domain_code || "Not specified";
           acc[k] = (acc[k] || 0) + 1;
           return acc;
         }, {}),
-      ).map(([domain, count]) => ({ domain, count }));
+      )
+        .map(([domain, count]) => ({ domain, count }))
+        .sort((a, b) => b.count - a.count);
 
       const complaint_by_priority = Object.entries(
         complaints.reduce((acc, c) => {
@@ -478,30 +603,29 @@ module.exports = {
           acc[k] = (acc[k] || 0) + 1;
           return acc;
         }, {}),
-      ).map(([priority, count]) => ({ priority, count }));
+      )
+        .map(([priority, count]) => ({ priority, count }))
+        .sort((a, b) => b.count - a.count);
 
-      const stateMap = {};
-      for (const s of satisfactionSurveys) {
-        if (!s.state_id) continue;
-        if (!stateMap[s.state_id]) stateMap[s.state_id] = { state_id: s.state_id, surveys: 0, scoreSum: 0, count: 0 };
-        stateMap[s.state_id].surveys += 1;
-        if (s.percentage_score != null) {
-          stateMap[s.state_id].scoreSum += Number(s.percentage_score);
-          stateMap[s.state_id].count += 1;
-        }
-      }
-      const stateIds = Object.keys(stateMap);
+      const stateIds = [
+        ...new Set([
+          ...satisfactionSurveys.map((s) => s.state_id),
+          ...commentCards.map((c) => c.state_id),
+          ...complaints.map((c) => c.state_id),
+        ].filter(Boolean)),
+      ];
       const stateRows = stateIds.length
         ? await StateOffice.findAll({ where: { id: stateIds }, attributes: ["id", "description"] })
         : [];
       const stateNameById = Object.fromEntries(stateRows.map((st) => [st.id, st.description]));
-      const state_satisfaction_rankings = Object.values(stateMap)
-        .map((s) => ({
-          ...s,
-          state_name: stateNameById[s.state_id] ?? null,
-          avg_score: s.count ? Math.round((s.scoreSum / s.count) * 10) / 10 : 0,
-        }))
-        .sort((a, b) => b.avg_score - a.avg_score);
+
+      const state_satisfaction_rankings = buildStatePerformanceRankings(
+        satisfactionSurveys,
+        commentCards,
+        complaints,
+        stateNameById,
+      );
+      const { top_states, low_states } = splitTopLowPerformingStates(state_satisfaction_rankings);
 
       res.json({
         success: true,
@@ -519,8 +643,8 @@ module.exports = {
           complaint_by_domain,
           complaint_by_priority,
           state_satisfaction_rankings,
-          top_states: state_satisfaction_rankings.slice(0, 5),
-          low_states: [...state_satisfaction_rankings].reverse().slice(0, 5),
+          top_states,
+          low_states,
         },
       });
     } catch (err) { next(err); }

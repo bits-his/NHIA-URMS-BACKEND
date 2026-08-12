@@ -50,6 +50,50 @@ npm run dev
 
 Server starts on `http://localhost:3001`
 
+## Production deploy
+
+After `git pull` on the server:
+
+```bash
+npm install
+npm run db:migrate-access   # fix Zonal/SOC/SDO privileges in existing users
+pm2 restart nhia-backend    # or your process manager — required for new routes
+```
+
+Verify routes are live (should **not** be 404):
+
+```bash
+curl -s https://your-server/NHIA-URMS-BACKEND/health
+curl -s -o /dev/null -w "%{http_code}" https://your-server/NHIA-URMS-BACKEND/api/stock/dashboard
+# Expect 401 without token (route exists). 404 means the app was not restarted.
+```
+
+Frontend build must use:
+
+```env
+VITE_API_URL=https://server.brainstorm.ng/NHIA-URMS-BACKEND/api
+```
+
+(`/api` suffix is required.)
+
+State office report routes (Zonal module privileges):
+
+| Section | API path |
+|---------|----------|
+| Enrolment | `GET /api/state-office/enrolment/reports` |
+| Migration | `GET /api/state-office/migration/reports` |
+| CEmONC | `GET /api/state-office/cemonc/reports` |
+| Monitoring Visits | `GET /api/state-office/compliance-visits` |
+| Accreditation | `GET /api/state-office/accreditation/reports` |
+| Stakeholder | `GET /api/state-office/stakeholder/reports` |
+| HMO Selection | `GET /api/state-office/hmo-selection/reports` |
+| Challenges | `GET /api/state-office/challenges/reports` |
+| IGR / SSHIA / Expenditure | `GET /api/state-office/igr/reports`, etc. |
+| SOC dashboard | `GET /api/state-office/dashboard` |
+| Stock dashboard | `GET /api/stock/dashboard` |
+
+403 on state-office routes means the logged-in user lacks the matching **Zonal** (or legacy **State Offices**) functionality — re-save privileges in Admin or run `npm run db:migrate-access`.
+
 ---
 
 ## API Endpoints

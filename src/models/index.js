@@ -177,6 +177,7 @@ StateOffice.hasMany(ContractedServicesReport,   { foreignKey: "state_id", as: "c
 ContractedServicesReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
 bindStateOfficeReport(ComplianceReport, "compliance");
+bindStateOfficeReport(SupplyVerification, "supply_verification");
 
 // ── SERVICOM M&E ──────────────────────────────────────────────────────────────
 ZonalOffice.hasMany(ServicomFacility,    { foreignKey: "zone_id",  as: "servicom_facilities" });
