@@ -65,6 +65,9 @@ const AssetTransfer               = require("./AssetTransfer");
 const SupplyVerification          = require("./SupplyVerification");
 const AssetMaintenance            = require("./AssetMaintenance");
 const AssetDisposal               = require("./AssetDisposal");
+const PhysicalAssetVerification   = require("./PhysicalAssetVerification");
+const PhysicalAssetVerificationItem = require("./PhysicalAssetVerificationItem");
+const StockConversion             = require("./StockConversion");
 
 const bindStateOfficeReport = (Model, alias) => {
   ZonalOffice.hasMany(Model, { foreignKey: "zone_id", as: `${alias}_zone` });
@@ -225,6 +228,22 @@ ServicomCommentCard.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone" 
 StateOffice.hasMany(ServicomCommentCard,   { foreignKey: "state_id", as: "servicom_comment_cards" });
 ServicomCommentCard.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+// ── Physical Asset Verification (Store Management) ────────────────────────────
+PhysicalAssetVerification.hasMany(PhysicalAssetVerificationItem, {
+  foreignKey: "verification_id",
+  as: "items",
+  onDelete: "CASCADE",
+});
+PhysicalAssetVerificationItem.belongsTo(PhysicalAssetVerification, {
+  foreignKey: "verification_id",
+  as: "verification",
+});
+PhysicalAssetVerificationItem.belongsTo(StoreAsset, {
+  foreignKey: "assetId",
+  as: "asset",
+  constraints: false,
+});
+
 // ── User ↔ Role (by key) ──────────────────────────────────────────────────────
 User.belongsTo(Role, { foreignKey: "role", targetKey: "key", as: "roleRecord", constraints: false });
 
@@ -251,4 +270,5 @@ module.exports = {
   ContractedServicesReport, ContractedServicesReportLine,
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
   StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, AssetMaintenance, AssetDisposal,
+  PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion,
 };

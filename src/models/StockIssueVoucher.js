@@ -37,6 +37,20 @@ const StockIssueVoucher = sequelize.define("StockIssueVoucher", {
     type: DataTypes.TEXT,
     allowNull: true,
   },
+  fromLocation: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: "Main Depot",
+  },
+  toLocation: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  lineItems: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: [],
+  },
 }, {
   tableName: "stock_issue_vouchers",
   timestamps: true,
