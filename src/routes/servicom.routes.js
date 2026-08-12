@@ -37,6 +37,7 @@ router.patch("/visits/:id/return", authorize(...reviewers), body("reason").notEm
 router.post("/visits/:id/evidence", authorize(...submitters), upload.single("file"), ctrl.uploadEvidence);
 
 router.get("/complaints", ctrl.listComplaints);
+router.get("/complaint-sla", ctrl.listComplaintSla);
 router.get("/complaints/:id", ctrl.getComplaint);
 router.post("/complaints", authorize(...submitters), [
   body("date_received").optional(),

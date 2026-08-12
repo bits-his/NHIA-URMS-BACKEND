@@ -10,6 +10,7 @@
     "db:sync": "node src/scripts/syncDb.js",
     "db:seed-all": "node src/scripts/seedAll.js",
     "db:seed": "node src/scripts/seedAll.js --seeds-only",
+    "db:seed-complaint-sla": "node src/scripts/seedComplaintSla.js",
     "db:fix-servicom-fks": "node src/scripts/fixServicomForeignKeys.js",
     "db:sync-accredited-providers": "node src/scripts/syncAccreditedProviders.js",
     "db:migrate-access": "node src/scripts/legacy/migrateProductionAccess.js"

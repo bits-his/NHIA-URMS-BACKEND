@@ -32,6 +32,7 @@ const SEED_STEPS = [
   { script: "src/scripts/seedUsers.js", label: "Demo users" },
   { script: "src/scripts/seedServicomIndicators.js", label: "SERVICOM indicators" },
   { script: "src/scripts/seedServicomData.js", label: "SERVICOM sample data" },
+  { script: "src/scripts/seedComplaintSla.js", label: "Complaint SLA rules + demo complaints" },
   { script: "src/scripts/seedStateOfficeData.js", label: "State Office sample data" },
   { script: "src/scripts/seedAccreditedProviders.js", label: "Accredited HMO & HCF (from nhia.gov.ng)" },
 ];

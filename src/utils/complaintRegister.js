@@ -1,18 +1,39 @@
+const {
+  getRuleForPriority,
+  loadComplaintSlaRules,
+  daysBetween,
+  isComplaintClosed,
+} = require("./complaintSla");
+
 const SLA_TARGETS = {
   Top:    { acknowledge: 1, investigate: 1, escalate: 3, resolve: 5 },
   High:   { acknowledge: 1, investigate: 2, escalate: 7, resolve: 10 },
   Medium: { acknowledge: 2, investigate: 3, escalate: 14, resolve: 20 },
 };
 
-function daysBetween(start, end) {
-  if (!start || !end) return null;
-  const d1 = new Date(start);
-  const d2 = new Date(end);
-  if (Number.isNaN(d1.getTime()) || Number.isNaN(d2.getTime())) return null;
-  return Math.max(0, Math.round((d2 - d1) / 86400000));
+async function computeComplaintMetrics(body) {
+  const date_received = body.date_received || body.complaint_date || null;
+  const date_closed = body.date_closed || body.resolution_date || null;
+  const resolution_days = daysBetween(date_received, date_closed);
+  const rulesMap = await loadComplaintSlaRules();
+  const rule = getRuleForPriority(rulesMap, body.priority_rating);
+  const resolution_within_sla = resolution_days != null && rule
+    ? resolution_days <= rule.target_resolution_days
+    : null;
+
+  return {
+    date_received,
+    date_closed,
+    resolution_days,
+    resolution_within_sla,
+    officer_assigned: body.officer_assigned || body.assigned_officer || null,
+    complaint_date: date_received || body.complaint_date,
+    resolution_date: date_closed,
+    assigned_officer: body.officer_assigned || body.assigned_officer || null,
+  };
 }
 
-function computeComplaintMetrics(body) {
+function computeComplaintMetricsSync(body) {
   const date_received = body.date_received || body.complaint_date || null;
   const date_closed = body.date_closed || body.resolution_date || null;
   const resolution_days = daysBetween(date_received, date_closed);
@@ -79,5 +100,10 @@ function pickComplaintFields(body) {
 }
 
 module.exports = {
-  SLA_TARGETS, computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, daysBetween,
+  SLA_TARGETS,
+  computeComplaintMetrics,
+  computeComplaintMetricsSync,
+  pickComplaintFields,
+  enrichComplaintCodes,
+  daysBetween,
 };

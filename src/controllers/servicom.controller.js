@@ -12,6 +12,11 @@ const {
 const { buildServicomListWhere } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
 const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes } = require("../utils/complaintRegister");
+const {
+  loadComplaintSlaRules,
+  enrichComplaintWithSla,
+  listComplaintSlaRulesFormatted,
+} = require("../utils/complaintSla");
 
 const VISIT_INCLUDES = [
   { model: ZonalOffice, as: "zone", attributes: ["id", "description", "zonal_code"] },
@@ -443,28 +448,42 @@ module.exports = {
       if (req.query.status) where.status = req.query.status;
       if (req.query.category) where.complaint_category = req.query.category;
       if (req.query.priority) where.priority_rating = req.query.priority;
-      const rows = await ServicomComplaint.findAll({
-        where,
-        include: [
-          { model: StateOffice, as: "state", attributes: ["id", "description"] },
-          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
-        ],
-        order: [["date_received", "DESC"], ["complaint_date", "DESC"], ["created_at", "DESC"]],
-      });
-      res.json({ success: true, data: rows });
+      const [rows, rulesMap] = await Promise.all([
+        ServicomComplaint.findAll({
+          where,
+          include: [
+            { model: StateOffice, as: "state", attributes: ["id", "description"] },
+            { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
+          ],
+          order: [["date_received", "DESC"], ["complaint_date", "DESC"], ["created_at", "DESC"]],
+        }),
+        loadComplaintSlaRules(),
+      ]);
+      const data = await Promise.all(rows.map((r) => enrichComplaintWithSla(r, rulesMap)));
+      res.json({ success: true, data });
     } catch (err) { next(err); }
   },
 
   getComplaint: async (req, res, next) => {
     try {
-      const row = await ServicomComplaint.findByPk(req.params.id, {
-        include: [
-          { model: StateOffice, as: "state", attributes: ["id", "description"] },
-          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
-        ],
-      });
+      const [row, rulesMap] = await Promise.all([
+        ServicomComplaint.findByPk(req.params.id, {
+          include: [
+            { model: StateOffice, as: "state", attributes: ["id", "description"] },
+            { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
+          ],
+        }),
+        loadComplaintSlaRules(),
+      ]);
       if (!row) return res.status(404).json({ success: false, message: "Complaint not found" });
-      res.json({ success: true, data: row });
+      res.json({ success: true, data: await enrichComplaintWithSla(row, rulesMap) });
+    } catch (err) { next(err); }
+  },
+
+  listComplaintSla: async (req, res, next) => {
+    try {
+      const data = await listComplaintSlaRulesFormatted();
+      res.json({ success: true, data });
     } catch (err) { next(err); }
   },
 
@@ -481,7 +500,7 @@ module.exports = {
       } else {
         complaint_number = await genRefId(ServicomComplaint, "CMP", t);
       }
-      const metrics = computeComplaintMetrics(req.body);
+      const metrics = await computeComplaintMetrics(req.body);
       const row = await ServicomComplaint.create({
         complaint_number,
         ...pickComplaintFields(req.body),
@@ -495,7 +514,8 @@ module.exports = {
       }, { transaction: t });
       await logAudit("servicom_complaint", row.id, "created", req.user?.name, null, t);
       await t.commit();
-      res.status(201).json({ success: true, data: row });
+      const rulesMap = await loadComplaintSlaRules(true);
+      res.status(201).json({ success: true, data: await enrichComplaintWithSla(row, rulesMap) });
     } catch (err) { await t.rollback(); next(err); }
   },
 
@@ -504,7 +524,7 @@ module.exports = {
       const row = await ServicomComplaint.findByPk(req.params.id);
       if (!row) return res.status(404).json({ success: false, message: "Complaint not found" });
       const merged = { ...row.toJSON(), ...req.body };
-      const metrics = computeComplaintMetrics(merged);
+      const metrics = await computeComplaintMetrics(merged);
       await row.update({
         ...pickComplaintFields(req.body),
         ...enrichComplaintCodes(merged),
@@ -512,7 +532,8 @@ module.exports = {
         escalated: req.body.escalated !== undefined ? !!req.body.escalated : row.escalated,
       });
       await logAudit("servicom_complaint", row.id, "updated", req.user?.name, req.body);
-      res.json({ success: true, data: row });
+      const rulesMap = await loadComplaintSlaRules(true);
+      res.json({ success: true, data: await enrichComplaintWithSla(row, rulesMap) });
     } catch (err) { next(err); }
   },
 
