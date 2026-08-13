@@ -111,6 +111,11 @@ function serializeReport(report) {
   if (!report) return report;
   const plain = report.toJSON ? report.toJSON() : { ...report };
   plain.complaint_categories = normalizeCategories(plain.complaint_categories);
+  const fc = { fully_compliant: 0, partially_compliant: 0, non_compliant: 0 };
+  for (const f of plain.findings ?? []) {
+    if (f.status in fc) fc[f.status] += 1;
+  }
+  plain.finding_counts = fc;
   return plain;
 }
 
