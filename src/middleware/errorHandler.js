@@ -3,10 +3,11 @@
  */
 const errorHandler = (err, req, res, next) => {
   console.error(err);
-  const status = err.status || 500;
+  const isCors = err.message?.startsWith("CORS blocked");
+  const status = isCors ? 403 : (err.status || 500);
   res.status(status).json({
     success: false,
-    message: err.message || "Internal server error",
+    message: isCors ? "Origin not allowed" : (err.message || "Internal server error"),
   });
 };
 

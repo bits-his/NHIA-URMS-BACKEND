@@ -1,14 +1,17 @@
 const { Router } = require("express");
 const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
+const { authenticate } = require("../middleware/auth");
 const {
   getZones, getStates, getDepartments, getUnits,
   getAssets, createAsset, updateAsset, setAssetStatus,
   createVerification, listVerifications, getVerification,
-  updateVerification, updateStatus,
+  updateVerification, updateStatus, getDashboard, getDashboardDrill,
 } = require("../controllers/stockVerification.controller");
 
 const router = Router();
+
+router.use(authenticate);
 
 // ── Lookup routes ─────────────────────────────────────────────────────────────
 router.get("/zones",       getZones);
@@ -34,6 +37,9 @@ const verificationRules = [
     .isIn(["annual","monthly","periodic","surprise"])
     .withMessage("Invalid stocktaking type"),
 ];
+
+router.get("/dashboard", getDashboard);
+router.get("/dashboard/drill", getDashboardDrill);
 
 router.get("/verifications",          listVerifications);
 router.get("/verifications/:id",      getVerification);

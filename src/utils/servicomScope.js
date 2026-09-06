@@ -1,11 +1,33 @@
 const { Op } = require("sequelize");
 const { findActiveRole } = require("./roleService");
+const { ROLE_SCOPE_FALLBACK } = require("./stateOfficeScope");
+
+const NATIONAL_ROLES = new Set(["admin", "sdo", "hq-department", "dg-ceo"]);
+
+function userGeo(user) {
+  if (!user) return { zone_id: null, state_id: null };
+  const zone_id = user.zone_id ?? user.get?.("zone_id") ?? null;
+  const state_id = user.state_id ?? user.get?.("state_id") ?? null;
+  return { zone_id, state_id };
+}
+
+async function resolveScope(user) {
+  const roleKey = user?.role;
+  if (!roleKey) return "none";
+  if (NATIONAL_ROLES.has(roleKey) || roleKey === "admin" || roleKey === "sdo" || roleKey === "dg-ceo") {
+    return "national";
+  }
+
+  const roleDef = await findActiveRole(roleKey);
+  const fromDb = roleDef?.report_scope;
+  if (fromDb && fromDb !== "none") return fromDb;
+  return ROLE_SCOPE_FALLBACK[roleKey] || "none";
+}
 
 async function buildServicomListWhere(user, query = {}) {
   const where = {};
-  const roleKey = user?.role;
-  const roleDef = await findActiveRole(roleKey);
-  const scope = roleDef?.report_scope || "none";
+  const scope = await resolveScope(user);
+  const { zone_id: userZoneId, state_id: userStateId } = userGeo(user);
 
   if (query.state_id) where.state_id = query.state_id;
   if (query.zone_id) where.zone_id = query.zone_id;
@@ -18,14 +40,27 @@ async function buildServicomListWhere(user, query = {}) {
     if (query.to) where.visit_date[Op.lte] = query.to;
   }
 
-  if (scope === "national" || roleKey === "admin" || roleKey === "sdo" || roleKey === "dg-ceo") {
+  if (scope === "national" || scope === "none") {
     return where;
   }
 
-  if (scope === "zonal" && user.zone_id && !query.state_id) {
-    where.zone_id = user.zone_id;
-  } else if (scope === "state" && user.state_id && !query.state_id) {
-    where.state_id = user.state_id;
+  if (scope === "state") {
+    if (!userStateId) {
+      where.state_id = -1;
+      return where;
+    }
+    where.state_id = userStateId;
+    if (userZoneId) where.zone_id = userZoneId;
+    return where;
+  }
+
+  if (scope === "zonal") {
+    if (!userZoneId) {
+      where.zone_id = -1;
+      return where;
+    }
+    where.zone_id = userZoneId;
+    return where;
   }
 
   return where;

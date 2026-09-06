@@ -4,6 +4,7 @@
 require("dotenv").config();
 const sequelize = require("../config/database");
 const ServicomAssessmentIndicator = require("../models/ServicomAssessmentIndicator");
+const { logPartial } = require("../utils/seedUtils");
 
 const DEFAULT_INDICATORS = [
   { key: "servicom_charter",              label: "Availability of SERVICOM Charter",              sort_order: 1 },
@@ -26,13 +27,18 @@ const DEFAULT_INDICATORS = [
 (async () => {
   try {
     await sequelize.authenticate();
+
+    let created = 0;
+    let skipped = 0;
     for (const ind of DEFAULT_INDICATORS) {
-      await ServicomAssessmentIndicator.findOrCreate({
+      const [, wasCreated] = await ServicomAssessmentIndicator.findOrCreate({
         where: { key: ind.key },
         defaults: { ...ind, is_active: true },
       });
+      if (wasCreated) created++;
+      else skipped++;
     }
-    console.log(`✅  SERVICOM indicators seeded (${DEFAULT_INDICATORS.length})`);
+    logPartial("SERVICOM indicators", created, skipped);
     process.exit(0);
   } catch (err) {
     console.error("❌  Seed failed:", err.message);

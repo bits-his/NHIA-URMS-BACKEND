@@ -2,7 +2,7 @@
  * Migration: add department_id and unit_id to users table
  * Run: node src/scripts/addUserColumns.js
  */
-const sequelize = require("../config/database");
+const sequelize = require("../../config/database");
 
 async function run() {
   const qi = sequelize.getQueryInterface();

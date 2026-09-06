@@ -13,6 +13,8 @@ const {
   ServicomAssessmentScore, ServicomKpiRecord,
   ServicomFinding, ServicomRecommendation,
   ServicomComplaint,
+  ServicomSatisfactionSurvey,
+  ServicomCommentCard,
 } = require("../models");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
 
@@ -25,6 +27,9 @@ const STATE_LABELS = {
   KAD: "Kaduna",
   IMO: "Imo",
   OND: "Ondo",
+  ZAM: "Zamfara",
+  BAU: "Bauchi",
+  BEN: "Benue",
 };
 
 async function resolveGeo(stateCode) {
@@ -420,6 +425,7 @@ const COMPLAINTS = [
     state_code: "FCT",
     complaint_date: "2026-02-25",
     category: "claims_processing",
+    complaint_domain: "Financial",
     description: "HMO claim for surgical procedure pending approval for 6 weeks despite complete documentation.",
     status: "escalated",
     assigned_officer: "Dr. Amina Lawal",
@@ -449,6 +455,26 @@ const COMPLAINTS = [
     resolution_date: "2026-02-28",
     created_by: "state.officer@nhia.gov.ng",
   },
+];
+
+/** Satisfaction surveys — percentage_score 0–100 */
+const SATISFACTION_SURVEYS = [
+  { reference_id: "SAT-2026-00001", state_code: "ZAM", survey_date: "2026-01-15", provider_name: "Ahmadu Bello University Teaching Hospital", percentage_score: 100, total_score: 13, max_score: 13 },
+  { reference_id: "SAT-2026-00002", state_code: "LAG", survey_date: "2026-02-08", provider_name: "Lagos University Teaching Hospital", percentage_score: 50, total_score: 7, max_score: 13 },
+  { reference_id: "SAT-2026-00003", state_code: "KAD", survey_date: "2026-02-20", provider_name: "Barau Dikko Teaching Hospital", percentage_score: 92, total_score: 12, max_score: 13 },
+  { reference_id: "SAT-2026-00004", state_code: "BAU", survey_date: "2026-03-01", provider_name: "Abubakar Tafawa Balewa University Teaching Hospital", percentage_score: 88, total_score: 11, max_score: 13 },
+  { reference_id: "SAT-2026-00005", state_code: "BEN", survey_date: "2026-03-05", provider_name: "Benue State University Teaching Hospital", percentage_score: 44, total_score: 6, max_score: 13 },
+  { reference_id: "SAT-2026-00006", state_code: "FCT", survey_date: "2026-01-28", provider_name: "National Hospital Abuja", percentage_score: 38, total_score: 5, max_score: 13 },
+  { reference_id: "SAT-2026-00007", state_code: "KAN", survey_date: "2026-02-12", provider_name: "Aminu Kano Teaching Hospital", percentage_score: 31, total_score: 4, max_score: 13 },
+  { reference_id: "SAT-2026-00008", state_code: "IMO", survey_date: "2026-03-08", provider_name: "Federal Medical Centre Owerri", percentage_score: 23, total_score: 3, max_score: 13 },
+];
+
+/** Charter comment cards — average_score 1–5 */
+const COMMENT_CARDS = [
+  { reference_id: "CCC-2026-00001", state_code: "KAD", card_date: "2026-02-18", organisation: "Kaduna NHIA Office", average_score: 4.8, total_score: 24 },
+  { reference_id: "CCC-2026-00002", state_code: "BAU", card_date: "2026-03-02", organisation: "Bauchi State Hospital", average_score: 4.5, total_score: 23 },
+  { reference_id: "CCC-2026-00003", state_code: "LAG", card_date: "2026-02-10", organisation: "Lagos NHIA Office", average_score: 3.2, total_score: 16 },
+  { reference_id: "CCC-2026-00004", state_code: "BEN", card_date: "2026-03-06", organisation: "Benue NHIA Office", average_score: 2.8, total_score: 14 },
 ];
 
 async function seedVisit(visitDef, facilityMap, indicators) {
@@ -541,12 +567,64 @@ async function seedComplaint(c, facilityMap) {
       facility_id: facility?.id ?? null,
       facility_name: c.facility_name,
       category: c.category,
+      complaint_category: c.category,
+      complaint_domain: c.complaint_domain ?? "Service Delivery",
       description: c.description,
       status: c.status,
       assigned_officer: c.assigned_officer,
       resolution_notes: c.resolution_notes ?? null,
       resolution_date: c.resolution_date ?? null,
       created_by: c.created_by,
+    },
+  });
+  return created;
+}
+
+async function seedSatisfactionSurvey(row) {
+  let geo;
+  try {
+    geo = await resolveGeo(row.state_code);
+  } catch (err) {
+    console.warn(`  ⚠  Skipping survey ${row.reference_id}: ${err.message}`);
+    return false;
+  }
+  const [, created] = await ServicomSatisfactionSurvey.findOrCreate({
+    where: { reference_id: row.reference_id },
+    defaults: {
+      zone_id: geo.zone_id,
+      state_id: geo.state_id,
+      provider_name: row.provider_name,
+      survey_date: row.survey_date,
+      survey_officers: row.survey_officers ?? "SERVICOM Team",
+      responses: row.responses ?? [],
+      total_score: row.total_score,
+      max_score: row.max_score,
+      percentage_score: row.percentage_score,
+      created_by: "seed@nhia.gov.ng",
+    },
+  });
+  return created;
+}
+
+async function seedCommentCard(row) {
+  let geo;
+  try {
+    geo = await resolveGeo(row.state_code);
+  } catch (err) {
+    console.warn(`  ⚠  Skipping comment card ${row.reference_id}: ${err.message}`);
+    return false;
+  }
+  const [, created] = await ServicomCommentCard.findOrCreate({
+    where: { reference_id: row.reference_id },
+    defaults: {
+      zone_id: geo.zone_id,
+      state_id: geo.state_id,
+      organisation: row.organisation ?? null,
+      card_date: row.card_date,
+      responses: row.responses ?? [],
+      total_score: row.total_score,
+      average_score: row.average_score,
+      created_by: "seed@nhia.gov.ng",
     },
   });
   return created;
@@ -586,6 +664,18 @@ async function seedComplaint(c, facilityMap) {
       if (await seedComplaint(c, facilityMap)) complaintsCreated++;
     }
     console.log(`✅  Complaints seeded (${complaintsCreated} new)`);
+
+    let surveysCreated = 0;
+    for (const s of SATISFACTION_SURVEYS) {
+      if (await seedSatisfactionSurvey(s)) surveysCreated++;
+    }
+    console.log(`✅  Satisfaction surveys seeded (${surveysCreated} new)`);
+
+    let cardsCreated = 0;
+    for (const c of COMMENT_CARDS) {
+      if (await seedCommentCard(c)) cardsCreated++;
+    }
+    console.log(`✅  Comment cards seeded (${cardsCreated} new)`);
 
     process.exit(0);
   } catch (err) {

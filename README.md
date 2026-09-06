@@ -1,40 +1,46 @@
 # NHIA Backend API
 
-Node.js + Express + MySQL + Sequelize backend for the NHIA Annual Report system.
+Node.js + Express + MySQL + Sequelize backend for the NHIA URMS.
 
 ## Setup
 
 ```bash
-cd nhia-backend
 npm install
 cp .env.example .env   # fill in your DB credentials
 ```
 
-## Create the database
+Create the database:
 
 ```sql
 CREATE DATABASE nhia_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-## Sync tables
+## Database (new install)
+
+**One command** — creates tables and loads all reference + demo data:
 
 ```bash
-npm run db:sync
+npm run db:setup
 ```
 
-## Seed data (run in this order on a fresh database)
+Default logins after setup:
 
-```bash
-npm run db:migrate-monthly
-npm run db:migrate-roles
-npm run db:migrate-depts
-npm run db:migrate-participating-institutions
-npm run db:seed-zones-states    # 6 zones + 37 states (required before users)
-npm run db:seed-depts             # departments & units (optional, links officers to depts)
-npm run db:seed-users             # SDO, zonal coordinators, state users (password: Nhia@2025)
-```
+| User | Staff ID | Password |
+|------|----------|----------|
+| Admin | `ADMIN001` | `Admin@1234` |
+| Demo users | see terminal output | `Nhia@2025` |
 
-Alternatively import `seed_data.sql` if you have monthly report history from Excel.
+Full details: **[docs/DATABASE.md](docs/DATABASE.md)**
+
+### Other database commands
+
+| Command | Purpose |
+|---------|---------|
+| `npm run db:setup` | New database — sync, migrate & seed (same as `db:seed-all`) |
+| `npm run db:seed-all` | Sync schema, run migrations, load all demo data |
+| `npm run db:sync` | Update schema on an existing database |
+| `npm run db:seed` | Add missing demo/reference data (safe on existing DBs) |
+| `npm run db:fix-servicom-fks` | Repair orphan FKs before sync (old data only) |
 
 ## Run (development)
 
@@ -43,6 +49,50 @@ npm run dev
 ```
 
 Server starts on `http://localhost:3001`
+
+## Production deploy
+
+After `git pull` on the server:
+
+```bash
+npm install
+npm run db:migrate-access   # fix Zonal/SOC/SDO privileges in existing users
+pm2 restart nhia-backend    # or your process manager — required for new routes
+```
+
+Verify routes are live (should **not** be 404):
+
+```bash
+curl -s https://your-server/NHIA-URMS-BACKEND/health
+curl -s -o /dev/null -w "%{http_code}" https://your-server/NHIA-URMS-BACKEND/api/stock/dashboard
+# Expect 401 without token (route exists). 404 means the app was not restarted.
+```
+
+Frontend build must use:
+
+```env
+VITE_API_URL=https://server.brainstorm.ng/NHIA-URMS-BACKEND/api
+```
+
+(`/api` suffix is required.)
+
+State office report routes (Zonal module privileges):
+
+| Section | API path |
+|---------|----------|
+| Enrolment | `GET /api/state-office/enrolment/reports` |
+| Migration | `GET /api/state-office/migration/reports` |
+| CEmONC | `GET /api/state-office/cemonc/reports` |
+| Monitoring Visits | `GET /api/state-office/compliance-visits` |
+| Accreditation | `GET /api/state-office/accreditation/reports` |
+| Stakeholder | `GET /api/state-office/stakeholder/reports` |
+| HMO Selection | `GET /api/state-office/hmo-selection/reports` |
+| Challenges | `GET /api/state-office/challenges/reports` |
+| IGR / SSHIA / Expenditure | `GET /api/state-office/igr/reports`, etc. |
+| SOC dashboard | `GET /api/state-office/dashboard` |
+| Stock dashboard | `GET /api/stock/dashboard` |
+
+403 on state-office routes means the logged-in user lacks the matching **Zonal** (or legacy **State Offices**) functionality — re-save privileges in Admin or run `npm run db:migrate-access`.
 
 ---
 
@@ -98,4 +148,3 @@ Server starts on `http://localhost:3001`
   "submitted_by": "SO · Lagos"
 }
 ```
-# NHIA-URMS-BACKEND

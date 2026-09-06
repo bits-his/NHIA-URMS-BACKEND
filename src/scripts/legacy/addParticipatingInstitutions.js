@@ -3,7 +3,7 @@
  * Run: node src/scripts/addParticipatingInstitutions.js
  */
 require("dotenv").config();
-const sequelize = require("../config/database");
+const sequelize = require("../../config/database");
 
 (async () => {
   try {

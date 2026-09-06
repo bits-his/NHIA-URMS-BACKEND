@@ -27,6 +27,7 @@ const StateOffice = require("../models/StateOffice");
 const Department = require("../models/Department");
 const Unit = require("../models/Unit");
 const { seedDefaultRoles } = require("../utils/roleService");
+const { logPartial } = require("../utils/seedUtils");
 
 const LEGACY_STAFF_IDS = [
   "SC-LAGOS", "DO-FIN-LAGOS", "DO-PROG-LAGOS", "DO-SQA-LAGOS",
@@ -58,18 +59,34 @@ const programmesMonthly = [{
 
 const sqaMonthly = [{
   access_to: "Standards & Quality Assurance",
-  functionalities: ["Monthly Report"],
+  functionalities: ["Monthly Report", "Compliance Management"],
 }];
 
-const stateOfficeAccess = [{
-  access_to: "State Offices",
+const zonalAccess = [{
+  access_to: "Zonal",
   functionalities: [
     "Enrolment",
     "Migration / Update Requests",
     "CEmONC & FFP Beneficiaries",
+    "Monitoring Visits",
+    "Accreditation / Reaccreditation",
+    "Stakeholder Engagement",
+    "HMO Selection Process",
+    "Challenges & Recommendations",
     "IGR",
     "SSHIA Financial Report",
     "Expenditure Profile",
+  ],
+}];
+
+const stateOfficeAccess = [{
+  access_to: "SOC/Zones",
+  functionalities: [
+    "SOC/Zones Dashboard",
+    "Weekly Actionable",
+    "Contracted Services",
+    "Operation Monitoring Visit",
+    "Spot Check Visit",
   ],
 }];
 
@@ -80,6 +97,7 @@ const allMonthlyModules = [
   ...financeMonthly,
   ...programmesMonthly,
   ...sqaMonthly,
+  ...zonalAccess,
   ...stateOfficeAccess,
   ...notifications,
 ];
@@ -96,12 +114,19 @@ const sdoAccess = [
   {
     access_to: "SDO",
     functionalities: [
-      "Stock Verification",
-      "Asset Register",
-      "Dashboard",
-      "Monitoring Visits",
-      "Complaints",
+      "SERVICOM Dashboard",
+      "Stock Verification Dashboard",
+      "Charter Performance",
+      "Complaints Management",
+      "Customer Satisfaction Survey",
+      "Physical Asset Verification",
+      "Verification of Supply",
+      "Special Project",
     ],
+  },
+  {
+    access_to: "Zonal",
+    functionalities: ["Monitoring Visits"],
   },
   ...notifications,
 ];
@@ -128,8 +153,14 @@ async function removeLegacyPilotUsers() {
 }
 
 async function upsertUser(spec) {
+  const existing = await User.findOne({ where: { staff_id: spec.staff_id } });
+  if (existing) {
+    return { user: existing, created: false, skipped: true };
+  }
+
   const hashed = await bcrypt.hash(spec.password || DEMO_PASSWORD, 12);
-  const payload = {
+  const user = await User.create({
+    staff_id: spec.staff_id,
     name: spec.name,
     email: spec.email,
     password: hashed,
@@ -140,16 +171,8 @@ async function upsertUser(spec) {
     unit_id: spec.unit_id ?? null,
     is_active: true,
     functionalities: spec.functionalities,
-  };
-
-  const existing = await User.findOne({ where: { staff_id: spec.staff_id } });
-  if (existing) {
-    await existing.update(payload);
-    return { user: existing, created: false };
-  }
-
-  const user = await User.create({ staff_id: spec.staff_id, ...payload });
-  return { user, created: true };
+  });
+  return { user, created: true, skipped: false };
 }
 
 // ─── User definitions ────────────────────────────────────────────────────────
@@ -281,8 +304,9 @@ async function buildUserSpecs(deptMap, unitMap) {
     const unitMap = Object.fromEntries(units.map((u) => [u.unit_code, u.id]));
 
     const specs = await buildUserSpecs(deptMap, unitMap);
+
     let created = 0;
-    let updated = 0;
+    let skipped = 0;
 
     const nationalAndZonal = specs.filter((s) => !s.state_id);
     const stateUsers = specs.filter((s) => s.state_id);
@@ -294,9 +318,9 @@ async function buildUserSpecs(deptMap, unitMap) {
     console.log("-".repeat(90));
 
     for (const spec of nationalAndZonal) {
-      const { created: isNew } = await upsertUser(spec);
+      const { created: isNew, skipped: wasSkipped } = await upsertUser(spec);
       if (isNew) created++;
-      else updated++;
+      else if (wasSkipped) skipped++;
 
       let location = "National";
       if (spec.zone_id) {
@@ -323,9 +347,9 @@ async function buildUserSpecs(deptMap, unitMap) {
 
     for (const [, { label, users }] of byState) {
       for (const spec of users) {
-        const { created: isNew } = await upsertUser(spec);
+        const { created: isNew, skipped: wasSkipped } = await upsertUser(spec);
         if (isNew) created++;
-        else updated++;
+        else if (wasSkipped) skipped++;
       }
 
       const sc = users.find((u) => u.role === "state-coordinator");
@@ -339,8 +363,12 @@ async function buildUserSpecs(deptMap, unitMap) {
     }
 
     console.log("\n" + "=".repeat(90));
-    console.log(`✅  Done — ${created} created, ${updated} updated (${specs.length} total users)`);
-    console.log(`🔑  Password for all seeded users: ${DEMO_PASSWORD}`);
+    logPartial("Demo users", created, skipped);
+    if (created > 0) {
+      console.log(`🔑  Password for newly created users: ${DEMO_PASSWORD}`);
+    } else {
+      console.log("🔑  Existing users kept unchanged (password not reset)");
+    }
     console.log("\nHow to use:");
     console.log("  • DO-FIN-*     → Finance & Admin monthly report only");
     console.log("  • DO-PROG-*    → Programmes (enrolment + outreach) monthly only");

@@ -18,22 +18,64 @@ const MonitoringVisit             = require("./MonitoringVisit");
 const ServicomAssessmentScore     = require("./ServicomAssessmentScore");
 const ServicomKpiRecord           = require("./ServicomKpiRecord");
 const ServicomComplaint           = require("./ServicomComplaint");
+const ComplaintSlaRule            = require("./ComplaintSlaRule");
 const ServicomFinding             = require("./ServicomFinding");
 const ServicomRecommendation      = require("./ServicomRecommendation");
 const ServicomEvidence            = require("./ServicomEvidence");
 const ServicomAuditLog            = require("./ServicomAuditLog");
+const ServicomSatisfactionSurvey  = require("./ServicomSatisfactionSurvey");
+const ServicomCommentCard         = require("./ServicomCommentCard");
 const EnrolmentReport             = require("./EnrolmentReport");
 const EnrolmentReportLine         = require("./EnrolmentReportLine");
 const MigrationReport             = require("./MigrationReport");
 const MigrationReportLine         = require("./MigrationReportLine");
 const CemoncReport                = require("./CemoncReport");
 const CemoncReportLine            = require("./CemoncReportLine");
+const ComplaintsComplianceReport  = require("./ComplaintsComplianceReport");
+require("./ComplaintsComplianceLines");
+const AccreditationReport         = require("./AccreditationReport");
+const AccreditationReportLine     = require("./AccreditationReportLine");
+const StakeholderReport           = require("./StakeholderReport");
+const StakeholderReportLine       = require("./StakeholderReportLine");
+const HmoSelectionReport          = require("./HmoSelectionReport");
+const HmoSelectionReportLine      = require("./HmoSelectionReportLine");
+const ChallengesReport            = require("./ChallengesReport");
+const StateOfficeComplaint        = require("./StateOfficeComplaint");
+const StateOfficeComplianceVisit  = require("./StateOfficeComplianceVisit");
+const StateOfficeReconciliationMeeting = require("./StateOfficeReconciliationMeeting");
+const NhiaAccreditedProvider          = require("./NhiaAccreditedProvider");
 const IgrReport                   = require("./IgrReport");
 const IgrReportLine               = require("./IgrReportLine");
 const SshiaFinancialReport        = require("./SshiaFinancialReport");
 const SshiaFinancialReportLine    = require("./SshiaFinancialReportLine");
 const ExpenditureProfileReport    = require("./ExpenditureProfileReport");
 const ExpenditureProfileReportLine = require("./ExpenditureProfileReportLine");
+const WeeklyActionableReport       = require("./WeeklyActionableReport");
+const WeeklyActionableReportLine   = require("./WeeklyActionableReportLine");
+const ContractedServicesReport     = require("./ContractedServicesReport");
+const ContractedServicesReportLine = require("./ContractedServicesReportLine");
+const ComplianceReport            = require("./ComplianceReport");
+const ComplianceFinding           = require("./ComplianceFinding");
+const ComplianceViolation         = require("./ComplianceViolation");
+const ComplianceEnforcementAction = require("./ComplianceEnforcementAction");
+const StoreAsset                  = require("./StoreAsset");
+const StoreInventoryItem          = require("./StoreInventoryItem");
+const GoodsReceiptNote            = require("./GoodsReceiptNote");
+const StockIssueVoucher           = require("./StockIssueVoucher");
+const AssetTransfer               = require("./AssetTransfer");
+const SupplyVerification          = require("./SupplyVerification");
+const AssetMaintenance            = require("./AssetMaintenance");
+const AssetDisposal               = require("./AssetDisposal");
+const PhysicalAssetVerification   = require("./PhysicalAssetVerification");
+const PhysicalAssetVerificationItem = require("./PhysicalAssetVerificationItem");
+const StockConversion             = require("./StockConversion");
+
+const bindStateOfficeReport = (Model, alias) => {
+  ZonalOffice.hasMany(Model, { foreignKey: "zone_id", as: `${alias}_zone` });
+  Model.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+  StateOffice.hasMany(Model, { foreignKey: "state_id", as: `${alias}_state` });
+  Model.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+};
 
 // ── Zone ↔ State ──────────────────────────────────────────────────────────────
 ZonalOffice.hasMany(StateOffice,   { foreignKey: "zonal_id", as: "states" });
@@ -93,6 +135,26 @@ CemoncReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
 StateOffice.hasMany(CemoncReport,   { foreignKey: "state_id", as: "cemonc_reports" });
 CemoncReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+bindStateOfficeReport(ComplaintsComplianceReport, "complaints");
+bindStateOfficeReport(AccreditationReport, "accreditation");
+bindStateOfficeReport(StakeholderReport, "stakeholder");
+bindStateOfficeReport(HmoSelectionReport, "hmo_selection");
+bindStateOfficeReport(ChallengesReport, "challenges");
+
+ZonalOffice.hasMany(StateOfficeComplaint, { foreignKey: "zone_id", as: "state_office_complaints" });
+StateOfficeComplaint.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(StateOfficeComplaint, { foreignKey: "state_id", as: "state_office_complaints" });
+StateOfficeComplaint.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(StateOfficeComplianceVisit, { foreignKey: "zone_id", as: "state_compliance_visits" });
+StateOfficeComplianceVisit.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(StateOfficeComplianceVisit, { foreignKey: "state_id", as: "state_compliance_visits" });
+StateOfficeComplianceVisit.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(StateOfficeReconciliationMeeting, { foreignKey: "zone_id", as: "state_reconciliation_meetings" });
+StateOfficeReconciliationMeeting.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(StateOfficeReconciliationMeeting, { foreignKey: "state_id", as: "state_reconciliation_meetings" });
+StateOfficeReconciliationMeeting.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 ZonalOffice.hasMany(IgrReport,   { foreignKey: "zone_id",  as: "igr_reports" });
 IgrReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
 StateOffice.hasMany(IgrReport,   { foreignKey: "state_id", as: "igr_reports" });
@@ -107,6 +169,19 @@ ZonalOffice.hasMany(ExpenditureProfileReport,   { foreignKey: "zone_id",  as: "e
 ExpenditureProfileReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
 StateOffice.hasMany(ExpenditureProfileReport,   { foreignKey: "state_id", as: "expenditure_profile_reports" });
 ExpenditureProfileReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(WeeklyActionableReport,   { foreignKey: "zone_id",  as: "weekly_actionable_reports" });
+WeeklyActionableReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(WeeklyActionableReport,   { foreignKey: "state_id", as: "weekly_actionable_reports" });
+WeeklyActionableReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(ContractedServicesReport,   { foreignKey: "zone_id",  as: "contracted_services_reports" });
+ContractedServicesReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(ContractedServicesReport,   { foreignKey: "state_id", as: "contracted_services_reports" });
+ContractedServicesReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+bindStateOfficeReport(ComplianceReport, "compliance");
+bindStateOfficeReport(SupplyVerification, "supply_verification");
 
 // ── SERVICOM M&E ──────────────────────────────────────────────────────────────
 ZonalOffice.hasMany(ServicomFacility,    { foreignKey: "zone_id",  as: "servicom_facilities" });
@@ -145,6 +220,32 @@ ServicomComplaint.belongsTo(ServicomFacility, { foreignKey: "facility_id", as: "
 MonitoringVisit.hasMany(ServicomComplaint, { foreignKey: "visit_id", as: "complaints" });
 ServicomComplaint.belongsTo(MonitoringVisit, { foreignKey: "visit_id", as: "visit" });
 
+ZonalOffice.hasMany(ServicomSatisfactionSurvey,   { foreignKey: "zone_id",  as: "servicom_satisfaction_surveys" });
+ServicomSatisfactionSurvey.belongsTo(ZonalOffice,  { foreignKey: "zone_id",  as: "zone" });
+StateOffice.hasMany(ServicomSatisfactionSurvey,    { foreignKey: "state_id", as: "servicom_satisfaction_surveys" });
+ServicomSatisfactionSurvey.belongsTo(StateOffice,  { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(ServicomCommentCard,   { foreignKey: "zone_id",  as: "servicom_comment_cards" });
+ServicomCommentCard.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone" });
+StateOffice.hasMany(ServicomCommentCard,   { foreignKey: "state_id", as: "servicom_comment_cards" });
+ServicomCommentCard.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+// ── Physical Asset Verification (Store Management) ────────────────────────────
+PhysicalAssetVerification.hasMany(PhysicalAssetVerificationItem, {
+  foreignKey: "verification_id",
+  as: "items",
+  onDelete: "CASCADE",
+});
+PhysicalAssetVerificationItem.belongsTo(PhysicalAssetVerification, {
+  foreignKey: "verification_id",
+  as: "verification",
+});
+PhysicalAssetVerificationItem.belongsTo(StoreAsset, {
+  foreignKey: "assetId",
+  as: "asset",
+  constraints: false,
+});
+
 // ── User ↔ Role (by key) ──────────────────────────────────────────────────────
 User.belongsTo(Role, { foreignKey: "role", targetKey: "key", as: "roleRecord", constraints: false });
 
@@ -154,11 +255,22 @@ module.exports = {
   StockAsset, StockVerification, StockVerificationItem,
   FinanceMonthlyReport, ProgrammesMonthlyReport, SqaMonthlyReport,
   ServicomAssessmentIndicator, ServicomFacility, MonitoringVisit,
-  ServicomAssessmentScore, ServicomKpiRecord, ServicomComplaint,
+  ServicomAssessmentScore, ServicomKpiRecord, ServicomComplaint, ComplaintSlaRule,
   ServicomFinding, ServicomRecommendation, ServicomEvidence, ServicomAuditLog,
+  ServicomSatisfactionSurvey, ServicomCommentCard,
   EnrolmentReport, EnrolmentReportLine, MigrationReport, MigrationReportLine,
   CemoncReport, CemoncReportLine,
+  ComplaintsComplianceReport, AccreditationReport, AccreditationReportLine,
+  StakeholderReport, StakeholderReportLine, HmoSelectionReport, HmoSelectionReportLine,
+  ChallengesReport,
+  StateOfficeComplaint, StateOfficeComplianceVisit,
+  StateOfficeReconciliationMeeting, NhiaAccreditedProvider,
   IgrReport, IgrReportLine,
   SshiaFinancialReport, SshiaFinancialReportLine,
   ExpenditureProfileReport, ExpenditureProfileReportLine,
+  WeeklyActionableReport, WeeklyActionableReportLine,
+  ContractedServicesReport, ContractedServicesReportLine,
+  ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
+  StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, AssetMaintenance, AssetDisposal,
+  PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion,
 };

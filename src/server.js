@@ -3,6 +3,7 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const { corsOptions, isProduction } = require("./config/cors");
 
 const sequelize = require("./config/database");
 // Register all models & associations
@@ -15,6 +16,9 @@ const stockRoutes = require("./routes/stockVerification.routes");
 const monthlyRoutes = require("./routes/monthlyReport.routes");
 const servicomRoutes = require("./routes/servicom.routes");
 const stateOfficeRoutes = require("./routes/stateOffice.routes");
+const accreditedProvidersRoutes = require("./routes/accreditedProviders.routes");
+const complianceReportRoutes = require("./routes/complianceReport.routes");
+const storeManagementRoutes = require("./routes/storeManagementRoutes");
 const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -22,32 +26,46 @@ const PORT = process.env.PORT || 3001;
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
-app.use(cors({
-  origin: (origin, cb) => {
-    const allowed = [
-      process.env.CLIENT_URL || "http://localhost:5173",
-      "http://localhost:3000",
-      "http://localhost:5173",
-    ];
-    if (!origin || allowed.includes(origin)) return cb(null, true);
-    cb(new Error("Not allowed by CORS"));
-  },
-  credentials: true,
-}));
-app.use(express.json());
+app.use(cors(corsOptions()));
+
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (isProduction) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+
+app.use(express.json({ limit: "2mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 app.use(morgan("dev"));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
-app.get("/health", (req, res) => res.json({ status: "ok" }));
+app.get("/health", (req, res) =>
+  res.json({
+    status: "ok",
+    version: require("../package.json").version,
+    endpoints: {
+      stockDashboard: "/api/stock/dashboard",
+      socDashboard: "/api/state-office/dashboard",
+      stateOfficeReports: "/api/state-office/{section}/reports",
+      servicomDashboard: "/api/servicom/dashboard",
+    },
+  }),
+);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/annual-reports", annualReportRoutes);
 app.use("/api/stock", stockRoutes);
 app.use("/api/monthly", monthlyRoutes);
 app.use("/api/servicom", servicomRoutes);
+app.use("/api/accredited-providers", accreditedProvidersRoutes);
 app.use("/api/state-office", stateOfficeRoutes);
+app.use("/api/sqa/compliance-reports", complianceReportRoutes);
+app.use("/api/store-management", storeManagementRoutes);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 

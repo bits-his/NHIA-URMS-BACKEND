@@ -6,6 +6,7 @@ const DEFAULT_ROLES = [
   { key: "hq-department",       label: "HQ Department",       staff_id_prefix: "HQ",    report_scope: "national", can_create_monthly: false, can_review_monthly: false, is_system: true },
   { key: "dg-ceo",              label: "DG-CEO",              staff_id_prefix: "DG",    report_scope: "national", can_create_monthly: false, can_review_monthly: false, is_system: true },
   { key: "zonal-coordinator",   label: "Zonal Coordinator",   staff_id_prefix: "ZC",    report_scope: "zonal",    can_create_monthly: false, can_review_monthly: true,  is_system: true },
+  { key: "zonal-officer",       label: "Zonal Officer",       staff_id_prefix: "ZO",    report_scope: "zonal",    can_create_monthly: true,  can_review_monthly: false, is_system: true },
   { key: "state-coordinator",   label: "State Coordinator",   staff_id_prefix: "SC",    report_scope: "state",    can_create_monthly: true,  can_review_monthly: true,  is_system: true },
   { key: "state-officer",       label: "State Officer",       staff_id_prefix: "SO",    report_scope: "state",    can_create_monthly: true,  can_review_monthly: false, is_system: true },
   { key: "department-officer",  label: "Department Officer",  staff_id_prefix: "DO",    report_scope: "state",    can_create_monthly: true,  can_review_monthly: false, is_system: true },

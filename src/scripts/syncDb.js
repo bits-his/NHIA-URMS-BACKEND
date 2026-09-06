@@ -1,6 +1,8 @@
 /**
- * Run once to create / update all tables:
- *   node src/scripts/syncDb.js
+ * Create / update all tables from Sequelize models.
+ *
+ * Prefer: npm run db:setup   (sync + seed for a new database)
+ * Or:     npm run db:sync    (schema only)
  *
  * Use { force: true } to DROP and recreate (destructive — dev only).
  */
@@ -11,11 +13,17 @@ const bcrypt = require("bcryptjs");
 // Register all models & associations
 require("../models/index");
 const { User } = require("../models/User");
+const { fixOrphanForeignKeys } = require("../utils/fixOrphanForeignKeys");
 
 (async () => {
   try {
     await sequelize.authenticate();
     console.log("✅  DB connection OK");
+
+    const cleared = await fixOrphanForeignKeys(sequelize, { log: true });
+    if (cleared) {
+      console.log(`ℹ️   Cleared ${cleared} orphan FK reference(s) before sync`);
+    }
 
     await sequelize.sync({ alter: true });
     console.log("✅  Tables synced");

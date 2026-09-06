@@ -4,16 +4,37 @@
  */
 const { Op } = require("sequelize");
 const { findActiveRole } = require("./roleService");
+const { ROLE_SCOPE_FALLBACK } = require("./stateOfficeScope");
 
 const STATUS = {
   INBOX_COORDINATOR: ["submitted", "under_review", "zonal_review", "approved", "rejected"],
   INBOX_ZONAL:       ["under_review", "zonal_review", "approved", "rejected"],
 };
 
+const NATIONAL_ROLES = new Set(["admin", "sdo", "hq-department", "dg-ceo"]);
+
+function userGeo(user) {
+  if (!user) return { zone_id: null, state_id: null };
+  const zone_id = user.zone_id ?? user.get?.("zone_id") ?? null;
+  const state_id = user.state_id ?? user.get?.("state_id") ?? null;
+  return { zone_id, state_id };
+}
+
+async function resolveReportScope(user) {
+  const roleKey = user?.role;
+  if (!roleKey) return "none";
+  if (NATIONAL_ROLES.has(roleKey)) return "national";
+
+  const roleDef = await findActiveRole(roleKey);
+  const fromDb = roleDef?.report_scope;
+  if (fromDb && fromDb !== "none") return fromDb;
+  return ROLE_SCOPE_FALLBACK[roleKey] || "none";
+}
+
 async function buildMonthlyListWhere(user, query, StateOffice) {
   const where = {};
   const roleKey = user?.role;
-  const roleDef = await findActiveRole(roleKey);
+  const { zone_id: userZoneId, state_id: userStateId } = userGeo(user);
 
   if (query.state_id) where.state_id = query.state_id;
   if (query.year)     where.reporting_year  = query.year;
@@ -21,25 +42,38 @@ async function buildMonthlyListWhere(user, query, StateOffice) {
   if (query.status)   where.status = query.status;
   if (query.section)  where.section = query.section;
 
-  const scope = roleDef?.report_scope || "none";
+  const scope = await resolveReportScope(user);
 
-  if (scope === "national") {
+  if (scope === "national" || scope === "none") {
     return where;
   }
 
-  if (scope === "zonal" && user.zone_id && !query.state_id) {
+  if (scope === "zonal") {
+    if (!userZoneId) {
+      where.state_id = -1;
+      return where;
+    }
     const zoneStates = await StateOffice.findAll({
-      where: { zonal_id: user.zone_id },
+      where: { zonal_id: userZoneId },
       attributes: ["id"],
     });
     const stateIds = zoneStates.map((s) => s.id);
     if (stateIds.length) where.state_id = { [Op.in]: stateIds };
+    else where.state_id = -1;
     if (!query.status) where.status = { [Op.in]: STATUS.INBOX_ZONAL };
-  } else if (scope === "state" && user.state_id && !query.state_id) {
-    where.state_id = user.state_id;
+    return where;
+  }
+
+  if (scope === "state") {
+    if (!userStateId) {
+      where.state_id = -1;
+      return where;
+    }
+    where.state_id = userStateId;
     if (roleKey === "state-coordinator" && !query.status) {
       where.status = { [Op.in]: STATUS.INBOX_COORDINATOR };
     }
+    return where;
   }
 
   return where;

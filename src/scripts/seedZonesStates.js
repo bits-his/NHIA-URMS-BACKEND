@@ -3,6 +3,7 @@ const sequelize  = require("../config/database");
 require("../models/index");
 const ZonalOffice = require("../models/ZonalOffice");
 const StateOffice = require("../models/StateOffice");
+const { logPartial } = require("../utils/seedUtils");
 
 const ZONES = [
   { zonal_code: "NW",  description: "North West"   },
@@ -64,29 +65,36 @@ const STATES = [
     await sequelize.authenticate();
     console.log("✅  DB connected");
 
-    // Sync tables (alter safe)
-    await sequelize.sync({ alter: true });
-    console.log("✅  Tables synced");
-
-    // Seed zones
+    let zonesCreated = 0;
+    let zonesSkipped = 0;
     for (const z of ZONES) {
-      await ZonalOffice.upsert(z);
+      const [, created] = await ZonalOffice.findOrCreate({
+        where: { zonal_code: z.zonal_code },
+        defaults: z,
+      });
+      if (created) zonesCreated++;
+      else zonesSkipped++;
     }
-    console.log(`✅  ${ZONES.length} zonal offices seeded`);
+    logPartial("Zonal offices", zonesCreated, zonesSkipped);
 
-    // Build zone code → id map
     const zones = await ZonalOffice.findAll();
     const zoneMap = Object.fromEntries(zones.map(z => [z.zonal_code, z.id]));
 
-    // Seed states
+    let statesCreated = 0;
+    let statesSkipped = 0;
     for (const s of STATES) {
-      await StateOffice.upsert({
-        code:        s.code,
-        description: s.description,
-        zonal_id:    zoneMap[s.zone],
+      const [, created] = await StateOffice.findOrCreate({
+        where: { code: s.code },
+        defaults: {
+          code: s.code,
+          description: s.description,
+          zonal_id: zoneMap[s.zone],
+        },
       });
+      if (created) statesCreated++;
+      else statesSkipped++;
     }
-    console.log(`✅  ${STATES.length} state offices seeded`);
+    logPartial("State offices", statesCreated, statesSkipped);
 
     console.log("\n🎉  Seed complete!");
     process.exit(0);
