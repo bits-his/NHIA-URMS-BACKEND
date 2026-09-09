@@ -82,13 +82,45 @@ function enrichComplaintCodes(body) {
   return out;
 }
 
+/** Match complaints assigned to the logged-in user (name or staff id in stored label). */
+function buildAssigneeWhere(user, Op) {
+  if (!user?.name && !user?.staff_id) return null;
+  const clauses = [];
+  if (user.name) {
+    const n = String(user.name).trim();
+    if (n) {
+      clauses.push(
+        { officer_assigned: n },
+        { assigned_officer: n },
+        { officer_assigned: { [Op.like]: `${n}%` } },
+        { assigned_officer: { [Op.like]: `${n}%` } },
+      );
+    }
+  }
+  if (user.staff_id) {
+    const s = String(user.staff_id).trim();
+    if (s) {
+      clauses.push(
+        { officer_assigned: { [Op.like]: `%(${s})%` } },
+        { assigned_officer: { [Op.like]: `%(${s})%` } },
+        { officer_assigned: { [Op.like]: `%${s}%` } },
+        { assigned_officer: { [Op.like]: `%${s}%` } },
+      );
+    }
+  }
+  return clauses.length ? { [Op.or]: clauses } : null;
+}
+
 function pickComplaintFields(body) {
   const fields = [
     "complaint_number", "zone_id", "state_id", "reporting_month", "reporting_year", "entry_date",
-    "complaint_type", "complaint_category", "category_code", "complaint_domain", "domain_code",
+    "complaint_type", "complaint_against", "complaint_category", "category_code", "complaint_domain", "domain_code",
     "offence_reference",
     "priority_rating", "date_received", "transmission_route",
-    "complainant_category", "complainant_id", "respondent_category", "respondent_id",
+    "complainant_category", "complainant_id", "complainant_name", "complainant_phone", "complainant_nhis_id",
+    "complainant_hmo_id", "complainant_hcf_id",
+    "respondent_category", "respondent_id", "respondent_name", "respondent_phone", "respondent_nhis_id",
+    "respondent_hmo_id", "respondent_hcf_id",
     "officer_assigned", "investigation_start_date", "status", "actions_taken", "actions_details",
     "escalated", "escalation_level", "escalation_date", "escalated_to",
     "date_closed", "outcome", "remarks",
@@ -103,6 +135,7 @@ module.exports = {
   SLA_TARGETS,
   computeComplaintMetrics,
   computeComplaintMetricsSync,
+  buildAssigneeWhere,
   pickComplaintFields,
   enrichComplaintCodes,
   daysBetween,

@@ -38,6 +38,7 @@ router.patch("/visits/:id/approve", authorize(...reviewers), ctrl.approveVisit);
 router.patch("/visits/:id/return", authorize(...reviewers), body("reason").notEmpty(), validate, ctrl.returnVisit);
 router.post("/visits/:id/evidence", authorize(...submitters), upload.single("file"), ctrl.uploadEvidence);
 
+router.get("/investigating-officers", ctrl.listInvestigatingOfficers);
 router.get("/complaints", ctrl.listComplaints);
 router.get("/complaint-sla", ctrl.listComplaintSla);
 router.get("/complaints/:id", ctrl.getComplaint);

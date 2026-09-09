@@ -7,11 +7,11 @@ const {
   ServicomKpiRecord, ServicomComplaint, ServicomSatisfactionSurvey, ServicomCommentCard,
   ServicomFinding, ServicomRecommendation,
   ServicomEvidence, ServicomAuditLog, ServicomFacility,
-  ZonalOffice, StateOffice,
+  ZonalOffice, StateOffice, User, Department, Unit,
 } = require("../models");
 const { buildServicomListWhere } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
-const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes } = require("../utils/complaintRegister");
+const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere } = require("../utils/complaintRegister");
 const {
   loadComplaintSlaRules,
   enrichComplaintWithSla,
@@ -456,14 +456,83 @@ module.exports = {
     } catch (err) { next(err); }
   },
 
+  listInvestigatingOfficers: async (req, res, next) => {
+    try {
+      const where = { is_active: true };
+      if (req.query.q) {
+        where[Op.or] = [
+          { name: { [Op.like]: `%${req.query.q}%` } },
+          { staff_id: { [Op.like]: `%${req.query.q}%` } },
+        ];
+      }
+
+      const rows = await User.findAll({
+        where,
+        attributes: ["id", "name", "staff_id", "role", "functionalities", "department_id", "unit_id"],
+        include: [
+          { model: Department, as: "department", attributes: ["id", "name", "department_code"], required: false },
+          { model: Unit, as: "unit", attributes: ["id", "name", "unit_code"], required: false },
+        ],
+        order: [["name", "ASC"]],
+        limit: 500,
+      });
+
+      const assignableRoles = new Set([
+        "state-officer", "state-coordinator", "zonal-coordinator",
+        "department-officer", "hq-department", "sdo", "admin",
+      ]);
+
+      const hasComplaintsAccess = (functionalities) => {
+        let access = functionalities;
+        if (typeof access === "string") {
+          try { access = JSON.parse(access); } catch { access = []; }
+        }
+        if (!Array.isArray(access)) return false;
+        return access.some((entry) => {
+          const funcs = entry?.functionalities;
+          return Array.isArray(funcs) && funcs.includes("Complaints Management");
+        });
+      };
+
+      const data = rows
+        .map((row) => row.toJSON())
+        .filter((u) => assignableRoles.has(u.role) || hasComplaintsAccess(u.functionalities))
+        .map((u) => ({
+          id: u.id,
+          name: u.name,
+          staff_id: u.staff_id,
+          role: u.role,
+          department: u.department?.name ?? null,
+          department_code: u.department?.department_code ?? null,
+          unit: u.unit?.name ?? null,
+        }));
+
+      res.json({ success: true, data });
+    } catch (err) { next(err); }
+  },
+
   listComplaints: async (req, res, next) => {
     try {
-      const where = {};
-      if (req.query.state_id) where.state_id = req.query.state_id;
-      if (req.query.zone_id) where.zone_id = req.query.zone_id;
-      if (req.query.status) where.status = req.query.status;
-      if (req.query.category) where.complaint_category = req.query.category;
-      if (req.query.priority) where.priority_rating = req.query.priority;
+      const shared = {};
+      if (req.query.status) shared.status = req.query.status;
+      if (req.query.category) shared.complaint_category = req.query.category;
+      if (req.query.priority) shared.priority_rating = req.query.priority;
+
+      const geo = {};
+      if (req.query.state_id) geo.state_id = req.query.state_id;
+      if (req.query.zone_id) geo.zone_id = req.query.zone_id;
+
+      const assignedOnly = req.query.assigned_to_me === "1" || req.query.assigned_to_me === "true";
+      const assigneeWhere = buildAssigneeWhere(req.user, Op);
+
+      let where;
+      if (assignedOnly && assigneeWhere) {
+        where = { ...shared, ...assigneeWhere };
+      } else if (assigneeWhere && Object.keys(geo).length) {
+        where = { ...shared, [Op.or]: [geo, assigneeWhere] };
+      } else {
+        where = { ...shared, ...geo };
+      }
       const [rows, rulesMap] = await Promise.all([
         ServicomComplaint.findAll({
           where,
