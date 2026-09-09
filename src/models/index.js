@@ -18,6 +18,7 @@ const MonitoringVisit             = require("./MonitoringVisit");
 const ServicomAssessmentScore     = require("./ServicomAssessmentScore");
 const ServicomKpiRecord           = require("./ServicomKpiRecord");
 const ServicomComplaint           = require("./ServicomComplaint");
+const ComplaintSlaRule            = require("./ComplaintSlaRule");
 const ServicomFinding             = require("./ServicomFinding");
 const ServicomRecommendation      = require("./ServicomRecommendation");
 const ServicomEvidence            = require("./ServicomEvidence");
@@ -254,7 +255,7 @@ module.exports = {
   StockAsset, StockVerification, StockVerificationItem,
   FinanceMonthlyReport, ProgrammesMonthlyReport, SqaMonthlyReport,
   ServicomAssessmentIndicator, ServicomFacility, MonitoringVisit,
-  ServicomAssessmentScore, ServicomKpiRecord, ServicomComplaint,
+  ServicomAssessmentScore, ServicomKpiRecord, ServicomComplaint, ComplaintSlaRule,
   ServicomFinding, ServicomRecommendation, ServicomEvidence, ServicomAuditLog,
   ServicomSatisfactionSurvey, ServicomCommentCard,
   EnrolmentReport, EnrolmentReportLine, MigrationReport, MigrationReportLine,

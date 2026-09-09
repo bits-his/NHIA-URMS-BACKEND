@@ -101,21 +101,21 @@ const SupplyVerification = sequelize.define("SupplyVerification", {
     type: DataTypes.ENUM("ASSET_REGISTER", "STORE_INVENTORY"),
     defaultValue: "ASSET_REGISTER",
   },
-  // Location
+  // Location (UNSIGNED to match zonal_offices / state_offices / departments / units)
   zone_id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.INTEGER.UNSIGNED,
     allowNull: true,
   },
   state_id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.INTEGER.UNSIGNED,
     allowNull: true,
   },
   department_id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.INTEGER.UNSIGNED,
     allowNull: true,
   },
   unit_id: {
-    type: DataTypes.INTEGER,
+    type: DataTypes.INTEGER.UNSIGNED,
     allowNull: true,
   },
   zone_name: {
