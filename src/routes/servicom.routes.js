@@ -25,6 +25,8 @@ router.get("/dashboard", ctrl.dashboard);
 router.get("/dashboard/drill", ctrl.dashboardDrill);
 router.get("/facilities", ctrl.listFacilities);
 router.get("/accredited-providers", require("../controllers/nhiaAccreditation.controller").listProviders);
+router.get("/hcf-facilities", require("../controllers/hcfFacility.controller").listFacilities);
+router.get("/hcf-facilities/services", require("../controllers/hcfFacility.controller").listServices);
 
 router.get("/visits", ctrl.listVisits);
 router.get("/visits/:id", ctrl.getVisit);

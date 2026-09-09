@@ -36,6 +36,8 @@ const SEED_STEPS = [
   { script: "src/scripts/seedComplaintSla.js", label: "Complaint SLA rules + demo complaints" },
   { script: "src/scripts/seedStateOfficeData.js", label: "State Office sample data" },
   { script: "src/scripts/seedAccreditedProviders.js", label: "Accredited HMO & HCF (from nhia.gov.ng)" },
+  { script: "src/scripts/seedHcfMasterFacilities.js", label: "HCF Master facilities (Excel)" },
+  { script: "src/scripts/seedHmoProviders.js", label: "Accredited HMOs (Excel June 2025)" },
   { script: "src/scripts/seedStoreManagement.js", label: "Store / Asset Management sample data" },
 ];
 

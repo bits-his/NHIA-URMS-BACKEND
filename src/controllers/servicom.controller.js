@@ -32,10 +32,26 @@ const VISIT_INCLUDES = [
   { model: ServicomEvidence, as: "evidence" },
 ];
 
-async function genRefId(Model, prefix, t) {
+async function genRefId(Model, prefix, t, field) {
   const year = new Date().getFullYear();
-  const count = await Model.count({ transaction: t });
-  return `${prefix}-${year}-${String(count + 1).padStart(5, "0")}`;
+  const idField =
+    field ||
+    (Model.rawAttributes?.complaint_number ? "complaint_number" : "reference_id");
+  const pattern = `${prefix}-${year}-`;
+  const rows = await Model.findAll({
+    attributes: [idField],
+    where: { [idField]: { [Op.like]: `${pattern}%` } },
+    transaction: t,
+    lock: t?.LOCK?.UPDATE,
+  });
+
+  let maxSeq = 0;
+  const re = new RegExp(`^${prefix}-${year}-(\\d+)$`);
+  for (const row of rows) {
+    const match = String(row.get(idField) || "").match(re);
+    if (match) maxSeq = Math.max(maxSeq, parseInt(match[1], 10));
+  }
+  return `${prefix}-${year}-${String(maxSeq + 1).padStart(5, "0")}`;
 }
 
 async function logAudit(entity_type, entity_id, action, actor, details, t) {
@@ -498,7 +514,7 @@ module.exports = {
           return res.status(400).json({ success: false, message: "Complaint ID already exists" });
         }
       } else {
-        complaint_number = await genRefId(ServicomComplaint, "CMP", t);
+        complaint_number = await genRefId(ServicomComplaint, "CMP", t, "complaint_number");
       }
       const metrics = await computeComplaintMetrics(req.body);
       const row = await ServicomComplaint.create({

@@ -16,6 +16,8 @@
     "db:seed-servicom-batch": "node src/scripts/runServicomSurveyComplaintCharterSeed.js",
     "db:fix-servicom-fks": "node src/scripts/fixServicomForeignKeys.js",
     "db:sync-accredited-providers": "node src/scripts/syncAccreditedProviders.js",
+    "db:seed-hcf": "node src/scripts/seedHcfMasterFacilities.js",
+    "db:seed-hmo": "node src/scripts/seedHmoProviders.js",
     "db:migrate-access": "node src/scripts/legacy/migrateProductionAccess.js"
   },
   "dependencies": {
@@ -28,7 +30,8 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.9.7",
-    "sequelize": "^6.37.3"
+    "sequelize": "^6.37.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

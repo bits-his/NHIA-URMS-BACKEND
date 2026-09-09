@@ -44,6 +44,8 @@ const StateOfficeComplaint        = require("./StateOfficeComplaint");
 const StateOfficeComplianceVisit  = require("./StateOfficeComplianceVisit");
 const StateOfficeReconciliationMeeting = require("./StateOfficeReconciliationMeeting");
 const NhiaAccreditedProvider          = require("./NhiaAccreditedProvider");
+const HcfFacility                     = require("./HcfFacility");
+const HmoProvider                     = require("./HmoProvider");
 const IgrReport                   = require("./IgrReport");
 const IgrReportLine               = require("./IgrReportLine");
 const SshiaFinancialReport        = require("./SshiaFinancialReport");
@@ -247,7 +249,10 @@ PhysicalAssetVerificationItem.belongsTo(StoreAsset, {
 });
 
 // ── User ↔ Role (by key) ──────────────────────────────────────────────────────
-User.belongsTo(Role, { foreignKey: "role", targetKey: "key", as: "roleRecord", constraints: false });
+ZonalOffice.hasMany(HcfFacility, { foreignKey: "zone_id", as: "hcf_facilities" });
+HcfFacility.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(HcfFacility, { foreignKey: "state_id", as: "hcf_facilities" });
+HcfFacility.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
 module.exports = {
   AnnualReport, QuarterlyData,
@@ -264,7 +269,7 @@ module.exports = {
   StakeholderReport, StakeholderReportLine, HmoSelectionReport, HmoSelectionReportLine,
   ChallengesReport,
   StateOfficeComplaint, StateOfficeComplianceVisit,
-  StateOfficeReconciliationMeeting, NhiaAccreditedProvider,
+  StateOfficeReconciliationMeeting, NhiaAccreditedProvider, HcfFacility, HmoProvider,
   IgrReport, IgrReportLine,
   SshiaFinancialReport, SshiaFinancialReportLine,
   ExpenditureProfileReport, ExpenditureProfileReportLine,
