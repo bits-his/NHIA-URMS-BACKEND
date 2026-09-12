@@ -15,6 +15,7 @@
     "db:seed-complaint-sla": "node src/scripts/seedComplaintSla.js",
     "db:seed-servicom-batch": "node src/scripts/runServicomSurveyComplaintCharterSeed.js",
     "db:fix-servicom-fks": "node src/scripts/fixServicomForeignKeys.js",
+    "db:sync-servicom-complaints": "node src/scripts/syncServicomComplaintsSchema.js",
     "db:sync-accredited-providers": "node src/scripts/syncAccreditedProviders.js",
     "db:seed-hcf": "node src/scripts/seedHcfMasterFacilities.js",
     "db:seed-hmo": "node src/scripts/seedHmoProviders.js",
