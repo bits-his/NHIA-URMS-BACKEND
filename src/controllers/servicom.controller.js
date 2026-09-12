@@ -9,7 +9,7 @@ const {
   ServicomEvidence, ServicomAuditLog, ServicomFacility,
   ZonalOffice, StateOffice, User, Department, Unit,
 } = require("../models");
-const { buildServicomListWhere } = require("../utils/servicomScope");
+const { buildServicomListWhere, applyComplaintExtraFilters } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
 const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere } = require("../utils/complaintRegister");
 const {
@@ -533,6 +533,7 @@ module.exports = {
       } else {
         where = { ...shared, ...geo };
       }
+      applyComplaintExtraFilters(where, req.query);
       const [rows, rulesMap] = await Promise.all([
         ServicomComplaint.findAll({
           where,
@@ -628,10 +629,12 @@ module.exports = {
       if (req.query.state_id) geoWhere.state_id = req.query.state_id;
       if (req.query.zone_id) geoWhere.zone_id = req.query.zone_id;
 
+      const complaintWhere = applyComplaintExtraFilters({ ...geoWhere }, req.query);
+
       const [satisfactionSurveys, commentCards, complaints] = await Promise.all([
         ServicomSatisfactionSurvey.findAll({ where: geoWhere }),
         ServicomCommentCard.findAll({ where: geoWhere }),
-        ServicomComplaint.findAll({ where: geoWhere }),
+        ServicomComplaint.findAll({ where: complaintWhere }),
       ]);
 
       const surveyPctScores = satisfactionSurveys
@@ -973,6 +976,7 @@ module.exports = {
         if (query.category) where.complaint_category = query.category;
         if (query.domain) where.complaint_domain = query.domain;
         if (query.priority) where.priority_rating = query.priority;
+        applyComplaintExtraFilters(where, query);
         if (query.month) {
           where[Op.or] = [
             { date_received: { [Op.like]: `${query.month}%` } },
@@ -1085,7 +1089,7 @@ module.exports = {
         const [surveys, cards, complaints] = await Promise.all([
           ServicomSatisfactionSurvey.count({ where: await buildServicomListWhere(req.user, q) }),
           ServicomCommentCard.count({ where: await buildServicomListWhere(req.user, q) }),
-          ServicomComplaint.count({ where: await buildServicomListWhere(req.user, q) }),
+          ServicomComplaint.count({ where: applyComplaintExtraFilters(await buildServicomListWhere(req.user, q), q) }),
         ]);
         const state = await StateOffice.findByPk(stateId, {
           attributes: ["description"],
@@ -1107,6 +1111,7 @@ module.exports = {
       if (req.query.category) where.complaint_category = req.query.category;
       if (req.query.domain) where.complaint_domain = req.query.domain;
       if (req.query.priority) where.priority_rating = req.query.priority;
+      applyComplaintExtraFilters(where, req.query);
       if (req.query.month) {
         where[Op.or] = [
           { date_received: { [Op.like]: `${req.query.month}%` } },
