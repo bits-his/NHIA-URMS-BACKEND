@@ -5,6 +5,8 @@ const {
   ComplaintsComplianceReport, IgrReport, SshiaFinancialReport, ExpenditureProfileReport,
   WeeklyActionableReport, ContractedServicesReport, MonitoringVisit,
   WeeklyActionableReportLine, ContractedServicesReportLine,
+  MonthlyEnrolleeRegister, EtmcTmcActionPointRegister,
+  ExtraDependantReport, HcpChangeReport,
   StateOffice, ZonalOffice,
 } = require("../models");
 const { buildStateOfficeListWhere } = require("../utils/stateOfficeScope");
@@ -14,12 +16,16 @@ const { buildZoneBreakdown, buildStateBreakdownInZone } = require("../utils/dash
 const MONTHLY_REPORT_SOURCES = [
   { key: "weekly_actionable", label: "Weekly Actionable", model: WeeklyActionableReport },
   { key: "contracted_services", label: "Contracted Services", model: ContractedServicesReport },
+  { key: "enrollee_register", label: "Monthly Enrollee Register", model: MonthlyEnrolleeRegister },
+  { key: "etmc_tmc_action_point", label: "ETMC/TMC Action-Point Register", model: EtmcTmcActionPointRegister },
   { key: "enrolment", label: "Enrolment", model: EnrolmentReport },
   { key: "migration", label: "Migration / Update Requests", model: MigrationReport },
   { key: "cemonc", label: "CEmONC & FFP Beneficiaries", model: CemoncReport },
   { key: "accreditation", label: "Accreditation / Reaccreditation", model: AccreditationReport },
   { key: "stakeholder", label: "Stakeholder Engagement", model: StakeholderReport },
   { key: "hmo_selection", label: "HMO Selection Process", model: HmoSelectionReport },
+  { key: "extra_dependant", label: "Additional / Extra Dependant", model: ExtraDependantReport },
+  { key: "hcf_change", label: "Change of HCF", model: HcpChangeReport },
   { key: "challenges", label: "Challenges & Recommendations", model: ChallengesReport },
   { key: "igr", label: "IGR", model: IgrReport },
   { key: "sshia_financial", label: "SSHIA Financial Report", model: SshiaFinancialReport },
@@ -47,14 +53,14 @@ const MONITORING_VISIT_SOURCES = [
 
 /** Legacy export — SOC-only monthly subset */
 const SOC_ZONES_REPORT_SOURCES = MONTHLY_REPORT_SOURCES.filter((s) =>
-  ["weekly_actionable", "contracted_services"].includes(s.key),
+  ["weekly_actionable", "contracted_services", "enrollee_register", "etmc_tmc_action_point"].includes(s.key),
 );
 
 /** Others module reports (complaints etc.) */
 const OTHERS_REPORT_SOURCES = [
   { key: "complaints_report", label: "Complaints / Compliance Report", model: ComplaintsComplianceReport },
   ...MONTHLY_REPORT_SOURCES.filter((s) =>
-    !["weekly_actionable", "contracted_services"].includes(s.key),
+    !["weekly_actionable", "contracted_services", "enrollee_register", "etmc_tmc_action_point"].includes(s.key),
   ),
 ];
 

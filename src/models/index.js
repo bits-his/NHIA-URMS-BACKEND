@@ -56,6 +56,13 @@ const WeeklyActionableReport       = require("./WeeklyActionableReport");
 const WeeklyActionableReportLine   = require("./WeeklyActionableReportLine");
 const ContractedServicesReport     = require("./ContractedServicesReport");
 const ContractedServicesReportLine = require("./ContractedServicesReportLine");
+const MonthlyEnrolleeRegister      = require("./MonthlyEnrolleeRegister");
+const ExtraDependantReport         = require("./ExtraDependantReport");
+const ExtraDependantReportLine     = require("./ExtraDependantReportLine");
+const HcpChangeReport              = require("./HcpChangeReport");
+const HcpChangeReportLine          = require("./HcpChangeReportLine");
+const EtmcTmcActionPointRegister   = require("./EtmcTmcActionPointRegister");
+const EtmcTmcActionPointLine       = require("./EtmcTmcActionPointLine");
 const ComplianceReport            = require("./ComplianceReport");
 const ComplianceFinding           = require("./ComplianceFinding");
 const ComplianceViolation         = require("./ComplianceViolation");
@@ -66,6 +73,8 @@ const GoodsReceiptNote            = require("./GoodsReceiptNote");
 const StockIssueVoucher           = require("./StockIssueVoucher");
 const AssetTransfer               = require("./AssetTransfer");
 const SupplyVerification          = require("./SupplyVerification");
+const StateZonalOfficeProfile     = require("./StateZonalOfficeProfile");
+const StateZonalFocalPerson       = require("./StateZonalFocalPerson");
 const AssetMaintenance            = require("./AssetMaintenance");
 const AssetDisposal               = require("./AssetDisposal");
 const PhysicalAssetVerification   = require("./PhysicalAssetVerification");
@@ -184,8 +193,30 @@ ContractedServicesReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "z
 StateOffice.hasMany(ContractedServicesReport,   { foreignKey: "state_id", as: "contracted_services_reports" });
 ContractedServicesReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+ZonalOffice.hasMany(MonthlyEnrolleeRegister,   { foreignKey: "zone_id",  as: "monthly_enrollee_registers" });
+MonthlyEnrolleeRegister.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(MonthlyEnrolleeRegister,   { foreignKey: "state_id", as: "monthly_enrollee_registers" });
+MonthlyEnrolleeRegister.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(ExtraDependantReport,   { foreignKey: "zone_id",  as: "extra_dependant_reports" });
+ExtraDependantReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(ExtraDependantReport,   { foreignKey: "state_id", as: "extra_dependant_reports" });
+ExtraDependantReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(HcpChangeReport,   { foreignKey: "zone_id",  as: "hcp_change_reports" });
+HcpChangeReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(HcpChangeReport,   { foreignKey: "state_id", as: "hcp_change_reports" });
+HcpChangeReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(EtmcTmcActionPointRegister,   { foreignKey: "zone_id",  as: "etmc_tmc_action_point_registers" });
+EtmcTmcActionPointRegister.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(EtmcTmcActionPointRegister,   { foreignKey: "state_id", as: "etmc_tmc_action_point_registers" });
+EtmcTmcActionPointRegister.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 bindStateOfficeReport(ComplianceReport, "compliance");
 bindStateOfficeReport(SupplyVerification, "supply_verification");
+bindStateOfficeReport(StateZonalOfficeProfile, "office_profile");
+bindStateOfficeReport(StateZonalFocalPerson, "focal_person");
 
 // ── SERVICOM M&E ──────────────────────────────────────────────────────────────
 ZonalOffice.hasMany(ServicomFacility,    { foreignKey: "zone_id",  as: "servicom_facilities" });
@@ -282,8 +313,13 @@ module.exports = {
   ExpenditureProfileReport, ExpenditureProfileReportLine,
   WeeklyActionableReport, WeeklyActionableReportLine,
   ContractedServicesReport, ContractedServicesReportLine,
+  MonthlyEnrolleeRegister,
+  ExtraDependantReport, ExtraDependantReportLine,
+  HcpChangeReport, HcpChangeReportLine,
+  EtmcTmcActionPointRegister, EtmcTmcActionPointLine,
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
-  StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, AssetMaintenance, AssetDisposal,
+  StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification,
+  StateZonalOfficeProfile, StateZonalFocalPerson, AssetMaintenance, AssetDisposal,
   PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion, PrepaymentAnalysis,
   AdminHrReport,
 };

@@ -13,7 +13,7 @@ const bcrypt = require("bcryptjs");
 // Register all models & associations
 require("../models/index");
 const { User } = require("../models/User");
-const { fixOrphanForeignKeys } = require("../utils/fixOrphanForeignKeys");
+const { fixOrphanForeignKeys, alignIntegerForeignKeys } = require("../utils/fixOrphanForeignKeys");
 const { repairAnnualReportKeys } = require("../utils/repairAnnualReportKeys");
 
 (async () => {
@@ -24,6 +24,11 @@ const { repairAnnualReportKeys } = require("../utils/repairAnnualReportKeys");
     const cleared = await fixOrphanForeignKeys(sequelize, { log: true });
     if (cleared) {
       console.log(`ℹ️   Cleared ${cleared} orphan FK reference(s) before sync`);
+    }
+
+    const aligned = await alignIntegerForeignKeys(sequelize, { log: true });
+    if (aligned) {
+      console.log(`ℹ️   Aligned ${aligned} integer FK column type(s) before sync`);
     }
 
     await repairAnnualReportKeys(sequelize);

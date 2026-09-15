@@ -13,8 +13,12 @@ const LEGACY_MODULE = "State Offices";
 
 const ALL_SOC_ZONES_FUNCS = [
   "SOC/Zones Dashboard",
+  "State/Zonal Office Profile",
+  "State/Zonal Focal Persons Register",
   "Weekly Actionable",
   "Contracted Services",
+  "Monthly Enrollee Register",
+  "ETMC/TMC Action-Point Register",
   "Operation Monitoring Visit",
   "Spot Check Visit",
 ];
