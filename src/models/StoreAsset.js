@@ -194,6 +194,10 @@ const StoreAsset = sequelize.define("StoreAsset", {
     type: DataTypes.JSON,
     allowNull: true,
   },
+  comments: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
   created_by: {
     type: DataTypes.INTEGER,
     allowNull: true,

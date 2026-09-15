@@ -10,6 +10,7 @@ const {
   PhysicalAssetVerification,
   PhysicalAssetVerificationItem,
   StockConversion,
+  PrepaymentAnalysis,
   ZonalOffice,
   StateOffice,
   Department,
@@ -68,12 +69,25 @@ exports.getAssetById = async (req, res) => {
 
 exports.createAsset = async (req, res) => {
   try {
-    const count = await StoreAsset.count();
-    const nextSeq = String(count + 1).padStart(4, "0");
     const year = new Date().getFullYear();
+    const prefixMap = {
+      Land: "LND",
+      Building: "BLD",
+      "Motor Vehicles": "VEH",
+      "Office Equipment": "OFE",
+      "Office Furniture": "FUR",
+      "Computer Equipment": "CMP",
+      "Plant & Machinery": "PLM",
+      "Plant and Machinery": "PLM",
+    };
+    const prefix = prefixMap[req.body.primaryCategory] || "AST";
+    const sameCat = await StoreAsset.count({
+      where: { primaryCategory: req.body.primaryCategory || null },
+    });
+    const autoId = `${prefix}-${String(sameCat + 1).padStart(3, "0")}`;
 
-    const assetId = req.body.assetId || req.body.nhiaTagNumber || `NHIA/AST/${year}/${nextSeq}`;
-    const assetNumber = req.body.assetNumber || assetId;
+    const assetId = req.body.assetId || autoId;
+    const assetNumber = req.body.assetNumber || autoId;
     const controlNumber = req.body.controlNumber || `CTRL-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
     const barcodeQrCode = req.body.barcodeQrCode || `QR-NHIA-${Date.now().toString().slice(-6)}`;
 
@@ -83,6 +97,7 @@ exports.createAsset = async (req, res) => {
       assetNumber,
       controlNumber,
       barcodeQrCode,
+      category: req.body.category || req.body.primaryCategory || "Office Equipment",
       created_by: req.user?.id || null,
     });
     res.status(201).json({ success: true, data: asset });
@@ -882,6 +897,109 @@ exports.updatePhysicalVerification = async (req, res) => {
       include: [{ model: PhysicalAssetVerificationItem, as: "items" }],
     });
     res.json({ success: true, data: full });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+};
+
+// ─── Prepayment Analysis Register ─────────────────────────────────────────────
+async function nextPrepaymentControl() {
+  const year = new Date().getFullYear();
+  const count = await PrepaymentAnalysis.count();
+  return `PAR-${year}-${String(count + 1).padStart(4, "0")}`;
+}
+
+exports.getPrepaymentAnalyses = async (req, res) => {
+  try {
+    const where = {};
+    if (req.query.state_id) where.state_id = req.query.state_id;
+    if (req.query.zone_id) where.zone_id = req.query.zone_id;
+    const rows = await PrepaymentAnalysis.findAll({
+      where,
+      order: [["id", "DESC"]],
+    });
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.getPrepaymentAnalysisById = async (req, res) => {
+  try {
+    const row = await PrepaymentAnalysis.findByPk(req.params.id);
+    if (!row) return res.status(404).json({ success: false, message: "Record not found" });
+    res.json({ success: true, data: row });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.createPrepaymentAnalysis = async (req, res) => {
+  try {
+    const body = { ...req.body };
+    const controlNumber = body.controlNumber || (await nextPrepaymentControl());
+
+    if (req.file) {
+      body.awardLetterPath = `/uploads/store/${req.file.filename}`;
+      body.awardLetterName = req.file.originalname;
+    }
+
+    const row = await PrepaymentAnalysis.create({
+      controlNumber,
+      entryDate: body.entryDate || new Date().toISOString().slice(0, 10),
+      procurementInstrument: body.procurementInstrument || null,
+      contractorName: body.contractorName,
+      contractorAddress: body.contractorAddress || null,
+      refInvoiceDeliveryNote: body.refInvoiceDeliveryNote || null,
+      itemDescription: body.itemDescription,
+      quantityOrdered: Number(body.quantityOrdered) || 0,
+      quantitySupplied: Number(body.quantitySupplied) || 0,
+      rate: Number(body.rate) || 0,
+      awardLetterPath: body.awardLetterPath || null,
+      awardLetterName: body.awardLetterName || null,
+      remarks: body.remarks || null,
+      zone_id: body.zone_id || null,
+      state_id: body.state_id || null,
+      zone_name: body.zone_name || null,
+      state_name: body.state_name || null,
+      created_by: req.user?.id || null,
+    });
+    res.status(201).json({ success: true, data: row });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+};
+
+exports.updatePrepaymentAnalysis = async (req, res) => {
+  try {
+    const existing = await PrepaymentAnalysis.findByPk(req.params.id);
+    if (!existing) return res.status(404).json({ success: false, message: "Record not found" });
+
+    const body = { ...req.body };
+    if (req.file) {
+      body.awardLetterPath = `/uploads/store/${req.file.filename}`;
+      body.awardLetterName = req.file.originalname;
+    }
+
+    await existing.update({
+      entryDate: body.entryDate ?? existing.entryDate,
+      procurementInstrument: body.procurementInstrument ?? existing.procurementInstrument,
+      contractorName: body.contractorName ?? existing.contractorName,
+      contractorAddress: body.contractorAddress ?? existing.contractorAddress,
+      refInvoiceDeliveryNote: body.refInvoiceDeliveryNote ?? existing.refInvoiceDeliveryNote,
+      itemDescription: body.itemDescription ?? existing.itemDescription,
+      quantityOrdered: body.quantityOrdered != null ? Number(body.quantityOrdered) : existing.quantityOrdered,
+      quantitySupplied: body.quantitySupplied != null ? Number(body.quantitySupplied) : existing.quantitySupplied,
+      rate: body.rate != null ? Number(body.rate) : existing.rate,
+      awardLetterPath: body.awardLetterPath ?? existing.awardLetterPath,
+      awardLetterName: body.awardLetterName ?? existing.awardLetterName,
+      remarks: body.remarks ?? existing.remarks,
+      zone_id: body.zone_id ?? existing.zone_id,
+      state_id: body.state_id ?? existing.state_id,
+      zone_name: body.zone_name ?? existing.zone_name,
+      state_name: body.state_name ?? existing.state_name,
+    });
+    res.json({ success: true, data: existing });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }

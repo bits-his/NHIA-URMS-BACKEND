@@ -71,6 +71,7 @@ const AssetDisposal               = require("./AssetDisposal");
 const PhysicalAssetVerification   = require("./PhysicalAssetVerification");
 const PhysicalAssetVerificationItem = require("./PhysicalAssetVerificationItem");
 const StockConversion             = require("./StockConversion");
+const PrepaymentAnalysis          = require("./PrepaymentAnalysis");
 
 const bindStateOfficeReport = (Model, alias) => {
   ZonalOffice.hasMany(Model, { foreignKey: "zone_id", as: `${alias}_zone` });
@@ -277,5 +278,5 @@ module.exports = {
   ContractedServicesReport, ContractedServicesReportLine,
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
   StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, AssetMaintenance, AssetDisposal,
-  PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion,
+  PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion, PrepaymentAnalysis,
 };
