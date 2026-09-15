@@ -21,9 +21,9 @@ const ServicomComplaint = require("../models/ServicomComplaint");
     const fields = rows.map((r) => r.Field);
     const needed = [
       "complaint_against",
-      "complainant_name", "complainant_phone", "complainant_nhis_id",
+      "complainant_name", "complainant_organization", "complainant_phone", "complainant_nhis_id",
       "complainant_hmo_id", "complainant_hcf_id",
-      "respondent_name", "respondent_phone", "respondent_nhis_id",
+      "respondent_name", "respondent_organization", "respondent_phone", "respondent_nhis_id",
       "respondent_hmo_id", "respondent_hcf_id",
     ];
     const missing = needed.filter((c) => !fields.includes(c));

@@ -21,6 +21,7 @@ const hcfFacilitiesRoutes = require("./routes/hcfFacilities.routes");
 const hmoProvidersRoutes = require("./routes/hmoProviders.routes");
 const complianceReportRoutes = require("./routes/complianceReport.routes");
 const storeManagementRoutes = require("./routes/storeManagementRoutes");
+const notificationsRoutes = require("./routes/notifications.routes");
 const { errorHandler } = require("./middleware/errorHandler");
 
 const app = express();
@@ -70,6 +71,7 @@ app.use("/api/hmo-providers", hmoProvidersRoutes);
 app.use("/api/state-office", stateOfficeRoutes);
 app.use("/api/sqa/compliance-reports", complianceReportRoutes);
 app.use("/api/store-management", storeManagementRoutes);
+app.use("/api/notifications", notificationsRoutes);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 

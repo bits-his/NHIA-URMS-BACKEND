@@ -155,6 +155,8 @@ const {
   ExpenditureProfileReport, ExpenditureProfileReportLine,
   WeeklyActionableReport, WeeklyActionableReportLine,
   ContractedServicesReport, ContractedServicesReportLine,
+  IctSupportReport, IctSupportReportLine,
+  AdhocAssignmentReport, AdhocAssignmentReportLine,
 } = require("../models");
 
 const enrolment = makeReportController(
@@ -584,11 +586,54 @@ const contractedServices = makeReportController(
   })
 );
 
+const ictSupport = makeReportController(
+  IctSupportReport, IctSupportReportLine, "ICT",
+  (line, reportId) => ({
+    report_id: reportId,
+    support_id: line.support_id || null,
+    date_reported: line.date_reported || null,
+    reported_by: line.reported_by || null,
+    support_category: line.support_category || null,
+    issue_type: line.issue_type || null,
+    description: line.description || null,
+    priority: line.priority || null,
+    date_resolved: line.date_resolved || null,
+    resolution_status: line.resolution_status || null,
+    action_taken: line.action_taken || null,
+    external_support_required: line.external_support_required || null,
+    referred_to: line.referred_to || null,
+    remarks: line.remarks || null,
+  })
+);
+
+const adhocAssignment = makeReportController(
+  AdhocAssignmentReport, AdhocAssignmentReportLine, "ASG",
+  (line, reportId) => ({
+    report_id: reportId,
+    assignment_id: line.assignment_id || null,
+    date_assigned: line.date_assigned || null,
+    assignment_title: line.assignment_title || null,
+    assigned_by: line.assigned_by || null,
+    assignment_description: line.assignment_description || null,
+    expected_output: line.expected_output || null,
+    responsible_unit: line.responsible_unit || null,
+    supporting_staff: line.supporting_staff || null,
+    due_date: line.due_date || null,
+    assignment_status: line.assignment_status || null,
+    date_completed: line.date_completed || null,
+    output_achieved: line.output_achieved || null,
+    challenges: line.challenges || null,
+    support_required: line.support_required || null,
+    evidence: line.evidence || null,
+    remarks: line.remarks || null,
+  })
+);
+
 const complaints = require("./complaintsCompliance.controller");
 
 module.exports = {
   enrolment, migration, cemonc,
   accreditation, stakeholder, hmoSelection, challenges,
   complaints, igr, sshiaFinancial, expenditureProfile,
-  weeklyActionable, contractedServices,
+  weeklyActionable, contractedServices, ictSupport, adhocAssignment,
 };

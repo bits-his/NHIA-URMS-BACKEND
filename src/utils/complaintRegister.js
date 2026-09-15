@@ -1,3 +1,4 @@
+const { Op } = require("sequelize");
 const {
   getRuleForPriority,
   loadComplaintSlaRules,
@@ -111,15 +112,58 @@ function buildAssigneeWhere(user, Op) {
   return clauses.length ? { [Op.or]: clauses } : null;
 }
 
+const MONTH_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+/** Party code for complaint ID middle segment (ENF/HCF/TR/JAN 26/001). */
+function complaintPartyCode(party) {
+  const p = String(party || "").trim();
+  if (/^enrollee$/i.test(p)) return "ENR";
+  if (/^hmo$/i.test(p)) return "HMO";
+  if (/^hcf$/i.test(p)) return "HCF";
+  return (p.slice(0, 3).toUpperCase() || "GEN");
+}
+
+/**
+ * Monthly sequential complaint ID: ENF/{against}/TR/{MON YY}/{seq}
+ * e.g. ENF/HCF/TR/JAN 26/001
+ */
+async function genComplaintNumber(Model, body, t) {
+  const against = complaintPartyCode(body.complaint_against || body.complaint_type);
+  const baseDate = body.date_received || body.complaint_date || new Date().toISOString().slice(0, 10);
+  const d = new Date(baseDate);
+  const month = Number.isNaN(d.getTime()) ? new Date().getMonth() : d.getMonth();
+  const year = Number.isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
+  const mon = MONTH_ABBR[month];
+  const yy = String(year).slice(-2);
+  const prefix = `ENF/${against}/TR/${mon} ${yy}/`;
+
+  const rows = await Model.findAll({
+    attributes: ["complaint_number"],
+    where: { complaint_number: { [Op.like]: `${prefix}%` } },
+    transaction: t,
+    lock: t?.LOCK?.UPDATE,
+  });
+
+  let maxSeq = 0;
+  const re = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\d+)$`);
+  for (const row of rows) {
+    const match = String(row.get("complaint_number") || "").match(re);
+    if (match) maxSeq = Math.max(maxSeq, parseInt(match[1], 10));
+  }
+  return `${prefix}${String(maxSeq + 1).padStart(3, "0")}`;
+}
+
 function pickComplaintFields(body) {
   const fields = [
     "complaint_number", "zone_id", "state_id", "reporting_month", "reporting_year", "entry_date",
     "complaint_type", "complaint_against", "complaint_category", "category_code", "complaint_domain", "domain_code",
     "offence_reference",
     "priority_rating", "date_received", "transmission_route",
-    "complainant_category", "complainant_id", "complainant_name", "complainant_phone", "complainant_nhis_id",
+    "complainant_category", "complainant_id", "complainant_name", "complainant_organization",
+    "complainant_phone", "complainant_nhis_id",
     "complainant_hmo_id", "complainant_hcf_id",
-    "respondent_category", "respondent_id", "respondent_name", "respondent_phone", "respondent_nhis_id",
+    "respondent_category", "respondent_id", "respondent_name", "respondent_organization",
+    "respondent_phone", "respondent_nhis_id",
     "respondent_hmo_id", "respondent_hcf_id",
     "officer_assigned", "investigation_start_date", "status", "actions_taken", "actions_details",
     "escalated", "escalation_level", "escalation_date", "escalated_to",
@@ -138,5 +182,7 @@ module.exports = {
   buildAssigneeWhere,
   pickComplaintFields,
   enrichComplaintCodes,
+  genComplaintNumber,
+  complaintPartyCode,
   daysBetween,
 };

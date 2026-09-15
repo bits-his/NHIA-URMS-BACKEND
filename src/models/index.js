@@ -56,6 +56,10 @@ const WeeklyActionableReport       = require("./WeeklyActionableReport");
 const WeeklyActionableReportLine   = require("./WeeklyActionableReportLine");
 const ContractedServicesReport     = require("./ContractedServicesReport");
 const ContractedServicesReportLine = require("./ContractedServicesReportLine");
+const IctSupportReport             = require("./IctSupportReport");
+const IctSupportReportLine         = require("./IctSupportReportLine");
+const AdhocAssignmentReport        = require("./AdhocAssignmentReport");
+const AdhocAssignmentReportLine    = require("./AdhocAssignmentReportLine");
 const ComplianceReport            = require("./ComplianceReport");
 const ComplianceFinding           = require("./ComplianceFinding");
 const ComplianceViolation         = require("./ComplianceViolation");
@@ -182,6 +186,16 @@ ContractedServicesReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "z
 StateOffice.hasMany(ContractedServicesReport,   { foreignKey: "state_id", as: "contracted_services_reports" });
 ContractedServicesReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+ZonalOffice.hasMany(IctSupportReport,   { foreignKey: "zone_id",  as: "ict_support_reports" });
+IctSupportReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(IctSupportReport,   { foreignKey: "state_id", as: "ict_support_reports" });
+IctSupportReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(AdhocAssignmentReport,   { foreignKey: "zone_id",  as: "adhoc_assignment_reports" });
+AdhocAssignmentReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(AdhocAssignmentReport,   { foreignKey: "state_id", as: "adhoc_assignment_reports" });
+AdhocAssignmentReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 bindStateOfficeReport(ComplianceReport, "compliance");
 bindStateOfficeReport(SupplyVerification, "supply_verification");
 
@@ -275,6 +289,8 @@ module.exports = {
   ExpenditureProfileReport, ExpenditureProfileReportLine,
   WeeklyActionableReport, WeeklyActionableReportLine,
   ContractedServicesReport, ContractedServicesReportLine,
+  IctSupportReport, IctSupportReportLine,
+  AdhocAssignmentReport, AdhocAssignmentReportLine,
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
   StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, AssetMaintenance, AssetDisposal,
   PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion,

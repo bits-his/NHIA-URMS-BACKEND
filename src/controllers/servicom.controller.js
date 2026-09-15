@@ -11,7 +11,8 @@ const {
 } = require("../models");
 const { buildServicomListWhere, applyComplaintExtraFilters } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
-const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere } = require("../utils/complaintRegister");
+const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere, genComplaintNumber } = require("../utils/complaintRegister");
+const { notifyOfficerLabel } = require("../utils/notify");
 const {
   loadComplaintSlaRules,
   enrichComplaintWithSla,
@@ -290,6 +291,10 @@ const SATISFACTION_QUESTIONS = [
   { id: "Q11", category: "INFORMATION" },
   { id: "Q12", category: "PROFESSIONALISM" },
   { id: "Q13", category: "PROFESSIONALISM" },
+  { id: "Q14", category: "PROFESSIONALISM" },
+  { id: "Q15", category: "STAFF ATTITUDE" },
+  { id: "Q16", category: "STAFF ATTITUDE" },
+  { id: "Q17", category: "STAFF ATTITUDE" },
 ];
 
 const COMMENT_CARD_QUESTIONS = [
@@ -466,9 +471,23 @@ module.exports = {
         ];
       }
 
+      const escalationLevel = String(req.query.escalation_level || "").trim();
+      const stateId = req.query.state_id || req.user?.state_id;
+      const zoneId = req.query.zone_id || req.user?.zone_id;
+
+      if (escalationLevel === "State Internal" && stateId) {
+        where.state_id = stateId;
+      } else if (escalationLevel === "Zonal Office" && zoneId) {
+        where.zone_id = zoneId;
+      } else if (escalationLevel === "NHIA Headquarters") {
+        // HQ / directors — no state lock
+      } else if (stateId) {
+        where.state_id = stateId;
+      }
+
       const rows = await User.findAll({
         where,
-        attributes: ["id", "name", "staff_id", "role", "functionalities", "department_id", "unit_id"],
+        attributes: ["id", "name", "staff_id", "role", "functionalities", "department_id", "unit_id", "state_id", "zone_id"],
         include: [
           { model: Department, as: "department", attributes: ["id", "name", "department_code"], required: false },
           { model: Unit, as: "unit", attributes: ["id", "name", "unit_code"], required: false },
@@ -494,14 +513,48 @@ module.exports = {
         });
       };
 
+      const isEnforcementDept = (u) => {
+        const deptCode = String(u.department?.department_code || "").toUpperCase();
+        const unitCode = String(u.unit?.unit_code || "").toUpperCase();
+        const deptName = String(u.department?.name || "").toLowerCase();
+        const unitName = String(u.unit?.name || "").toLowerCase();
+        if (deptCode === "AUD" || deptCode === "ENF") return true;
+        if (unitCode === "AUD-COMP" || unitCode.startsWith("ENF")) return true;
+        if (deptName.includes("enforcement") || unitName.includes("enforcement")) return true;
+        if (unitName.includes("compliance & enforcement")) return true;
+        return false;
+      };
+
+      const matchesEscalationLevel = (u) => {
+        if (!escalationLevel) return true;
+        if (escalationLevel === "State Internal") {
+          return ["state-officer", "state-coordinator"].includes(u.role) || isEnforcementDept(u) || hasComplaintsAccess(u.functionalities);
+        }
+        if (escalationLevel === "Zonal Office") {
+          return u.role === "zonal-coordinator" || isEnforcementDept(u) || hasComplaintsAccess(u.functionalities);
+        }
+        if (escalationLevel === "NHIA Headquarters") {
+          return ["hq-department", "department-officer", "sdo", "admin"].includes(u.role) || isEnforcementDept(u);
+        }
+        return isEnforcementDept(u) || hasComplaintsAccess(u.functionalities);
+      };
+
       const data = rows
         .map((row) => row.toJSON())
-        .filter((u) => assignableRoles.has(u.role) || hasComplaintsAccess(u.functionalities))
+        .filter((u) => (assignableRoles.has(u.role) || hasComplaintsAccess(u.functionalities) || isEnforcementDept(u)) && matchesEscalationLevel(u))
+        .sort((a, b) => {
+          const aEnf = isEnforcementDept(a) ? 0 : 1;
+          const bEnf = isEnforcementDept(b) ? 0 : 1;
+          if (aEnf !== bEnf) return aEnf - bEnf;
+          return String(a.name || "").localeCompare(String(b.name || ""));
+        })
         .map((u) => ({
           id: u.id,
           name: u.name,
           staff_id: u.staff_id,
           role: u.role,
+          state_id: u.state_id ?? null,
+          zone_id: u.zone_id ?? null,
           department: u.department?.name ?? null,
           department_code: u.department?.department_code ?? null,
           unit: u.unit?.name ?? null,
@@ -584,7 +637,7 @@ module.exports = {
           return res.status(400).json({ success: false, message: "Complaint ID already exists" });
         }
       } else {
-        complaint_number = await genRefId(ServicomComplaint, "CMP", t, "complaint_number");
+        complaint_number = await genComplaintNumber(ServicomComplaint, req.body, t);
       }
       const metrics = await computeComplaintMetrics(req.body);
       const row = await ServicomComplaint.create({
@@ -600,6 +653,16 @@ module.exports = {
       }, { transaction: t });
       await logAudit("servicom_complaint", row.id, "created", req.user?.name, null, t);
       await t.commit();
+      if (row.officer_assigned) {
+        await notifyOfficerLabel(row.officer_assigned, {
+          title: "Complaint assigned to you",
+          body: `${row.complaint_number || "A complaint"} has been assigned to you for investigation.`,
+          type: "alert",
+          link: "/sdo/servicom/complaints",
+          entity_type: "servicom_complaint",
+          entity_id: row.id,
+        }).catch(() => {});
+      }
       const rulesMap = await loadComplaintSlaRules(true);
       res.status(201).json({ success: true, data: await enrichComplaintWithSla(row, rulesMap) });
     } catch (err) { await t.rollback(); next(err); }
@@ -609,8 +672,17 @@ module.exports = {
     try {
       const row = await ServicomComplaint.findByPk(req.params.id);
       if (!row) return res.status(404).json({ success: false, message: "Complaint not found" });
+      const prevOfficer = row.officer_assigned || row.assigned_officer;
       const merged = { ...row.toJSON(), ...req.body };
       const metrics = await computeComplaintMetrics(merged);
+
+      // Escalation hands the complaint to the escalation officer
+      const becomingEscalated = req.body.escalated === true || req.body.escalated === "true" || req.body.escalated === 1;
+      if (becomingEscalated && req.body.escalated_to) {
+        metrics.officer_assigned = req.body.escalated_to;
+        metrics.assigned_officer = req.body.escalated_to;
+      }
+
       await row.update({
         ...pickComplaintFields(req.body),
         ...enrichComplaintCodes(merged),
@@ -618,6 +690,21 @@ module.exports = {
         escalated: req.body.escalated !== undefined ? !!req.body.escalated : row.escalated,
       });
       await logAudit("servicom_complaint", row.id, "updated", req.user?.name, req.body);
+
+      const nextOfficer = row.officer_assigned || row.assigned_officer;
+      if (nextOfficer && nextOfficer !== prevOfficer) {
+        await notifyOfficerLabel(nextOfficer, {
+          title: becomingEscalated ? "Complaint escalated to you" : "Complaint assigned to you",
+          body: becomingEscalated
+            ? `${row.complaint_number || "A complaint"} was escalated to you (${req.body.escalation_level || "escalation"}). Immediate attention required.`
+            : `${row.complaint_number || "A complaint"} has been assigned to you.`,
+          type: becomingEscalated ? "directive" : "alert",
+          link: "/sdo/servicom/complaints",
+          entity_type: "servicom_complaint",
+          entity_id: row.id,
+        }).catch(() => {});
+      }
+
       const rulesMap = await loadComplaintSlaRules(true);
       res.json({ success: true, data: await enrichComplaintWithSla(row, rulesMap) });
     } catch (err) { next(err); }

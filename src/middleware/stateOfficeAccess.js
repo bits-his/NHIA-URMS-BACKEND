@@ -1,5 +1,6 @@
 const SOC_ZONES_MODULE = "SOC/Zones";
 const ZONAL_MODULE = "Zonal";
+const SDO_MODULE = "SDO";
 const LEGACY_MODULE = "State Offices";
 const ZONAL_LEGACY = "Others";
 
@@ -21,6 +22,8 @@ const ROUTE_FUNCTIONALITY = {
   "expenditure-profile": "Expenditure Profile",
   "weekly-actionable": "Weekly Actionable",
   "contracted-services": "Contracted Services",
+  "ict-support-register": "ICT Support Register",
+  "adhoc-special-assignment": "Ad-hoc / Special Assignment",
   dashboard: "SOC/Zones Dashboard",
 };
 
@@ -30,6 +33,11 @@ const SOC_ONLY_FUNCTIONALITIES = new Set([
   "Contracted Services",
   "Operation Monitoring Visit",
   "Spot Check Visit",
+]);
+
+/** Privileges granted under SDO (still served by state-office APIs) */
+const SDO_FUNCTIONALITIES = new Set([
+  "Ad-hoc / Special Assignment",
 ]);
 
 /** Canonical title → legacy names stored in older user.functionalities rows */
@@ -63,6 +71,12 @@ const FUNCTIONALITY_ALIASES = {
   ],
   "Enrollee Complaints": ["Complaints Register", "Complaints"],
   "Reconciliation Meetings": ["Reconciliation"],
+  "ICT Support Register": ["ICT Support", "Support"],
+  "Ad-hoc / Special Assignment": [
+    "SPECIAL PROJECT",
+    "Special Project",
+    "Ad-hoc Project",
+  ],
 };
 
 /** Legacy path — also allow these sections to search NHIA lists */
@@ -105,6 +119,10 @@ function findZonalEntry(access) {
   );
 }
 
+function findSdoEntry(access) {
+  return access.find((e) => e?.access_to === SDO_MODULE);
+}
+
 function hasFunctionality(entry, title) {
   const funcs = Array.isArray(entry?.functionalities) ? entry.functionalities : [];
   const accepted = acceptedFunctionalityNames(title);
@@ -115,6 +133,15 @@ function grantForFunctionality(access, requiredFunctionality) {
   if (SOC_ONLY_FUNCTIONALITIES.has(requiredFunctionality)) {
     const socEntry = findSocZonesEntry(access);
     return !!socEntry && hasFunctionality(socEntry, requiredFunctionality);
+  }
+
+  if (SDO_FUNCTIONALITIES.has(requiredFunctionality)) {
+    const sdoEntry = findSdoEntry(access);
+    if (sdoEntry && hasFunctionality(sdoEntry, requiredFunctionality)) return true;
+    // Legacy: previously under SOC/Zones
+    const socEntry = findSocZonesEntry(access);
+    if (socEntry && hasFunctionality(socEntry, requiredFunctionality)) return true;
+    return false;
   }
 
   // Prefer Zonal / SOC entries, then any state-office-related module row

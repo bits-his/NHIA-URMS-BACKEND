@@ -76,6 +76,7 @@ const zonalAccess = [{
     "IGR",
     "SSHIA Financial Report",
     "Expenditure Profile",
+    "ICT Support Register",
   ],
 }];
 
@@ -118,15 +119,16 @@ const sdoAccess = [
       "Stock Verification Dashboard",
       "Charter Performance",
       "Complaints Management",
+      "HCF Customer Satisfaction",
       "Customer Satisfaction Survey",
       "Physical Asset Verification",
       "Verification of Supply",
-      "Special Project",
+      "Ad-hoc / Special Assignment",
     ],
   },
   {
     access_to: "Zonal",
-    functionalities: ["Monitoring Visits"],
+    functionalities: ["Monitoring Visits", "ICT Support Register"],
   },
   ...notifications,
 ];
