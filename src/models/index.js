@@ -66,6 +66,8 @@ const GoodsReceiptNote            = require("./GoodsReceiptNote");
 const StockIssueVoucher           = require("./StockIssueVoucher");
 const AssetTransfer               = require("./AssetTransfer");
 const SupplyVerification          = require("./SupplyVerification");
+const StateZonalOfficeProfile     = require("./StateZonalOfficeProfile");
+const StateZonalFocalPerson       = require("./StateZonalFocalPerson");
 const AssetMaintenance            = require("./AssetMaintenance");
 const AssetDisposal               = require("./AssetDisposal");
 const PhysicalAssetVerification   = require("./PhysicalAssetVerification");
@@ -184,6 +186,8 @@ ContractedServicesReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "s
 
 bindStateOfficeReport(ComplianceReport, "compliance");
 bindStateOfficeReport(SupplyVerification, "supply_verification");
+bindStateOfficeReport(StateZonalOfficeProfile, "office_profile");
+bindStateOfficeReport(StateZonalFocalPerson, "focal_person");
 
 // ── SERVICOM M&E ──────────────────────────────────────────────────────────────
 ZonalOffice.hasMany(ServicomFacility,    { foreignKey: "zone_id",  as: "servicom_facilities" });
@@ -276,6 +280,6 @@ module.exports = {
   WeeklyActionableReport, WeeklyActionableReportLine,
   ContractedServicesReport, ContractedServicesReportLine,
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
-  StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, AssetMaintenance, AssetDisposal,
+  StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, StateZonalOfficeProfile, StateZonalFocalPerson, AssetMaintenance, AssetDisposal,
   PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion,
 };

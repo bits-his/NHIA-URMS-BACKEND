@@ -22,10 +22,14 @@ const ROUTE_FUNCTIONALITY = {
   "weekly-actionable": "Weekly Actionable",
   "contracted-services": "Contracted Services",
   dashboard: "SOC/Zones Dashboard",
+  "office-profiles": "State/Zonal Office Profile",
+  "focal-persons": "State/Zonal Focal Persons Register",
 };
 
 const SOC_ONLY_FUNCTIONALITIES = new Set([
   "SOC/Zones Dashboard",
+  "State/Zonal Office Profile",
+  "State/Zonal Focal Persons Register",
   "Weekly Actionable",
   "Contracted Services",
   "Operation Monitoring Visit",
