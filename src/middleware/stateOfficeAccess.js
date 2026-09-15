@@ -82,6 +82,13 @@ const FUNCTIONALITY_ALIASES = {
   ],
   "Enrollee Complaints": ["Complaints Register", "Complaints"],
   "Reconciliation Meetings": ["Reconciliation"],
+  "State Office Meeting Report": ["Meetings", "State Office Meeting"],
+  "ETMC Cascading Report": ["ETMC Cascading"],
+  "Office Accommodation": ["Accommodation"],
+  "Utility Services": ["Utilities"],
+  "Vehicle Maintenance": ["Vehicles"],
+  "Conflict / Infraction Report": ["Infractions", "Conflict Report"],
+  "Enrollee Feedback Survey": ["Staff Feedback", "Feedback", "Enrollee Feedback"],
 };
 
 /** Legacy path — also allow these sections to search NHIA lists */

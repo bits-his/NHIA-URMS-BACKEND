@@ -22,6 +22,19 @@ const AdminHrReport = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true,
       defaultValue: {},
+      get() {
+        const raw = this.getDataValue("payload");
+        if (raw == null) return {};
+        if (typeof raw === "string") {
+          try {
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === "object" ? parsed : {};
+          } catch {
+            return {};
+          }
+        }
+        return raw;
+      },
     },
   },
   {
