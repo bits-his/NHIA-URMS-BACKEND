@@ -100,6 +100,38 @@ const StoreAsset = sequelize.define("StoreAsset", {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  zone_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  zone_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  state_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  state_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  department_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  department_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  unit_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  unit_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   operationalStatus: {
     type: DataTypes.STRING,
     allowNull: true,
