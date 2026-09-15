@@ -7,12 +7,18 @@ const {
   enrolment, migration, cemonc,
   accreditation, stakeholder, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile,
   weeklyActionable, contractedServices, ictSupport, adhocAssignment,
+  enrolleeRegister, etmcTmcActionPoint,
+  extraDependant, hcpChange,
 } = require("../controllers/stateOfficeReport.controller");
 const enrolleeComplaints = require("../controllers/stateOfficeComplaint.controller");
 const complianceVisits = require("../controllers/stateOfficeComplianceVisit.controller");
 const reconciliation = require("../controllers/stateOfficeReconciliation.controller");
 const nhiaAccreditation = require("../controllers/nhiaAccreditation.controller");
 const stateOfficeDashboard = require("../controllers/stateOfficeDashboard.controller");
+const adminHr = require("../controllers/adminHrReport.controller");
+const officeProfiles = require("../controllers/stateZonalOfficeProfile.controller");
+const focalPersons = require("../controllers/stateZonalFocalPerson.controller");
+const { optionalAopUpload } = require("../middleware/officeProfileUpload");
 
 const router = Router();
 
@@ -21,6 +27,23 @@ router.use(requireStateOfficeRoute);
 
 router.get("/dashboard", stateOfficeDashboard.dashboard);
 router.get("/dashboard/drill", stateOfficeDashboard.dashboardDrill);
+
+const profileRules = [
+  body("zone_id").notEmpty().withMessage("Zone is required"),
+  body("state_id").notEmpty().withMessage("State is required"),
+  body("reporting_year").isInt({ min: 2000 }).withMessage("Valid year is required"),
+];
+
+router.get("/office-profiles", officeProfiles.listProfiles);
+router.get("/office-profiles/:id", officeProfiles.getProfile);
+router.post("/office-profiles", optionalAopUpload, profileRules, validate, officeProfiles.createProfile);
+router.put("/office-profiles/:id", optionalAopUpload, profileRules, validate, officeProfiles.updateProfile);
+router.delete("/office-profiles/:id", officeProfiles.deleteProfile);
+
+router.get("/focal-persons", focalPersons.listRecords);
+router.get("/focal-persons/:id", focalPersons.getRecord);
+router.post("/focal-persons", profileRules, validate, focalPersons.createRecord);
+router.put("/focal-persons/:id", profileRules, validate, focalPersons.updateRecord);
 
 const headerRules = [
   body("zone_id").notEmpty().withMessage("Zone is required"),
@@ -54,6 +77,36 @@ mount("weekly-actionable", weeklyActionable);
 mount("contracted-services", contractedServices);
 mount("ict-support-register", ictSupport);
 mount("adhoc-special-assignment", adhocAssignment);
+mount("enrollee-register", enrolleeRegister);
+mount("etmc-tmc-action-point", etmcTmcActionPoint);
+mount("extra-dependant", extraDependant);
+mount("hcf-change", hcpChange);
+
+const { upload: etmcUpload } = require("../middleware/etmcUpload");
+const { upload: beneficiaryUpload } = require("../middleware/beneficiaryUpload");
+router.post(
+  "/hmo-selection/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.single("file"),
+  hmoSelection.uploadLineFile,
+);
+router.post(
+  "/extra-dependant/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.array("files", 10),
+  extraDependant.uploadLineFiles,
+);
+router.post(
+  "/etmc-tmc-action-point/reports/:id/document",
+  etmcUpload.single("file"),
+  etmcTmcActionPoint.uploadDocument,
+);
+
+mount("office-meeting", adminHr.officeMeeting);
+mount("etmc-cascading", adminHr.etmcCascading);
+mount("office-accommodation", adminHr.officeAccommodation);
+mount("utility-services", adminHr.utilityServices);
+mount("vehicle-maintenance", adminHr.vehicleMaintenance);
+mount("conflict-infraction", adminHr.conflictInfraction);
+mount("enrollee-feedback", adminHr.enrolleeFeedback);
 
 router.get("/enrollee-complaints/summary", enrolleeComplaints.getSummary);
 router.get("/enrollee-complaints", enrolleeComplaints.listComplaints);

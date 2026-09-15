@@ -16,6 +16,8 @@ const ROUTE_FUNCTIONALITY = {
   accreditation: "Accreditation / Reaccreditation",
   stakeholder: "Stakeholder Engagement",
   "hmo-selection": "HMO Selection Process",
+  "extra-dependant": "Additional / Extra Dependant",
+  "hcf-change": "Change of HCF",
   challenges: "Challenges & Recommendations",
   igr: "IGR",
   "sshia-financial": "SSHIA Financial Report",
@@ -24,13 +26,28 @@ const ROUTE_FUNCTIONALITY = {
   "contracted-services": "Contracted Services",
   "ict-support-register": "ICT Support Register",
   "adhoc-special-assignment": "Ad-hoc / Special Assignment",
+  "enrollee-register": "Monthly Enrollee Register",
+  "etmc-tmc-action-point": "ETMC/TMC Action-Point Register",
   dashboard: "SOC/Zones Dashboard",
+  "office-profiles": "State/Zonal Office Profile",
+  "focal-persons": "State/Zonal Focal Persons Register",
+  "office-meeting": "State Office Meeting Report",
+  "etmc-cascading": "ETMC Cascading Report",
+  "office-accommodation": "Office Accommodation",
+  "utility-services": "Utility Services",
+  "vehicle-maintenance": "Vehicle Maintenance",
+  "conflict-infraction": "Conflict / Infraction Report",
+  "enrollee-feedback": "Enrollee Feedback Survey",
 };
 
 const SOC_ONLY_FUNCTIONALITIES = new Set([
   "SOC/Zones Dashboard",
+  "State/Zonal Office Profile",
+  "State/Zonal Focal Persons Register",
   "Weekly Actionable",
   "Contracted Services",
+  "Monthly Enrollee Register",
+  "ETMC/TMC Action-Point Register",
   "Operation Monitoring Visit",
   "Spot Check Visit",
 ]);
@@ -63,6 +80,8 @@ const FUNCTIONALITY_ALIASES = {
   ],
   "Stakeholder Engagement": ["Stakeholder"],
   "HMO Selection Process": ["HMO Selection", "HMO Selection Process"],
+  "Additional / Extra Dependant": ["Extra Dependant", "Additional/Extra Dependent", "Additional / Extra Dependent"],
+  "Change of HCF": ["Change of HCP", "Change of HCF/HCP", "Change of HCF"],
   "Challenges & Recommendations": ["Challenges"],
   "SSHIA Financial Report": ["SSHIA Financial", "SSHIA Financial Reports"],
   "Complaints & Compliance Monitoring": [
@@ -77,6 +96,13 @@ const FUNCTIONALITY_ALIASES = {
     "Special Project",
     "Ad-hoc Project",
   ],
+  "State Office Meeting Report": ["Meetings", "State Office Meeting"],
+  "ETMC Cascading Report": ["ETMC Cascading"],
+  "Office Accommodation": ["Accommodation"],
+  "Utility Services": ["Utilities"],
+  "Vehicle Maintenance": ["Vehicles"],
+  "Conflict / Infraction Report": ["Infractions", "Conflict Report"],
+  "Enrollee Feedback Survey": ["Staff Feedback", "Feedback", "Enrollee Feedback"],
 };
 
 /** Legacy path — also allow these sections to search NHIA lists */

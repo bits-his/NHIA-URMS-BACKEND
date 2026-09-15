@@ -9,6 +9,7 @@
     "db:setup": "node src/scripts/dbSetup.js",
     "db:sync": "node src/scripts/syncDb.js",
     "db:update-store": "node src/scripts/updateStoreDb.js",
+    "db:update-admin-hr": "node src/scripts/updateAdminHrDb.js",
     "db:seed-store": "node src/scripts/seedStoreManagement.js",
     "db:seed-all": "node src/scripts/seedAll.js",
     "db:seed": "node src/scripts/seedAll.js --seeds-only",
@@ -20,6 +21,10 @@
     "db:seed-hcf": "node src/scripts/seedHcfMasterFacilities.js",
     "db:seed-hmo": "node src/scripts/seedHmoProviders.js",
     "db:seed-enforcement-dashboard": "node src/scripts/seedEnforcementDashboardDemo.js",
+    "db:sync-enrollee-register": "node src/scripts/legacy/addMonthlyEnrolleeRegister.js",
+    "db:sync-etmc-action-point": "node src/scripts/legacy/addEtmcTmcActionPoint.js",
+    "db:sync-beneficiary-management": "node src/scripts/legacy/addBeneficiaryManagement.js",
+    "db:migrate-soc-zones-privileges": "node src/scripts/legacy/migrateSocZonesPrivileges.js",
     "db:migrate-access": "node src/scripts/legacy/migrateProductionAccess.js"
   },
   "dependencies": {

@@ -2,6 +2,17 @@ const express = require("express");
 const router = express.Router();
 const { authenticate } = require("../middleware/auth");
 const storeCtrl = require("../controllers/storeManagementController");
+const { upload } = require("../middleware/storeUpload");
+
+function optionalAwardUpload(req, res, next) {
+  if (req.is("multipart/form-data")) {
+    return upload.single("awardLetter")(req, res, (err) => {
+      if (err) return res.status(400).json({ success: false, error: err.message });
+      next();
+    });
+  }
+  next();
+}
 
 router.use(authenticate);
 
@@ -43,6 +54,12 @@ router.get("/verification/physical", storeCtrl.getPhysicalVerifications);
 router.get("/verification/physical/:id", storeCtrl.getPhysicalVerificationById);
 router.post("/verification/physical", storeCtrl.createPhysicalVerification);
 router.put("/verification/physical/:id", storeCtrl.updatePhysicalVerification);
+
+// Prepayment Analysis Register
+router.get("/prepayment-analysis", storeCtrl.getPrepaymentAnalyses);
+router.get("/prepayment-analysis/:id", storeCtrl.getPrepaymentAnalysisById);
+router.post("/prepayment-analysis", optionalAwardUpload, storeCtrl.createPrepaymentAnalysis);
+router.put("/prepayment-analysis/:id", optionalAwardUpload, storeCtrl.updatePrepaymentAnalysis);
 
 // Maintenance & Disposal
 router.get("/maintenance", storeCtrl.getMaintenance);

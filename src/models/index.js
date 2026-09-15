@@ -60,6 +60,13 @@ const IctSupportReport             = require("./IctSupportReport");
 const IctSupportReportLine         = require("./IctSupportReportLine");
 const AdhocAssignmentReport        = require("./AdhocAssignmentReport");
 const AdhocAssignmentReportLine    = require("./AdhocAssignmentReportLine");
+const MonthlyEnrolleeRegister      = require("./MonthlyEnrolleeRegister");
+const ExtraDependantReport         = require("./ExtraDependantReport");
+const ExtraDependantReportLine     = require("./ExtraDependantReportLine");
+const HcpChangeReport              = require("./HcpChangeReport");
+const HcpChangeReportLine          = require("./HcpChangeReportLine");
+const EtmcTmcActionPointRegister   = require("./EtmcTmcActionPointRegister");
+const EtmcTmcActionPointLine       = require("./EtmcTmcActionPointLine");
 const ComplianceReport            = require("./ComplianceReport");
 const ComplianceFinding           = require("./ComplianceFinding");
 const ComplianceViolation         = require("./ComplianceViolation");
@@ -70,11 +77,15 @@ const GoodsReceiptNote            = require("./GoodsReceiptNote");
 const StockIssueVoucher           = require("./StockIssueVoucher");
 const AssetTransfer               = require("./AssetTransfer");
 const SupplyVerification          = require("./SupplyVerification");
+const StateZonalOfficeProfile     = require("./StateZonalOfficeProfile");
+const StateZonalFocalPerson       = require("./StateZonalFocalPerson");
 const AssetMaintenance            = require("./AssetMaintenance");
 const AssetDisposal               = require("./AssetDisposal");
 const PhysicalAssetVerification   = require("./PhysicalAssetVerification");
 const PhysicalAssetVerificationItem = require("./PhysicalAssetVerificationItem");
 const StockConversion             = require("./StockConversion");
+const PrepaymentAnalysis          = require("./PrepaymentAnalysis");
+const AdminHrReport               = require("./AdminHrReport");
 
 const bindStateOfficeReport = (Model, alias) => {
   ZonalOffice.hasMany(Model, { foreignKey: "zone_id", as: `${alias}_zone` });
@@ -196,8 +207,30 @@ AdhocAssignmentReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone
 StateOffice.hasMany(AdhocAssignmentReport,   { foreignKey: "state_id", as: "adhoc_assignment_reports" });
 AdhocAssignmentReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+ZonalOffice.hasMany(MonthlyEnrolleeRegister,   { foreignKey: "zone_id",  as: "monthly_enrollee_registers" });
+MonthlyEnrolleeRegister.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(MonthlyEnrolleeRegister,   { foreignKey: "state_id", as: "monthly_enrollee_registers" });
+MonthlyEnrolleeRegister.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(ExtraDependantReport,   { foreignKey: "zone_id",  as: "extra_dependant_reports" });
+ExtraDependantReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(ExtraDependantReport,   { foreignKey: "state_id", as: "extra_dependant_reports" });
+ExtraDependantReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(HcpChangeReport,   { foreignKey: "zone_id",  as: "hcp_change_reports" });
+HcpChangeReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(HcpChangeReport,   { foreignKey: "state_id", as: "hcp_change_reports" });
+HcpChangeReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(EtmcTmcActionPointRegister,   { foreignKey: "zone_id",  as: "etmc_tmc_action_point_registers" });
+EtmcTmcActionPointRegister.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(EtmcTmcActionPointRegister,   { foreignKey: "state_id", as: "etmc_tmc_action_point_registers" });
+EtmcTmcActionPointRegister.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 bindStateOfficeReport(ComplianceReport, "compliance");
 bindStateOfficeReport(SupplyVerification, "supply_verification");
+bindStateOfficeReport(StateZonalOfficeProfile, "office_profile");
+bindStateOfficeReport(StateZonalFocalPerson, "focal_person");
 
 // ── SERVICOM M&E ──────────────────────────────────────────────────────────────
 ZonalOffice.hasMany(ServicomFacility,    { foreignKey: "zone_id",  as: "servicom_facilities" });
@@ -268,6 +301,11 @@ HcfFacility.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
 StateOffice.hasMany(HcfFacility, { foreignKey: "state_id", as: "hcf_facilities" });
 HcfFacility.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+ZonalOffice.hasMany(AdminHrReport, { foreignKey: "zone_id", as: "admin_hr_reports" });
+AdminHrReport.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(AdminHrReport, { foreignKey: "state_id", as: "admin_hr_reports" });
+AdminHrReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 module.exports = {
   AnnualReport, QuarterlyData,
   ZonalOffice, StateOffice, Department, Unit, User, Role,
@@ -291,7 +329,13 @@ module.exports = {
   ContractedServicesReport, ContractedServicesReportLine,
   IctSupportReport, IctSupportReportLine,
   AdhocAssignmentReport, AdhocAssignmentReportLine,
+  MonthlyEnrolleeRegister,
+  ExtraDependantReport, ExtraDependantReportLine,
+  HcpChangeReport, HcpChangeReportLine,
+  EtmcTmcActionPointRegister, EtmcTmcActionPointLine,
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
-  StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, AssetMaintenance, AssetDisposal,
-  PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion,
+  StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification,
+  StateZonalOfficeProfile, StateZonalFocalPerson, AssetMaintenance, AssetDisposal,
+  PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion, PrepaymentAnalysis,
+  AdminHrReport,
 };
