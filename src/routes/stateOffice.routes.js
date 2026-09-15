@@ -13,6 +13,7 @@ const complianceVisits = require("../controllers/stateOfficeComplianceVisit.cont
 const reconciliation = require("../controllers/stateOfficeReconciliation.controller");
 const nhiaAccreditation = require("../controllers/nhiaAccreditation.controller");
 const stateOfficeDashboard = require("../controllers/stateOfficeDashboard.controller");
+const adminHr = require("../controllers/adminHrReport.controller");
 
 const router = Router();
 
@@ -52,6 +53,14 @@ mount("sshia-financial", sshiaFinancial);
 mount("expenditure-profile", expenditureProfile);
 mount("weekly-actionable", weeklyActionable);
 mount("contracted-services", contractedServices);
+
+mount("office-meeting", adminHr.officeMeeting);
+mount("etmc-cascading", adminHr.etmcCascading);
+mount("office-accommodation", adminHr.officeAccommodation);
+mount("utility-services", adminHr.utilityServices);
+mount("vehicle-maintenance", adminHr.vehicleMaintenance);
+mount("conflict-infraction", adminHr.conflictInfraction);
+mount("enrollee-feedback", adminHr.enrolleeFeedback);
 
 router.get("/enrollee-complaints/summary", enrolleeComplaints.getSummary);
 router.get("/enrollee-complaints", enrolleeComplaints.listComplaints);

@@ -9,6 +9,7 @@
     "db:setup": "node src/scripts/dbSetup.js",
     "db:sync": "node src/scripts/syncDb.js",
     "db:update-store": "node src/scripts/updateStoreDb.js",
+    "db:update-admin-hr": "node src/scripts/updateAdminHrDb.js",
     "db:seed-store": "node src/scripts/seedStoreManagement.js",
     "db:seed-all": "node src/scripts/seedAll.js",
     "db:seed": "node src/scripts/seedAll.js --seeds-only",

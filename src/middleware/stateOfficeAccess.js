@@ -22,6 +22,13 @@ const ROUTE_FUNCTIONALITY = {
   "weekly-actionable": "Weekly Actionable",
   "contracted-services": "Contracted Services",
   dashboard: "SOC/Zones Dashboard",
+  "office-meeting": "State Office Meeting Report",
+  "etmc-cascading": "ETMC Cascading Report",
+  "office-accommodation": "Office Accommodation",
+  "utility-services": "Utility Services",
+  "vehicle-maintenance": "Vehicle Maintenance",
+  "conflict-infraction": "Conflict / Infraction Report",
+  "enrollee-feedback": "Enrollee Feedback Survey",
 };
 
 const SOC_ONLY_FUNCTIONALITIES = new Set([

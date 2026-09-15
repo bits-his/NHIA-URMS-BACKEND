@@ -72,6 +72,7 @@ const PhysicalAssetVerification   = require("./PhysicalAssetVerification");
 const PhysicalAssetVerificationItem = require("./PhysicalAssetVerificationItem");
 const StockConversion             = require("./StockConversion");
 const PrepaymentAnalysis          = require("./PrepaymentAnalysis");
+const AdminHrReport               = require("./AdminHrReport");
 
 const bindStateOfficeReport = (Model, alias) => {
   ZonalOffice.hasMany(Model, { foreignKey: "zone_id", as: `${alias}_zone` });
@@ -255,6 +256,11 @@ HcfFacility.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
 StateOffice.hasMany(HcfFacility, { foreignKey: "state_id", as: "hcf_facilities" });
 HcfFacility.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+ZonalOffice.hasMany(AdminHrReport, { foreignKey: "zone_id", as: "admin_hr_reports" });
+AdminHrReport.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(AdminHrReport, { foreignKey: "state_id", as: "admin_hr_reports" });
+AdminHrReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 module.exports = {
   AnnualReport, QuarterlyData,
   ZonalOffice, StateOffice, Department, Unit, User, Role,
@@ -279,4 +285,5 @@ module.exports = {
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
   StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, AssetMaintenance, AssetDisposal,
   PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion, PrepaymentAnalysis,
+  AdminHrReport,
 };
