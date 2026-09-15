@@ -6,7 +6,7 @@ const { requireStateOfficeRoute } = require("../middleware/stateOfficeAccess");
 const {
   enrolment, migration, cemonc,
   accreditation, stakeholder, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile,
-  weeklyActionable, contractedServices,
+  weeklyActionable, contractedServices, enrolleeRegister, etmcTmcActionPoint,
 } = require("../controllers/stateOfficeReport.controller");
 const enrolleeComplaints = require("../controllers/stateOfficeComplaint.controller");
 const complianceVisits = require("../controllers/stateOfficeComplianceVisit.controller");
@@ -52,6 +52,15 @@ mount("sshia-financial", sshiaFinancial);
 mount("expenditure-profile", expenditureProfile);
 mount("weekly-actionable", weeklyActionable);
 mount("contracted-services", contractedServices);
+mount("enrollee-register", enrolleeRegister);
+mount("etmc-tmc-action-point", etmcTmcActionPoint);
+
+const { upload: etmcUpload } = require("../middleware/etmcUpload");
+router.post(
+  "/etmc-tmc-action-point/reports/:id/document",
+  etmcUpload.single("file"),
+  etmcTmcActionPoint.uploadDocument,
+);
 
 router.get("/enrollee-complaints/summary", enrolleeComplaints.getSummary);
 router.get("/enrollee-complaints", enrolleeComplaints.listComplaints);

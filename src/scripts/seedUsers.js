@@ -85,6 +85,8 @@ const stateOfficeAccess = [{
     "SOC/Zones Dashboard",
     "Weekly Actionable",
     "Contracted Services",
+    "Monthly Enrollee Register",
+    "ETMC/TMC Action-Point Register",
     "Operation Monitoring Visit",
     "Spot Check Visit",
   ],

@@ -56,6 +56,9 @@ const WeeklyActionableReport       = require("./WeeklyActionableReport");
 const WeeklyActionableReportLine   = require("./WeeklyActionableReportLine");
 const ContractedServicesReport     = require("./ContractedServicesReport");
 const ContractedServicesReportLine = require("./ContractedServicesReportLine");
+const MonthlyEnrolleeRegister      = require("./MonthlyEnrolleeRegister");
+const EtmcTmcActionPointRegister   = require("./EtmcTmcActionPointRegister");
+const EtmcTmcActionPointLine       = require("./EtmcTmcActionPointLine");
 const ComplianceReport            = require("./ComplianceReport");
 const ComplianceFinding           = require("./ComplianceFinding");
 const ComplianceViolation         = require("./ComplianceViolation");
@@ -182,6 +185,16 @@ ContractedServicesReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "z
 StateOffice.hasMany(ContractedServicesReport,   { foreignKey: "state_id", as: "contracted_services_reports" });
 ContractedServicesReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+ZonalOffice.hasMany(MonthlyEnrolleeRegister,   { foreignKey: "zone_id",  as: "monthly_enrollee_registers" });
+MonthlyEnrolleeRegister.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(MonthlyEnrolleeRegister,   { foreignKey: "state_id", as: "monthly_enrollee_registers" });
+MonthlyEnrolleeRegister.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(EtmcTmcActionPointRegister,   { foreignKey: "zone_id",  as: "etmc_tmc_action_point_registers" });
+EtmcTmcActionPointRegister.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(EtmcTmcActionPointRegister,   { foreignKey: "state_id", as: "etmc_tmc_action_point_registers" });
+EtmcTmcActionPointRegister.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 bindStateOfficeReport(ComplianceReport, "compliance");
 bindStateOfficeReport(SupplyVerification, "supply_verification");
 
@@ -275,6 +288,8 @@ module.exports = {
   ExpenditureProfileReport, ExpenditureProfileReportLine,
   WeeklyActionableReport, WeeklyActionableReportLine,
   ContractedServicesReport, ContractedServicesReportLine,
+  MonthlyEnrolleeRegister,
+  EtmcTmcActionPointRegister, EtmcTmcActionPointLine,
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
   StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, AssetMaintenance, AssetDisposal,
   PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion,

@@ -21,6 +21,8 @@ const ROUTE_FUNCTIONALITY = {
   "expenditure-profile": "Expenditure Profile",
   "weekly-actionable": "Weekly Actionable",
   "contracted-services": "Contracted Services",
+  "enrollee-register": "Monthly Enrollee Register",
+  "etmc-tmc-action-point": "ETMC/TMC Action-Point Register",
   dashboard: "SOC/Zones Dashboard",
 };
 
@@ -28,6 +30,8 @@ const SOC_ONLY_FUNCTIONALITIES = new Set([
   "SOC/Zones Dashboard",
   "Weekly Actionable",
   "Contracted Services",
+  "Monthly Enrollee Register",
+  "ETMC/TMC Action-Point Register",
   "Operation Monitoring Visit",
   "Spot Check Visit",
 ]);

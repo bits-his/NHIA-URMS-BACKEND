@@ -155,6 +155,8 @@ const {
   ExpenditureProfileReport, ExpenditureProfileReportLine,
   WeeklyActionableReport, WeeklyActionableReportLine,
   ContractedServicesReport, ContractedServicesReportLine,
+  MonthlyEnrolleeRegister,
+  EtmcTmcActionPointRegister, EtmcTmcActionPointLine,
 } = require("../models");
 
 const enrolment = makeReportController(
@@ -572,6 +574,334 @@ const makeWeeklyActionableController = () => {
 
 const weeklyActionable = makeWeeklyActionableController();
 
+const SCHEME_FIELDS = ["self_paying", "ops", "retirees", "constituency", "gifship", "formal_sector"];
+
+function enrolleeCounts(body = {}) {
+  const counts = {};
+  for (const key of SCHEME_FIELDS) {
+    counts[key] = Math.max(0, Number(body[key]) || 0);
+  }
+  counts.total_lives = SCHEME_FIELDS.reduce((sum, key) => sum + counts[key], 0);
+  return counts;
+}
+
+function isUniquePeriodError(err) {
+  const name = err?.name || "";
+  const msg = String(err?.message || err?.original?.sqlMessage || "");
+  return name === "SequelizeUniqueConstraintError" || msg.includes("mer_zone_state_period");
+}
+
+const makeMonthlyEnrolleeRegisterController = () => {
+  const generateRefId = async (t) => {
+    const year = new Date().getFullYear();
+    const count = await MonthlyEnrolleeRegister.count({ transaction: t });
+    return `MER-${year}-${String(count + 1).padStart(5, "0")}`;
+  };
+
+  const findReport = (id) =>
+    MonthlyEnrolleeRegister.findByPk(id, {
+      include: [
+        { model: ZonalOffice, as: "zone",  attributes: ["id", "description"] },
+        { model: StateOffice, as: "state", attributes: ["id", "description"] },
+      ],
+    });
+
+  const createReport = async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+      const scoped = await applyScopeToBody(req.user, req.body);
+      const {
+        zone_id, state_id, reporting_year, reporting_month,
+        submission_date, submitted_by, status = "draft",
+      } = scoped;
+
+      const report = await MonthlyEnrolleeRegister.create({
+        reference_id: await generateRefId(t),
+        zone_id, state_id, reporting_year, reporting_month,
+        submission_date, submitted_by, status,
+        ...enrolleeCounts(scoped),
+      }, { transaction: t });
+
+      await t.commit();
+      res.status(201).json({ success: true, data: await findReport(report.id) });
+    } catch (err) {
+      await t.rollback();
+      if (isUniquePeriodError(err)) {
+        return res.status(409).json({
+          success: false,
+          message: "A register already exists for this zone, state, year and month",
+        });
+      }
+      next(err);
+    }
+  };
+
+  const listReports = async (req, res, next) => {
+    try {
+      const where = await buildStateOfficeListWhere(req.user, req.query);
+      const list = await MonthlyEnrolleeRegister.findAll({
+        where,
+        include: [
+          { model: ZonalOffice, as: "zone",  attributes: ["id", "description"] },
+          { model: StateOffice, as: "state", attributes: ["id", "description"] },
+        ],
+        order: [["reporting_year", "DESC"], ["reporting_month", "DESC"], ["created_at", "DESC"]],
+      });
+      res.json({ success: true, data: list });
+    } catch (err) { next(err); }
+  };
+
+  const getReport = async (req, res, next) => {
+    try {
+      const report = await findReport(req.params.id);
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
+      res.json({ success: true, data: report });
+    } catch (err) { next(err); }
+  };
+
+  const updateReport = async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+      const report = await MonthlyEnrolleeRegister.findByPk(req.params.id, { transaction: t });
+      if (!report) {
+        await t.rollback();
+        return res.status(404).json({ success: false, message: "Not found" });
+      }
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        await t.rollback();
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
+
+      const scoped = await applyScopeToBody(req.user, req.body);
+      const {
+        zone_id, state_id, reporting_year, reporting_month,
+        submission_date, submitted_by, status,
+      } = scoped;
+
+      await report.update({
+        zone_id, state_id, reporting_year, reporting_month,
+        submission_date, submitted_by,
+        ...(status && { status }),
+        ...enrolleeCounts(scoped),
+      }, { transaction: t });
+
+      await t.commit();
+      res.json({ success: true, data: await findReport(report.id) });
+    } catch (err) {
+      await t.rollback();
+      if (isUniquePeriodError(err)) {
+        return res.status(409).json({
+          success: false,
+          message: "A register already exists for this zone, state, year and month",
+        });
+      }
+      next(err);
+    }
+  };
+
+  const updateStatus = async (req, res, next) => {
+    try {
+      const allowed = ["draft", "submitted", "approved"];
+      const { status } = req.body;
+      if (!allowed.includes(status)) {
+        return res.status(422).json({ success: false, message: "Invalid status" });
+      }
+      const report = await MonthlyEnrolleeRegister.findByPk(req.params.id);
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
+      await report.update({ status });
+      res.json({ success: true, data: report });
+    } catch (err) { next(err); }
+  };
+
+  return { createReport, listReports, getReport, updateReport, updateStatus };
+};
+
+const enrolleeRegister = makeMonthlyEnrolleeRegisterController();
+
+const sessionFromMonth = (month) => `Q${Math.ceil((Number(month) || 1) / 3)}`;
+
+const mapEtmcLine = (line, reportId, index) => ({
+  report_id: reportId,
+  sn: Number(line.sn) || index + 1,
+  agenda_item: line.agenda_item || "",
+  resolution_id: line.resolution_id || `R${String(index + 1).padStart(2, "0")}`,
+  resolutions: line.resolutions || "",
+  action_point_id: line.action_point_id || `R${String(index + 1).padStart(2, "0")}-AP01`,
+  action_point: line.action_point || "",
+  timeline: line.timeline || null,
+  responsible_dept: line.responsible_dept || null,
+  supporting_dept: line.supporting_dept || null,
+  status_update: line.status_update || null,
+});
+
+const makeEtmcTmcActionPointController = () => {
+  const generateRefId = async (t) => {
+    const year = new Date().getFullYear();
+    const count = await EtmcTmcActionPointRegister.count({ transaction: t });
+    return `ETMC-${year}-${String(count + 1).padStart(5, "0")}`;
+  };
+
+  const findReport = (id) =>
+    EtmcTmcActionPointRegister.findByPk(id, {
+      include: [
+        { model: ZonalOffice, as: "zone",  attributes: ["id", "description"] },
+        { model: StateOffice, as: "state", attributes: ["id", "description"] },
+        { model: EtmcTmcActionPointLine, as: "lines" },
+      ],
+      order: [[{ model: EtmcTmcActionPointLine, as: "lines" }, "sn", "ASC"]],
+    });
+
+  const createReport = async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+      const scoped = await applyScopeToBody(req.user, req.body);
+      const {
+        zone_id, state_id, reporting_year, reporting_month,
+        meeting_date, etmc_session, submission_date, submitted_by,
+        status = "draft", lines = [],
+      } = scoped;
+
+      const report = await EtmcTmcActionPointRegister.create({
+        reference_id: await generateRefId(t),
+        zone_id, state_id, reporting_year, reporting_month,
+        meeting_date: meeting_date || null,
+        etmc_session: etmc_session || sessionFromMonth(reporting_month),
+        submission_date, submitted_by, status,
+      }, { transaction: t });
+
+      if (lines.length > 0) {
+        await EtmcTmcActionPointLine.bulkCreate(
+          lines.map((line, i) => mapEtmcLine(line, report.id, i)),
+          { transaction: t },
+        );
+      }
+
+      await t.commit();
+      res.status(201).json({ success: true, data: await findReport(report.id) });
+    } catch (err) {
+      await t.rollback();
+      next(err);
+    }
+  };
+
+  const listReports = async (req, res, next) => {
+    try {
+      const where = await buildStateOfficeListWhere(req.user, req.query);
+      const list = await EtmcTmcActionPointRegister.findAll({
+        where,
+        include: [
+          { model: ZonalOffice, as: "zone",  attributes: ["id", "description"] },
+          { model: StateOffice, as: "state", attributes: ["id", "description"] },
+          { model: EtmcTmcActionPointLine, as: "lines" },
+        ],
+        order: [["reporting_year", "DESC"], ["reporting_month", "DESC"], ["created_at", "DESC"]],
+      });
+      res.json({ success: true, data: list });
+    } catch (err) { next(err); }
+  };
+
+  const getReport = async (req, res, next) => {
+    try {
+      const report = await findReport(req.params.id);
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
+      res.json({ success: true, data: report });
+    } catch (err) { next(err); }
+  };
+
+  const updateReport = async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+      const report = await EtmcTmcActionPointRegister.findByPk(req.params.id, { transaction: t });
+      if (!report) {
+        await t.rollback();
+        return res.status(404).json({ success: false, message: "Not found" });
+      }
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        await t.rollback();
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
+
+      const scoped = await applyScopeToBody(req.user, req.body);
+      const {
+        zone_id, state_id, reporting_year, reporting_month,
+        meeting_date, etmc_session, submission_date, submitted_by, status, lines = [],
+      } = scoped;
+
+      await report.update({
+        zone_id, state_id, reporting_year, reporting_month,
+        meeting_date: meeting_date || null,
+        etmc_session: etmc_session || sessionFromMonth(reporting_month),
+        submission_date, submitted_by,
+        ...(status && { status }),
+      }, { transaction: t });
+
+      await EtmcTmcActionPointLine.destroy({ where: { report_id: report.id }, transaction: t });
+      if (lines.length > 0) {
+        await EtmcTmcActionPointLine.bulkCreate(
+          lines.map((line, i) => mapEtmcLine(line, report.id, i)),
+          { transaction: t },
+        );
+      }
+
+      await t.commit();
+      res.json({ success: true, data: await findReport(report.id) });
+    } catch (err) {
+      await t.rollback();
+      next(err);
+    }
+  };
+
+  const updateStatus = async (req, res, next) => {
+    try {
+      const allowed = ["draft", "submitted", "approved"];
+      const { status } = req.body;
+      if (!allowed.includes(status)) {
+        return res.status(422).json({ success: false, message: "Invalid status" });
+      }
+      const report = await EtmcTmcActionPointRegister.findByPk(req.params.id);
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
+      await report.update({ status });
+      res.json({ success: true, data: report });
+    } catch (err) { next(err); }
+  };
+
+  const uploadDocument = async (req, res, next) => {
+    try {
+      const report = await EtmcTmcActionPointRegister.findByPk(req.params.id);
+      const access = await assertRecordAccess(req.user, report);
+      if (!access.ok) {
+        return res.status(access.status).json({ success: false, message: access.message });
+      }
+      if (!req.file) {
+        return res.status(422).json({ success: false, message: "No file uploaded" });
+      }
+      await report.update({
+        source_document_path: `/uploads/etmc/${req.file.filename}`,
+        source_document_name: req.file.originalname,
+      });
+      res.json({ success: true, data: await findReport(report.id) });
+    } catch (err) { next(err); }
+  };
+
+  return { createReport, listReports, getReport, updateReport, updateStatus, uploadDocument };
+};
+
+const etmcTmcActionPoint = makeEtmcTmcActionPointController();
+
 // ── Contracted Services ───────────────────────────────────────────────────────
 const contractedServices = makeReportController(
   ContractedServicesReport, ContractedServicesReportLine, "CSR",
@@ -590,5 +920,5 @@ module.exports = {
   enrolment, migration, cemonc,
   accreditation, stakeholder, hmoSelection, challenges,
   complaints, igr, sshiaFinancial, expenditureProfile,
-  weeklyActionable, contractedServices,
+  weeklyActionable, contractedServices, enrolleeRegister, etmcTmcActionPoint,
 };

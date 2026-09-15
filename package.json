@@ -20,6 +20,9 @@
     "db:seed-hcf": "node src/scripts/seedHcfMasterFacilities.js",
     "db:seed-hmo": "node src/scripts/seedHmoProviders.js",
     "db:seed-enforcement-dashboard": "node src/scripts/seedEnforcementDashboardDemo.js",
+    "db:sync-enrollee-register": "node src/scripts/legacy/addMonthlyEnrolleeRegister.js",
+    "db:sync-etmc-action-point": "node src/scripts/legacy/addEtmcTmcActionPoint.js",
+    "db:migrate-soc-zones-privileges": "node src/scripts/legacy/migrateSocZonesPrivileges.js",
     "db:migrate-access": "node src/scripts/legacy/migrateProductionAccess.js"
   },
   "dependencies": {
