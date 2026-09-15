@@ -7,11 +7,11 @@ const {
   ServicomKpiRecord, ServicomComplaint, ServicomSatisfactionSurvey, ServicomCommentCard,
   ServicomFinding, ServicomRecommendation,
   ServicomEvidence, ServicomAuditLog, ServicomFacility,
-  ZonalOffice, StateOffice,
+  ZonalOffice, StateOffice, User, Department, Unit,
 } = require("../models");
-const { buildServicomListWhere } = require("../utils/servicomScope");
+const { buildServicomListWhere, applyComplaintExtraFilters } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
-const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes } = require("../utils/complaintRegister");
+const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere } = require("../utils/complaintRegister");
 const {
   loadComplaintSlaRules,
   enrichComplaintWithSla,
@@ -32,10 +32,26 @@ const VISIT_INCLUDES = [
   { model: ServicomEvidence, as: "evidence" },
 ];
 
-async function genRefId(Model, prefix, t) {
+async function genRefId(Model, prefix, t, field) {
   const year = new Date().getFullYear();
-  const count = await Model.count({ transaction: t });
-  return `${prefix}-${year}-${String(count + 1).padStart(5, "0")}`;
+  const idField =
+    field ||
+    (Model.rawAttributes?.complaint_number ? "complaint_number" : "reference_id");
+  const pattern = `${prefix}-${year}-`;
+  const rows = await Model.findAll({
+    attributes: [idField],
+    where: { [idField]: { [Op.like]: `${pattern}%` } },
+    transaction: t,
+    lock: t?.LOCK?.UPDATE,
+  });
+
+  let maxSeq = 0;
+  const re = new RegExp(`^${prefix}-${year}-(\\d+)$`);
+  for (const row of rows) {
+    const match = String(row.get(idField) || "").match(re);
+    if (match) maxSeq = Math.max(maxSeq, parseInt(match[1], 10));
+  }
+  return `${prefix}-${year}-${String(maxSeq + 1).padStart(5, "0")}`;
 }
 
 async function logAudit(entity_type, entity_id, action, actor, details, t) {
@@ -440,14 +456,84 @@ module.exports = {
     } catch (err) { next(err); }
   },
 
+  listInvestigatingOfficers: async (req, res, next) => {
+    try {
+      const where = { is_active: true };
+      if (req.query.q) {
+        where[Op.or] = [
+          { name: { [Op.like]: `%${req.query.q}%` } },
+          { staff_id: { [Op.like]: `%${req.query.q}%` } },
+        ];
+      }
+
+      const rows = await User.findAll({
+        where,
+        attributes: ["id", "name", "staff_id", "role", "functionalities", "department_id", "unit_id"],
+        include: [
+          { model: Department, as: "department", attributes: ["id", "name", "department_code"], required: false },
+          { model: Unit, as: "unit", attributes: ["id", "name", "unit_code"], required: false },
+        ],
+        order: [["name", "ASC"]],
+        limit: 500,
+      });
+
+      const assignableRoles = new Set([
+        "state-officer", "state-coordinator", "zonal-coordinator",
+        "department-officer", "hq-department", "sdo", "admin",
+      ]);
+
+      const hasComplaintsAccess = (functionalities) => {
+        let access = functionalities;
+        if (typeof access === "string") {
+          try { access = JSON.parse(access); } catch { access = []; }
+        }
+        if (!Array.isArray(access)) return false;
+        return access.some((entry) => {
+          const funcs = entry?.functionalities;
+          return Array.isArray(funcs) && funcs.includes("Complaints Management");
+        });
+      };
+
+      const data = rows
+        .map((row) => row.toJSON())
+        .filter((u) => assignableRoles.has(u.role) || hasComplaintsAccess(u.functionalities))
+        .map((u) => ({
+          id: u.id,
+          name: u.name,
+          staff_id: u.staff_id,
+          role: u.role,
+          department: u.department?.name ?? null,
+          department_code: u.department?.department_code ?? null,
+          unit: u.unit?.name ?? null,
+        }));
+
+      res.json({ success: true, data });
+    } catch (err) { next(err); }
+  },
+
   listComplaints: async (req, res, next) => {
     try {
-      const where = {};
-      if (req.query.state_id) where.state_id = req.query.state_id;
-      if (req.query.zone_id) where.zone_id = req.query.zone_id;
-      if (req.query.status) where.status = req.query.status;
-      if (req.query.category) where.complaint_category = req.query.category;
-      if (req.query.priority) where.priority_rating = req.query.priority;
+      const shared = {};
+      if (req.query.status) shared.status = req.query.status;
+      if (req.query.category) shared.complaint_category = req.query.category;
+      if (req.query.priority) shared.priority_rating = req.query.priority;
+
+      const geo = {};
+      if (req.query.state_id) geo.state_id = req.query.state_id;
+      if (req.query.zone_id) geo.zone_id = req.query.zone_id;
+
+      const assignedOnly = req.query.assigned_to_me === "1" || req.query.assigned_to_me === "true";
+      const assigneeWhere = buildAssigneeWhere(req.user, Op);
+
+      let where;
+      if (assignedOnly && assigneeWhere) {
+        where = { ...shared, ...assigneeWhere };
+      } else if (assigneeWhere && Object.keys(geo).length) {
+        where = { ...shared, [Op.or]: [geo, assigneeWhere] };
+      } else {
+        where = { ...shared, ...geo };
+      }
+      applyComplaintExtraFilters(where, req.query);
       const [rows, rulesMap] = await Promise.all([
         ServicomComplaint.findAll({
           where,
@@ -498,7 +584,7 @@ module.exports = {
           return res.status(400).json({ success: false, message: "Complaint ID already exists" });
         }
       } else {
-        complaint_number = await genRefId(ServicomComplaint, "CMP", t);
+        complaint_number = await genRefId(ServicomComplaint, "CMP", t, "complaint_number");
       }
       const metrics = await computeComplaintMetrics(req.body);
       const row = await ServicomComplaint.create({
@@ -543,10 +629,12 @@ module.exports = {
       if (req.query.state_id) geoWhere.state_id = req.query.state_id;
       if (req.query.zone_id) geoWhere.zone_id = req.query.zone_id;
 
+      const complaintWhere = applyComplaintExtraFilters({ ...geoWhere }, req.query);
+
       const [satisfactionSurveys, commentCards, complaints] = await Promise.all([
         ServicomSatisfactionSurvey.findAll({ where: geoWhere }),
         ServicomCommentCard.findAll({ where: geoWhere }),
-        ServicomComplaint.findAll({ where: geoWhere }),
+        ServicomComplaint.findAll({ where: complaintWhere }),
       ]);
 
       const surveyPctScores = satisfactionSurveys
@@ -888,6 +976,7 @@ module.exports = {
         if (query.category) where.complaint_category = query.category;
         if (query.domain) where.complaint_domain = query.domain;
         if (query.priority) where.priority_rating = query.priority;
+        applyComplaintExtraFilters(where, query);
         if (query.month) {
           where[Op.or] = [
             { date_received: { [Op.like]: `${query.month}%` } },
@@ -1000,7 +1089,7 @@ module.exports = {
         const [surveys, cards, complaints] = await Promise.all([
           ServicomSatisfactionSurvey.count({ where: await buildServicomListWhere(req.user, q) }),
           ServicomCommentCard.count({ where: await buildServicomListWhere(req.user, q) }),
-          ServicomComplaint.count({ where: await buildServicomListWhere(req.user, q) }),
+          ServicomComplaint.count({ where: applyComplaintExtraFilters(await buildServicomListWhere(req.user, q), q) }),
         ]);
         const state = await StateOffice.findByPk(stateId, {
           attributes: ["description"],
@@ -1022,6 +1111,7 @@ module.exports = {
       if (req.query.category) where.complaint_category = req.query.category;
       if (req.query.domain) where.complaint_domain = req.query.domain;
       if (req.query.priority) where.priority_rating = req.query.priority;
+      applyComplaintExtraFilters(where, req.query);
       if (req.query.month) {
         where[Op.or] = [
           { date_received: { [Op.like]: `${req.query.month}%` } },

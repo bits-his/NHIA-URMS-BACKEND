@@ -31,11 +31,15 @@ const SEED_STEPS = [
   { script: "src/scripts/seedZonesStates.js", label: "Zones & states" },
   { script: "src/scripts/seedDepartmentsUnits.js", label: "Departments & units" },
   { script: "src/scripts/seedUsers.js", label: "Demo users" },
+  { script: "src/scripts/seedDirectorEnforcement.js", label: "Director Enforcement (HOD-0003)" },
   { script: "src/scripts/seedServicomIndicators.js", label: "SERVICOM indicators" },
   { script: "src/scripts/seedServicomData.js", label: "SERVICOM sample data" },
   { script: "src/scripts/seedComplaintSla.js", label: "Complaint SLA rules + demo complaints" },
+  { script: "src/scripts/seedEnforcementDashboardDemo.js", label: "Enforcement dashboard (compliance + complaints)" },
   { script: "src/scripts/seedStateOfficeData.js", label: "State Office sample data" },
   { script: "src/scripts/seedAccreditedProviders.js", label: "Accredited HMO & HCF (from nhia.gov.ng)" },
+  { script: "src/scripts/seedHcfMasterFacilities.js", label: "HCF Master facilities (Excel)" },
+  { script: "src/scripts/seedHmoProviders.js", label: "Accredited HMOs (Excel June 2025)" },
   { script: "src/scripts/seedStoreManagement.js", label: "Store / Asset Management sample data" },
 ];
 

@@ -77,6 +77,8 @@ router.put("/compliance-visits/:id", complianceVisits.updateVisit);
 
 router.get("/accredited-providers", nhiaAccreditation.listProviders);
 router.post("/accredited-providers/sync", nhiaAccreditation.syncProviders);
+router.get("/hcf-facilities", require("../controllers/hcfFacility.controller").listFacilities);
+router.get("/hcf-facilities/services", require("../controllers/hcfFacility.controller").listServices);
 
 router.get("/reconciliation-meetings", reconciliation.listMeetings);
 router.post("/reconciliation-meetings", [

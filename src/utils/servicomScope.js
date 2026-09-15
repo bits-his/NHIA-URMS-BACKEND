@@ -66,7 +66,53 @@ async function buildServicomListWhere(user, query = {}) {
   return where;
 }
 
+/**
+ * Extra complaint list/dashboard filters: facility, HMO, transmission route.
+ * Mutates and returns `where`.
+ */
+function applyComplaintExtraFilters(where, query = {}) {
+  const and = Array.isArray(where[Op.and]) ? [...where[Op.and]] : [];
+
+  if (query.transmission_route) {
+    and.push({ transmission_route: query.transmission_route });
+  }
+
+  if (query.hmo_id) {
+    and.push({
+      [Op.or]: [
+        { complainant_hmo_id: query.hmo_id },
+        { respondent_hmo_id: query.hmo_id },
+      ],
+    });
+  }
+
+  const facilityId = query.facility_id || query.hcf_id;
+  if (facilityId) {
+    and.push({
+      [Op.or]: [
+        { facility_id: facilityId },
+        { complainant_hcf_id: facilityId },
+        { respondent_hcf_id: facilityId },
+      ],
+    });
+  }
+
+  if (query.facility_name) {
+    const like = { [Op.like]: `%${String(query.facility_name).trim()}%` };
+    and.push({
+      [Op.or]: [
+        { facility_name: like },
+        { respondent_name: like },
+        { complainant_name: like },
+      ],
+    });
+  }
+
+  if (and.length) where[Op.and] = and;
+  return where;
+}
+
 const SUBMITTERS = ["state-officer", "state-coordinator", "department-officer", "admin", "sdo"];
 const REVIEWERS = ["state-coordinator", "zonal-coordinator", "sdo", "admin"];
 
-module.exports = { buildServicomListWhere, SUBMITTERS, REVIEWERS };
+module.exports = { buildServicomListWhere, applyComplaintExtraFilters, SUBMITTERS, REVIEWERS };

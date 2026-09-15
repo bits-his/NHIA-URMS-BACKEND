@@ -25,6 +25,8 @@ router.get("/dashboard", ctrl.dashboard);
 router.get("/dashboard/drill", ctrl.dashboardDrill);
 router.get("/facilities", ctrl.listFacilities);
 router.get("/accredited-providers", require("../controllers/nhiaAccreditation.controller").listProviders);
+router.get("/hcf-facilities", require("../controllers/hcfFacility.controller").listFacilities);
+router.get("/hcf-facilities/services", require("../controllers/hcfFacility.controller").listServices);
 
 router.get("/visits", ctrl.listVisits);
 router.get("/visits/:id", ctrl.getVisit);
@@ -36,6 +38,7 @@ router.patch("/visits/:id/approve", authorize(...reviewers), ctrl.approveVisit);
 router.patch("/visits/:id/return", authorize(...reviewers), body("reason").notEmpty(), validate, ctrl.returnVisit);
 router.post("/visits/:id/evidence", authorize(...submitters), upload.single("file"), ctrl.uploadEvidence);
 
+router.get("/investigating-officers", ctrl.listInvestigatingOfficers);
 router.get("/complaints", ctrl.listComplaints);
 router.get("/complaint-sla", ctrl.listComplaintSla);
 router.get("/complaints/:id", ctrl.getComplaint);
