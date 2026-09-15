@@ -13,6 +13,9 @@ const complianceVisits = require("../controllers/stateOfficeComplianceVisit.cont
 const reconciliation = require("../controllers/stateOfficeReconciliation.controller");
 const nhiaAccreditation = require("../controllers/nhiaAccreditation.controller");
 const stateOfficeDashboard = require("../controllers/stateOfficeDashboard.controller");
+const officeProfiles = require("../controllers/stateZonalOfficeProfile.controller");
+const focalPersons = require("../controllers/stateZonalFocalPerson.controller");
+const { optionalAopUpload } = require("../middleware/officeProfileUpload");
 
 const router = Router();
 
@@ -21,6 +24,23 @@ router.use(requireStateOfficeRoute);
 
 router.get("/dashboard", stateOfficeDashboard.dashboard);
 router.get("/dashboard/drill", stateOfficeDashboard.dashboardDrill);
+
+const profileRules = [
+  body("zone_id").notEmpty().withMessage("Zone is required"),
+  body("state_id").notEmpty().withMessage("State is required"),
+  body("reporting_year").isInt({ min: 2000 }).withMessage("Valid year is required"),
+];
+
+router.get("/office-profiles", officeProfiles.listProfiles);
+router.get("/office-profiles/:id", officeProfiles.getProfile);
+router.post("/office-profiles", optionalAopUpload, profileRules, validate, officeProfiles.createProfile);
+router.put("/office-profiles/:id", optionalAopUpload, profileRules, validate, officeProfiles.updateProfile);
+router.delete("/office-profiles/:id", officeProfiles.deleteProfile);
+
+router.get("/focal-persons", focalPersons.listRecords);
+router.get("/focal-persons/:id", focalPersons.getRecord);
+router.post("/focal-persons", profileRules, validate, focalPersons.createRecord);
+router.put("/focal-persons/:id", profileRules, validate, focalPersons.updateRecord);
 
 const headerRules = [
   body("zone_id").notEmpty().withMessage("Zone is required"),

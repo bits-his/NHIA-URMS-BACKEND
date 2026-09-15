@@ -24,10 +24,14 @@ const ROUTE_FUNCTIONALITY = {
   "enrollee-register": "Monthly Enrollee Register",
   "etmc-tmc-action-point": "ETMC/TMC Action-Point Register",
   dashboard: "SOC/Zones Dashboard",
+  "office-profiles": "State/Zonal Office Profile",
+  "focal-persons": "State/Zonal Focal Persons Register",
 };
 
 const SOC_ONLY_FUNCTIONALITIES = new Set([
   "SOC/Zones Dashboard",
+  "State/Zonal Office Profile",
+  "State/Zonal Focal Persons Register",
   "Weekly Actionable",
   "Contracted Services",
   "Monthly Enrollee Register",
