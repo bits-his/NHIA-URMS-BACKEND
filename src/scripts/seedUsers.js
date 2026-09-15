@@ -72,6 +72,8 @@ const zonalAccess = [{
     "Accreditation / Reaccreditation",
     "Stakeholder Engagement",
     "HMO Selection Process",
+    "Additional / Extra Dependant",
+    "Change of HCF",
     "Challenges & Recommendations",
     "IGR",
     "SSHIA Financial Report",

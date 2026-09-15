@@ -15,6 +15,8 @@ const ROUTE_FUNCTIONALITY = {
   accreditation: "Accreditation / Reaccreditation",
   stakeholder: "Stakeholder Engagement",
   "hmo-selection": "HMO Selection Process",
+  "extra-dependant": "Additional / Extra Dependant",
+  "hcf-change": "Change of HCF",
   challenges: "Challenges & Recommendations",
   igr: "IGR",
   "sshia-financial": "SSHIA Financial Report",
@@ -63,6 +65,8 @@ const FUNCTIONALITY_ALIASES = {
   ],
   "Stakeholder Engagement": ["Stakeholder"],
   "HMO Selection Process": ["HMO Selection", "HMO Selection Process"],
+  "Additional / Extra Dependant": ["Extra Dependant", "Additional/Extra Dependent", "Additional / Extra Dependent"],
+  "Change of HCF": ["Change of HCP", "Change of HCF/HCP", "Change of HCF"],
   "Challenges & Recommendations": ["Challenges"],
   "SSHIA Financial Report": ["SSHIA Financial", "SSHIA Financial Reports"],
   "Complaints & Compliance Monitoring": [

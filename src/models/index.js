@@ -57,6 +57,10 @@ const WeeklyActionableReportLine   = require("./WeeklyActionableReportLine");
 const ContractedServicesReport     = require("./ContractedServicesReport");
 const ContractedServicesReportLine = require("./ContractedServicesReportLine");
 const MonthlyEnrolleeRegister      = require("./MonthlyEnrolleeRegister");
+const ExtraDependantReport         = require("./ExtraDependantReport");
+const ExtraDependantReportLine     = require("./ExtraDependantReportLine");
+const HcpChangeReport              = require("./HcpChangeReport");
+const HcpChangeReportLine          = require("./HcpChangeReportLine");
 const EtmcTmcActionPointRegister   = require("./EtmcTmcActionPointRegister");
 const EtmcTmcActionPointLine       = require("./EtmcTmcActionPointLine");
 const ComplianceReport            = require("./ComplianceReport");
@@ -192,6 +196,16 @@ MonthlyEnrolleeRegister.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zo
 StateOffice.hasMany(MonthlyEnrolleeRegister,   { foreignKey: "state_id", as: "monthly_enrollee_registers" });
 MonthlyEnrolleeRegister.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+ZonalOffice.hasMany(ExtraDependantReport,   { foreignKey: "zone_id",  as: "extra_dependant_reports" });
+ExtraDependantReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(ExtraDependantReport,   { foreignKey: "state_id", as: "extra_dependant_reports" });
+ExtraDependantReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(HcpChangeReport,   { foreignKey: "zone_id",  as: "hcp_change_reports" });
+HcpChangeReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(HcpChangeReport,   { foreignKey: "state_id", as: "hcp_change_reports" });
+HcpChangeReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 ZonalOffice.hasMany(EtmcTmcActionPointRegister,   { foreignKey: "zone_id",  as: "etmc_tmc_action_point_registers" });
 EtmcTmcActionPointRegister.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
 StateOffice.hasMany(EtmcTmcActionPointRegister,   { foreignKey: "state_id", as: "etmc_tmc_action_point_registers" });
@@ -293,6 +307,8 @@ module.exports = {
   WeeklyActionableReport, WeeklyActionableReportLine,
   ContractedServicesReport, ContractedServicesReportLine,
   MonthlyEnrolleeRegister,
+  ExtraDependantReport, ExtraDependantReportLine,
+  HcpChangeReport, HcpChangeReportLine,
   EtmcTmcActionPointRegister, EtmcTmcActionPointLine,
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
   StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, StateZonalOfficeProfile, StateZonalFocalPerson, AssetMaintenance, AssetDisposal,

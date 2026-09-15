@@ -21,6 +21,8 @@ const ZONAL_CANONICAL = new Set([
   "Accreditation / Reaccreditation",
   "Stakeholder Engagement",
   "HMO Selection Process",
+  "Additional / Extra Dependant",
+  "Change of HCF",
   "Challenges & Recommendations",
   "IGR",
   "SSHIA Financial Report",
@@ -172,6 +174,25 @@ function renameOthersToZonal(access) {
       }
 
       access = renameOthersToZonal(access);
+
+      const zonalIdx = access.findIndex((e) => e?.access_to === ZONAL);
+      if (zonalIdx >= 0) {
+        const funcs = Array.isArray(access[zonalIdx].functionalities)
+          ? [...access[zonalIdx].functionalities]
+          : [];
+        let funcChanged = false;
+        for (const f of ["Additional / Extra Dependant", "Change of HCF"]) {
+          if (!funcs.includes(f)) {
+            funcs.push(f);
+            funcChanged = true;
+            console.log(`  ✔  Added ${f} → ${user.staff_id}`);
+          }
+        }
+        if (funcChanged) {
+          access[zonalIdx] = { ...access[zonalIdx], functionalities: funcs };
+          changed = true;
+        }
+      }
 
       if (changed) {
         await user.update({ functionalities: access });

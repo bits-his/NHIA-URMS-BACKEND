@@ -7,6 +7,7 @@ const {
   enrolment, migration, cemonc,
   accreditation, stakeholder, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile,
   weeklyActionable, contractedServices, enrolleeRegister, etmcTmcActionPoint,
+  extraDependant, hcpChange,
 } = require("../controllers/stateOfficeReport.controller");
 const enrolleeComplaints = require("../controllers/stateOfficeComplaint.controller");
 const complianceVisits = require("../controllers/stateOfficeComplianceVisit.controller");
@@ -74,8 +75,21 @@ mount("weekly-actionable", weeklyActionable);
 mount("contracted-services", contractedServices);
 mount("enrollee-register", enrolleeRegister);
 mount("etmc-tmc-action-point", etmcTmcActionPoint);
+mount("extra-dependant", extraDependant);
+mount("hcf-change", hcpChange);
 
 const { upload: etmcUpload } = require("../middleware/etmcUpload");
+const { upload: beneficiaryUpload } = require("../middleware/beneficiaryUpload");
+router.post(
+  "/hmo-selection/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.single("file"),
+  hmoSelection.uploadLineFile,
+);
+router.post(
+  "/extra-dependant/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.array("files", 10),
+  extraDependant.uploadLineFiles,
+);
 router.post(
   "/etmc-tmc-action-point/reports/:id/document",
   etmcUpload.single("file"),

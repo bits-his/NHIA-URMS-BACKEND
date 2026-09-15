@@ -6,6 +6,7 @@ const {
   WeeklyActionableReport, ContractedServicesReport, MonitoringVisit,
   WeeklyActionableReportLine, ContractedServicesReportLine,
   MonthlyEnrolleeRegister, EtmcTmcActionPointRegister,
+  ExtraDependantReport, HcpChangeReport,
   StateOffice, ZonalOffice,
 } = require("../models");
 const { buildStateOfficeListWhere } = require("../utils/stateOfficeScope");
@@ -23,6 +24,8 @@ const MONTHLY_REPORT_SOURCES = [
   { key: "accreditation", label: "Accreditation / Reaccreditation", model: AccreditationReport },
   { key: "stakeholder", label: "Stakeholder Engagement", model: StakeholderReport },
   { key: "hmo_selection", label: "HMO Selection Process", model: HmoSelectionReport },
+  { key: "extra_dependant", label: "Additional / Extra Dependant", model: ExtraDependantReport },
+  { key: "hcf_change", label: "Change of HCF", model: HcpChangeReport },
   { key: "challenges", label: "Challenges & Recommendations", model: ChallengesReport },
   { key: "igr", label: "IGR", model: IgrReport },
   { key: "sshia_financial", label: "SSHIA Financial Report", model: SshiaFinancialReport },

@@ -194,6 +194,8 @@ const {
   StakeholderReport, StakeholderReportLine,
   HmoSelectionReport, HmoSelectionReportLine,
   ChallengesReport,
+  ExtraDependantReport, ExtraDependantReportLine,
+  HcpChangeReport, HcpChangeReportLine,
 } = require("../models");
 
 const accreditation = makeReportController(
@@ -225,7 +227,107 @@ const hmoSelection = makeReportController(
     report_id: reportId,
     mda: line.mda,
     selection_date: line.selection_date || null,
-    hmos_in_attendance: line.hmos_in_attendance || null,
+    hmos_in_attendance: line.hmos_in_attendance || (line.hmos_attended != null ? String(line.hmos_attended) : null),
+    former_hmo: line.former_hmo || null,
+    reason_for_change: line.reason_for_change || null,
+    hmos_invited: line.hmos_invited != null && line.hmos_invited !== "" ? Number(line.hmos_invited) : null,
+    hmos_attended: line.hmos_attended != null && line.hmos_attended !== "" ? Number(line.hmos_attended) : null,
+    compliance_guideline: line.compliance_guideline || null,
+    transparent_process: line.transparent_process || null,
+    selected_hmo: line.selected_hmo || null,
+    evidence_path: line.evidence_path || null,
+    evidence_name: line.evidence_name || null,
+    report_path: line.report_path || null,
+    report_name: line.report_name || null,
+  })
+);
+
+hmoSelection.uploadLineFile = async (req, res, next) => {
+  try {
+    const report = await HmoSelectionReport.findByPk(req.params.id);
+    const access = await assertRecordAccess(req.user, report);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
+    const line = await HmoSelectionReportLine.findOne({
+      where: { id: req.params.lineId, report_id: report.id },
+    });
+    if (!line) return res.status(404).json({ success: false, message: "Line not found" });
+    if (!req.file) return res.status(422).json({ success: false, message: "No file uploaded" });
+    const kind = req.body.kind === "report" ? "report" : "evidence";
+    const publicPath = `/uploads/beneficiary/${req.file.filename}`;
+    if (kind === "report") {
+      await line.update({ report_path: publicPath, report_name: req.file.originalname });
+    } else {
+      await line.update({ evidence_path: publicPath, evidence_name: req.file.originalname });
+    }
+    res.json({ success: true, data: line });
+  } catch (err) { next(err); }
+};
+
+const extraDependant = makeReportController(
+  ExtraDependantReport, ExtraDependantReportLine, "XDEP",
+  (line, reportId) => ({
+    report_id: reportId,
+    enrollee_name: line.enrollee_name,
+    principle_nhia_number: line.principle_nhia_number,
+    age: line.age != null && line.age !== "" ? Number(line.age) : null,
+    relationship: line.relationship,
+    program: line.program || null,
+    request_date: line.request_date || null,
+    process_end_date: line.process_end_date || null,
+    line_status: line.line_status || "pending",
+    supporting_documents: Array.isArray(line.supporting_documents)
+      ? line.supporting_documents
+          .filter((d) => d && typeof d === "object" && d.path)
+          .map((d) => ({ name: d.name || "Document", path: d.path }))
+      : [],
+  })
+);
+
+extraDependant.uploadLineFiles = async (req, res, next) => {
+  try {
+    const report = await ExtraDependantReport.findByPk(req.params.id);
+    const access = await assertRecordAccess(req.user, report);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
+    const line = await ExtraDependantReportLine.findOne({
+      where: { id: req.params.lineId, report_id: report.id },
+    });
+    if (!line) return res.status(404).json({ success: false, message: "Line not found" });
+    const files = req.files || [];
+    if (!files.length) return res.status(422).json({ success: false, message: "No file uploaded" });
+    const existingRaw = line.supporting_documents;
+    let existing = existingRaw;
+    if (typeof existingRaw === "string") {
+      try { existing = JSON.parse(existingRaw); } catch { existing = []; }
+    }
+    if (!Array.isArray(existing)) existing = [];
+    const added = files.map((f) => ({
+      name: f.originalname,
+      path: `/uploads/beneficiary/${f.filename}`,
+    }));
+    await line.update({ supporting_documents: [...existing, ...added] });
+    res.json({ success: true, data: line });
+  } catch (err) { next(err); }
+};
+
+const hcpChange = makeReportController(
+  HcpChangeReport, HcpChangeReportLine, "HCPC",
+  (line, reportId) => ({
+    report_id: reportId,
+    record_date: line.record_date || null,
+    enrollee_name: line.enrollee_name,
+    nhia_number: line.nhia_number,
+    current_hcp_hmo: line.current_hcp_hmo || null,
+    new_hcp_hmo: line.new_hcp_hmo || null,
+    reason_for_transfer: line.reason_for_transfer || null,
+    met_criteria: line.met_criteria || null,
+    request_channel: line.request_channel || null,
+    request_date: line.request_date || null,
+    process_end_date: line.process_end_date || null,
+    line_status: line.line_status || "pending",
   })
 );
 
@@ -921,4 +1023,5 @@ module.exports = {
   accreditation, stakeholder, hmoSelection, challenges,
   complaints, igr, sshiaFinancial, expenditureProfile,
   weeklyActionable, contractedServices, enrolleeRegister, etmcTmcActionPoint,
+  extraDependant, hcpChange,
 };
