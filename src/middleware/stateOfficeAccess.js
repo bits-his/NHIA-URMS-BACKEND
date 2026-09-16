@@ -12,6 +12,8 @@ const ROUTE_FUNCTIONALITY = {
   complaints: "Complaints & Compliance Monitoring",
   "enrollee-complaints": "Enrollee Complaints",
   "compliance-visits": "Monitoring Visits",
+  "mystery-shopping": "Mystery Shopping",
+  "hmo-indebtedness": "HMO Indebtedness Collation",
   "reconciliation-meetings": "Reconciliation Meetings",
   accreditation: "Accreditation / Reaccreditation",
   stakeholder: "Stakeholder Engagement",
@@ -112,6 +114,8 @@ const ACCREDITED_PROVIDER_SECTIONS = [
   "Reconciliation Meetings",
   "Compliance Monitoring",
   "Monitoring Visits",
+  "Mystery Shopping",
+  "HMO Indebtedness Collation",
 ];
 
 const STATE_OFFICE_ACCESS_MODULES = new Set([

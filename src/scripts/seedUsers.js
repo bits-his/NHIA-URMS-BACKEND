@@ -69,6 +69,8 @@ const zonalAccess = [{
     "Migration / Update Requests",
     "CEmONC & FFP Beneficiaries",
     "Monitoring Visits",
+    "Mystery Shopping",
+    "HMO Indebtedness Collation",
     "Accreditation / Reaccreditation",
     "Stakeholder Engagement",
     "HMO Selection Process",
@@ -132,7 +134,7 @@ const sdoAccess = [
   },
   {
     access_to: "Zonal",
-    functionalities: ["Monitoring Visits", "ICT Support Register"],
+    functionalities: ["Monitoring Visits", "Mystery Shopping", "HMO Indebtedness Collation", "ICT Support Register"],
   },
   ...notifications,
 ];

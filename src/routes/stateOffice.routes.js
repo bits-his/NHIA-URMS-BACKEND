@@ -12,6 +12,8 @@ const {
 } = require("../controllers/stateOfficeReport.controller");
 const enrolleeComplaints = require("../controllers/stateOfficeComplaint.controller");
 const complianceVisits = require("../controllers/stateOfficeComplianceVisit.controller");
+const mysteryShopping = require("../controllers/stateOfficeMysteryShopping.controller");
+const hmoIndebtedness = require("../controllers/stateOfficeHmoIndebtedness.controller");
 const reconciliation = require("../controllers/stateOfficeReconciliation.controller");
 const nhiaAccreditation = require("../controllers/nhiaAccreditation.controller");
 const stateOfficeDashboard = require("../controllers/stateOfficeDashboard.controller");
@@ -129,6 +131,26 @@ router.post("/compliance-visits", [
   body("facility_visited").notEmpty(),
 ], validate, complianceVisits.createVisit);
 router.put("/compliance-visits/:id", complianceVisits.updateVisit);
+
+router.get("/mystery-shopping", mysteryShopping.listVisits);
+router.get("/mystery-shopping/:id", mysteryShopping.getVisit);
+router.post("/mystery-shopping", [
+  body("zone_id").notEmpty(),
+  body("state_id").notEmpty(),
+  body("email").isEmail().withMessage("Valid email is required"),
+  body("facility_name").notEmpty(),
+], validate, mysteryShopping.createVisit);
+router.put("/mystery-shopping/:id", mysteryShopping.updateVisit);
+
+router.get("/hmo-indebtedness", hmoIndebtedness.listSheets);
+router.get("/hmo-indebtedness/:id", hmoIndebtedness.getSheet);
+router.post("/hmo-indebtedness", [
+  body("zone_id").notEmpty(),
+  body("state_id").notEmpty(),
+  body("reporting_year").isInt({ min: 2000 }),
+  body("reporting_month").isInt({ min: 1, max: 12 }),
+], validate, hmoIndebtedness.createSheet);
+router.put("/hmo-indebtedness/:id", hmoIndebtedness.updateSheet);
 
 router.get("/accredited-providers", nhiaAccreditation.listProviders);
 router.post("/accredited-providers/sync", nhiaAccreditation.syncProviders);

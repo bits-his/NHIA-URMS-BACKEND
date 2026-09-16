@@ -26,6 +26,8 @@ const ComplianceReport = sequelize.define("ComplianceReport", {
   },
   follow_up_required: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   certification: { type: DataTypes.TEXT, allowNull: true },
+  certification_file_path: { type: DataTypes.STRING(500), allowNull: true },
+  certification_original_name: { type: DataTypes.STRING(255), allowNull: true },
   facility_name: { type: DataTypes.STRING(200), allowNull: true },
   facility_code: { type: DataTypes.STRING(30), allowNull: true },
   facility_type: { type: DataTypes.STRING(50), allowNull: true },

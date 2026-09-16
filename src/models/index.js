@@ -42,6 +42,9 @@ const HmoSelectionReportLine      = require("./HmoSelectionReportLine");
 const ChallengesReport            = require("./ChallengesReport");
 const StateOfficeComplaint        = require("./StateOfficeComplaint");
 const StateOfficeComplianceVisit  = require("./StateOfficeComplianceVisit");
+const StateOfficeMysteryShopping  = require("./StateOfficeMysteryShopping");
+const StateOfficeHmoIndebtedness  = require("./StateOfficeHmoIndebtedness");
+const StateOfficeHmoIndebtednessLine = require("./StateOfficeHmoIndebtednessLine");
 const StateOfficeReconciliationMeeting = require("./StateOfficeReconciliationMeeting");
 const NhiaAccreditedProvider          = require("./NhiaAccreditedProvider");
 const HcfFacility                     = require("./HcfFacility");
@@ -167,6 +170,16 @@ ZonalOffice.hasMany(StateOfficeComplianceVisit, { foreignKey: "zone_id", as: "st
 StateOfficeComplianceVisit.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
 StateOffice.hasMany(StateOfficeComplianceVisit, { foreignKey: "state_id", as: "state_compliance_visits" });
 StateOfficeComplianceVisit.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(StateOfficeMysteryShopping, { foreignKey: "zone_id", as: "state_mystery_shopping" });
+StateOfficeMysteryShopping.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(StateOfficeMysteryShopping, { foreignKey: "state_id", as: "state_mystery_shopping" });
+StateOfficeMysteryShopping.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(StateOfficeHmoIndebtedness, { foreignKey: "zone_id", as: "hmo_indebtedness" });
+StateOfficeHmoIndebtedness.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(StateOfficeHmoIndebtedness, { foreignKey: "state_id", as: "hmo_indebtedness" });
+StateOfficeHmoIndebtedness.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
 ZonalOffice.hasMany(StateOfficeReconciliationMeeting, { foreignKey: "zone_id", as: "state_reconciliation_meetings" });
 StateOfficeReconciliationMeeting.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
@@ -320,7 +333,8 @@ module.exports = {
   ComplaintsComplianceReport, AccreditationReport, AccreditationReportLine,
   StakeholderReport, StakeholderReportLine, HmoSelectionReport, HmoSelectionReportLine,
   ChallengesReport,
-  StateOfficeComplaint, StateOfficeComplianceVisit,
+  StateOfficeComplaint, StateOfficeComplianceVisit, StateOfficeMysteryShopping,
+  StateOfficeHmoIndebtedness, StateOfficeHmoIndebtednessLine,
   StateOfficeReconciliationMeeting, NhiaAccreditedProvider, HcfFacility, HmoProvider,
   IgrReport, IgrReportLine,
   SshiaFinancialReport, SshiaFinancialReportLine,

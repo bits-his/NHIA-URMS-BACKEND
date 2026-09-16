@@ -6,6 +6,8 @@ const {
 const {
   buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
 } = require("../utils/stateOfficeScope");
+const { formatComplianceReportId } = require("../utils/complianceReportId");
+const { removeCertFile, publicCertPath } = require("../middleware/complianceCertUpload");
 
 const quarterFromWeek = (week) => Math.min(4, Math.ceil(Number(week) / 13) || 1);
 
@@ -25,15 +27,32 @@ const includeAll = [
   { model: ComplianceEnforcementAction, as: "enforcement_actions" },
 ];
 
+function parseMaybeJson(value, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value !== "string") return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function coerceMultipartBody(body = {}) {
+  const out = { ...body };
+  out.findings = parseMaybeJson(out.findings, []);
+  out.violations = parseMaybeJson(out.violations, []);
+  out.enforcement_actions = parseMaybeJson(out.enforcement_actions, []);
+  out.complaint_categories = parseMaybeJson(out.complaint_categories, out.complaint_categories);
+  if (out.follow_up_required === "true" || out.follow_up_required === true) out.follow_up_required = true;
+  else if (out.follow_up_required === "false" || out.follow_up_required === false) out.follow_up_required = false;
+  return out;
+}
+
 async function generateRefId(stateId, facilityCode, reportingYear, reportingWeek, t) {
-  const state = await StateOffice.findByPk(stateId, { transaction: t });
-  const stateCode = (state?.code || "ST").slice(0, 3).toUpperCase();
-  const fac = (facilityCode || "FAC").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) || "FAC";
-  const base = `${stateCode}-${fac}-${reportingYear}-W${String(reportingWeek).padStart(2, "0")}`;
+  const state = await StateOffice.findByPk(stateId, {
+    attributes: ["id", "code", "description"],
+    transaction: t,
+  });
+  const base = formatComplianceReportId(state, facilityCode, reportingYear, reportingWeek);
   const existing = await ComplianceReport.count({ where: { reference_id: base }, transaction: t });
   if (!existing) return base;
-  const suffix = await ComplianceReport.count({ transaction: t });
-  return `${base}-${String(suffix + 1).padStart(2, "0")}`;
+  return `${base}-${String(existing + 1).padStart(2, "0")}`;
 }
 
 function mapNested(reportId, { findings = [], violations = [], enforcement_actions = [] }) {
@@ -89,6 +108,8 @@ function headerFields(body, defaults = {}) {
     compliance_status_confirmed: body.compliance_status_confirmed || "pending",
     follow_up_required: !!body.follow_up_required,
     certification: body.certification || null,
+    certification_file_path: body.certification_file_path ?? defaults.certification_file_path ?? null,
+    certification_original_name: body.certification_original_name ?? defaults.certification_original_name ?? null,
     facility_name: body.facility_name || null,
     facility_code: body.facility_code || null,
     facility_type: body.facility_type || null,
@@ -148,13 +169,17 @@ const getReport = async (req, res, next) => {
 const createReport = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const scoped = await applyScopeToBody(req.user, req.body);
+    const scoped = await applyScopeToBody(req.user, coerceMultipartBody(req.body));
     const {
       findings = [], violations = [], enforcement_actions = [],
       status = "draft",
     } = scoped;
 
     const header = headerFields(scoped);
+    if (req.file) {
+      header.certification_file_path = publicCertPath(req.file.filename);
+      header.certification_original_name = req.file.originalname;
+    }
     const reference_id = await generateRefId(
       header.state_id, scoped.facility_code, header.reporting_year, header.reporting_week, t,
     );
@@ -192,12 +217,26 @@ const updateReport = async (req, res, next) => {
       return res.status(access.status).json({ success: false, message: access.message });
     }
 
-    const scoped = await applyScopeToBody(req.user, req.body);
+    const scoped = await applyScopeToBody(req.user, coerceMultipartBody(req.body));
     const {
       findings = [], violations = [], enforcement_actions = [],
     } = scoped;
 
-    await report.update(headerFields(scoped, report), { transaction: t });
+    const header = headerFields(scoped, report);
+    if (req.file) {
+      if (report.certification_file_path) removeCertFile(report.certification_file_path);
+      header.certification_file_path = publicCertPath(req.file.filename);
+      header.certification_original_name = req.file.originalname;
+    } else if (scoped.remove_certification === "true" || scoped.remove_certification === true) {
+      if (report.certification_file_path) removeCertFile(report.certification_file_path);
+      header.certification_file_path = null;
+      header.certification_original_name = null;
+    } else {
+      header.certification_file_path = report.certification_file_path;
+      header.certification_original_name = report.certification_original_name;
+    }
+
+    await report.update(header, { transaction: t });
 
     await ComplianceFinding.destroy({ where: { report_id: report.id }, transaction: t });
     await ComplianceViolation.destroy({ where: { report_id: report.id }, transaction: t });

@@ -1,10 +1,27 @@
 const { Op } = require("sequelize");
 const { HcfFacility, ZonalOffice, StateOffice } = require("../models");
+const { resolveNhiaPrefix } = require("../utils/nhiaStateFilter");
 
 const includeGeo = [
   { model: ZonalOffice, as: "zone", attributes: ["id", "description", "zonal_code"] },
   { model: StateOffice, as: "state", attributes: ["id", "description", "code"] },
 ];
+
+async function stateMatchClause(stateId) {
+  if (!stateId) return null;
+  const or = [{ state_id: stateId }];
+  const state = await StateOffice.findByPk(stateId, { attributes: ["id", "description", "code"] });
+  const desc = (state?.description || "").replace(/\(.*?\)/g, "").trim();
+  if (desc) {
+    or.push({ state_name: { [Op.like]: `%${desc}%` } });
+  }
+  const resolved = await resolveNhiaPrefix(stateId);
+  if (resolved?.prefix) {
+    or.push({ accreditation_code: { [Op.like]: `${resolved.prefix}/%` } });
+    or.push({ facility_code: { [Op.like]: `${resolved.prefix}/%` } });
+  }
+  return { [Op.or]: or };
+}
 
 /**
  * GET /api/hcf-facilities
@@ -12,22 +29,26 @@ const includeGeo = [
  */
 const listFacilities = async (req, res, next) => {
   try {
-    const where = { is_active: true };
-    if (req.query.state_id) where.state_id = req.query.state_id;
+    const and = [{ is_active: true }];
+    const stateClause = await stateMatchClause(req.query.state_id);
+    if (stateClause) and.push(stateClause);
     if (req.query.service) {
-      where.service_applied_for = { [Op.like]: `%${String(req.query.service).trim()}%` };
+      and.push({ service_applied_for: { [Op.like]: `%${String(req.query.service).trim()}%` } });
     }
     if (req.query.q) {
       const q = String(req.query.q).trim();
-      where[Op.or] = [
-        { name: { [Op.like]: `%${q}%` } },
-        { accreditation_code: { [Op.like]: `%${q}%` } },
-        { facility_code: { [Op.like]: `%${q}%` } },
-        { lga: { [Op.like]: `%${q}%` } },
-        { state_name: { [Op.like]: `%${q}%` } },
-      ];
+      and.push({
+        [Op.or]: [
+          { name: { [Op.like]: `%${q}%` } },
+          { accreditation_code: { [Op.like]: `%${q}%` } },
+          { facility_code: { [Op.like]: `%${q}%` } },
+          { lga: { [Op.like]: `%${q}%` } },
+          { state_name: { [Op.like]: `%${q}%` } },
+        ],
+      });
     }
 
+    const where = and.length === 1 ? and[0] : { [Op.and]: and };
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 1000);
     const unique = String(req.query.unique || "") === "1" || String(req.query.unique || "") === "true";
 
