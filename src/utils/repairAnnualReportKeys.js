@@ -34,8 +34,10 @@ async function repairAnnualReportKeys(sequelize, { log = console.log } = {}) {
       );
     }
     if (autoIncrement) {
+      const cols = await qi(`SHOW COLUMNS FROM \`${table}\` LIKE :column`, { column });
+      const type = cols[0]?.Type || "int(10) unsigned";
       await sequelize.query(
-        `ALTER TABLE \`${table}\` MODIFY \`${column}\` INT(10) UNSIGNED NOT NULL AUTO_INCREMENT, ADD PRIMARY KEY (\`${column}\`)`
+        `ALTER TABLE \`${table}\` MODIFY \`${column}\` ${type} NOT NULL AUTO_INCREMENT, ADD PRIMARY KEY (\`${column}\`)`
       );
     } else {
       await sequelize.query(`ALTER TABLE \`${table}\` ADD PRIMARY KEY (\`${column}\`)`);
@@ -49,6 +51,31 @@ async function repairAnnualReportKeys(sequelize, { log = console.log } = {}) {
   await ensurePrimaryKey("units", "id", { autoIncrement: true });
   await ensurePrimaryKey("annual_reports", "reference_id");
   await ensurePrimaryKey("quarterly_data", "id", { autoIncrement: true });
+
+  const noPk = await qi(
+    `SELECT t.TABLE_NAME
+     FROM INFORMATION_SCHEMA.TABLES t
+     LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS c
+       ON c.TABLE_SCHEMA = t.TABLE_SCHEMA
+      AND c.TABLE_NAME = t.TABLE_NAME
+      AND c.CONSTRAINT_TYPE = 'PRIMARY KEY'
+     WHERE t.TABLE_SCHEMA = DATABASE()
+       AND t.TABLE_TYPE = 'BASE TABLE'
+       AND c.CONSTRAINT_NAME IS NULL`
+  );
+  for (const { TABLE_NAME: table } of noPk) {
+    const cols = await qi(`SHOW COLUMNS FROM \`${table}\``);
+    const idCol = cols.find((c) => c.Field === "id");
+    if (!idCol) {
+      log(`⏭   ${table} has no id column — skipped PK repair`);
+      continue;
+    }
+    try {
+      await ensurePrimaryKey(table, "id", { autoIncrement: /int/i.test(idCol.Type) });
+    } catch (err) {
+      log(`⚠️   Could not add PRIMARY KEY on ${table}.id — ${String(err.message || err).split("\n")[0]}`);
+    }
+  }
 
   if (await tableExists("quarterly_data")) {
     const fkRows = await qi(
