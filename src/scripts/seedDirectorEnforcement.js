@@ -36,7 +36,7 @@ const functionalities = [
   try {
     await sequelize.authenticate();
 
-    const dept = await Department.findOne({ where: { department_code: "AUD" } });
+    const dept = await Department.findOne({ where: { department_code: "ENF" } });
     const unit = await Unit.findOne({ where: { unit_code: "AUD-COMP" } });
 
     const hashed = await bcrypt.hash(PASSWORD, 12);
@@ -68,7 +68,7 @@ User ready:
   Name:     Director Enforcement
   Staff ID: ${STAFF_ID}
   Password: ${PASSWORD}
-  Office:   HQ Department (Audit & Compliance › Compliance & Enforcement)
+  Office:   HQ Department (Enforcement Department)
   Role:     hq-department (national zone/state view)
   Access:
     • Dashboard (Enforcement overview)

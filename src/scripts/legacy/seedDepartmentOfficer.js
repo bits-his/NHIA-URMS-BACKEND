@@ -4,7 +4,6 @@ const sequelize = require("../../config/database");
 require("../../models/index");
 const { User } = require("../../models/User");
 const Department = require("../../models/Department");
-const Unit = require("../../models/Unit");
 const { anyExists, logSkip } = require("../../utils/seedUtils");
 
 (async () => {
@@ -17,26 +16,23 @@ const { anyExists, logSkip } = require("../../utils/seedUtils");
       process.exit(0);
     }
 
-    // Find Finance department
-    const financeDept = await Department.findOne({ where: { department_code: "FIN" } });
+    // Find Administration & Finance department
+    const financeDept = await Department.findOne({ where: { department_code: "AFD" } });
     if (!financeDept) {
-      console.error("❌  Finance department not found. Run seedDepartmentsUnits.js first.");
+      console.error("❌  Administration & Finance department not found. Run seedDepartmentsUnits.js first.");
       process.exit(1);
     }
-
-    // Find Revenue unit
-    const revenueUnit = await Unit.findOne({ where: { unit_code: "FIN-REV" } });
 
     const hashedPassword = await bcrypt.hash("password123", 10);
 
     await User.create({
-      name: "Finance Department Officer",
+      name: "AFD Department Officer",
       staff_id: "DO-0001",
       email: "do@nhia.gov.ng",
       password: hashedPassword,
       role: "department-officer",
       department_id: financeDept.id,
-      unit_id: revenueUnit?.id || null,
+      unit_id: null,
       is_active: true,
       functionalities: [
         {
@@ -54,7 +50,7 @@ const { anyExists, logSkip } = require("../../utils/seedUtils");
     console.log(`   Staff ID: DO-0001`);
     console.log(`   Password: password123`);
     console.log(`   Department: ${financeDept.name}`);
-    console.log(`   Unit: ${revenueUnit?.name || "None"}`);
+    console.log(`   Unit: None`);
 
     process.exit(0);
   } catch (err) {

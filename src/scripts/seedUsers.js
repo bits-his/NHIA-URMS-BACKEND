@@ -2,7 +2,7 @@
  * Seed demo users for the monthly-report workflow.
  *
  * Workflow:
- *   department-officer  → fills their department's monthly report (Finance / Programmes / SQA)
+ *   department-officer  → fills their department's monthly report (AFD / FSD / SQA)
  *   state-coordinator   → fills any section + reviews state submissions → zonal
  *   zonal-coordinator   → reviews state-approved reports → SDO
  *   sdo                 → final approval
@@ -258,8 +258,8 @@ async function buildUserSpecs(deptMap, unitMap) {
       zone_id: zoneId,
       state_id: state.id,
       state_label: label,
-      department_id: deptMap.FIN || null,
-      unit_id: unitMap["FIN-REV"] || null,
+      department_id: deptMap.AFD || null,
+      unit_id: null,
       functionalities: [...dashboard, ...financeMonthly, ...notifications],
     });
 
@@ -271,8 +271,8 @@ async function buildUserSpecs(deptMap, unitMap) {
       zone_id: zoneId,
       state_id: state.id,
       state_label: label,
-      department_id: deptMap.HI || null,
-      unit_id: unitMap["HI-ENR"] || null,
+      department_id: deptMap.FSD || null,
+      unit_id: null,
       functionalities: [...dashboard, ...programmesMonthly, ...notifications],
     });
 
@@ -284,8 +284,8 @@ async function buildUserSpecs(deptMap, unitMap) {
       zone_id: zoneId,
       state_id: state.id,
       state_label: label,
-      department_id: deptMap.HI || null,
-      unit_id: unitMap["HI-QA"] || null,
+      department_id: deptMap.SQA || null,
+      unit_id: null,
       functionalities: [...dashboard, ...sqaMonthly, ...notifications],
     });
   }
