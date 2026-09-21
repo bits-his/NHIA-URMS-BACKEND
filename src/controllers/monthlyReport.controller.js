@@ -1,6 +1,10 @@
 const sequelize = require("../config/database");
 const { FinanceMonthlyReport, ProgrammesMonthlyReport, SqaMonthlyReport, StateOffice } = require("../models");
-const { buildMonthlyListWhere } = require("../utils/monthlyReportScope");
+const {
+  buildMonthlyListWhere,
+  canCreateMonthlyReport,
+  canReviewMonthlyReport,
+} = require("../utils/monthlyReportScope");
 
 const MONTH_NAMES = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -39,6 +43,13 @@ const makeController = (Model, prefix) => ({
   create: async (req, res, next) => {
     const t = await sequelize.transaction();
     try {
+      if (req.user?.role !== "admin") {
+        const allowed = await canCreateMonthlyReport(req.user?.role);
+        if (!allowed) {
+          await t.rollback();
+          return res.status(403).json({ success: false, message: "Your role cannot create monthly reports" });
+        }
+      }
       const reference_id = await genRefId(Model, prefix, t);
       const record = await Model.create(
         { reference_id, ...req.body, status: req.body.status || "draft",
@@ -75,6 +86,12 @@ const makeController = (Model, prefix) => ({
 
   update: async (req, res, next) => {
     try {
+      if (req.user?.role !== "admin") {
+        const allowed = await canCreateMonthlyReport(req.user?.role);
+        if (!allowed) {
+          return res.status(403).json({ success: false, message: "Your role cannot edit monthly reports" });
+        }
+      }
       const record = await Model.findByPk(req.params.id);
       if (!record) return res.status(404).json({ success: false, message: "Not found" });
       if (!["draft", "rejected"].includes(record.status)) {
@@ -89,6 +106,12 @@ const makeController = (Model, prefix) => ({
   approve: async (req, res, next) => {
     try {
       const role = req.user?.role;
+      if (role !== "admin") {
+        const allowed = await canReviewMonthlyReport(role);
+        if (!allowed) {
+          return res.status(403).json({ success: false, message: "Your role cannot review monthly reports" });
+        }
+      }
       const chain = CHAIN[role];
       if (!chain) return res.status(403).json({ success: false, message: "Your role cannot approve reports" });
 
@@ -117,6 +140,12 @@ const makeController = (Model, prefix) => ({
   reject: async (req, res, next) => {
     try {
       const role = req.user?.role;
+      if (role !== "admin") {
+        const allowed = await canReviewMonthlyReport(role);
+        if (!allowed) {
+          return res.status(403).json({ success: false, message: "Your role cannot review monthly reports" });
+        }
+      }
       const chain = CHAIN[role];
       if (!chain) return res.status(403).json({ success: false, message: "Your role cannot reject reports" });
 
