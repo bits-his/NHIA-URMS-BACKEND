@@ -28,6 +28,7 @@ const MIGRATE_STEPS = [
   { script: "src/scripts/legacy/migrateOthersPrivileges.js", label: "Zonal module privileges" },
   { script: "src/scripts/legacy/migrateSectionDashboards.js", label: "Section dashboards privileges" },
   { script: "src/scripts/updateStoreDb.js", label: "Store / Asset Management schema" },
+  { script: "src/scripts/updateAdminHrDb.js", label: "Admin / HR reports schema" },
 ];
 
 const SEED_STEPS = [
@@ -44,6 +45,7 @@ const SEED_STEPS = [
   { script: "src/scripts/seedHcfMasterFacilities.js", label: "HCF Master facilities (Excel)" },
   { script: "src/scripts/seedHmoProviders.js", label: "Accredited HMOs (Excel June 2025)" },
   { script: "src/scripts/seedStoreManagement.js", label: "Store / Asset Management sample data" },
+  { script: "src/scripts/seedAdminHr.js", label: "Admin / HR sample reports" },
 ];
 
 const INCREMENTAL_MIGRATE_STEPS = [
@@ -58,6 +60,7 @@ const INCREMENTAL_MIGRATE_STEPS = [
   { script: "src/scripts/legacy/migrateOthersPrivileges.js", label: "Zonal module privileges" },
   { script: "src/scripts/legacy/migrateSectionDashboards.js", label: "Section dashboards privileges" },
   { script: "src/scripts/updateStoreDb.js", label: "Store / Asset Management schema" },
+  { script: "src/scripts/updateAdminHrDb.js", label: "Admin / HR reports schema" },
 ];
 
 const steps = seedsOnly
