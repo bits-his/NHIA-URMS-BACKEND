@@ -1,5 +1,9 @@
 const jwt = require("jsonwebtoken");
 const { User } = require("../models");
+const {
+  canReviewMonthlyReport,
+  canSubmitForms,
+} = require("../utils/monthlyReportScope");
 
 const JWT_SECRET = process.env.JWT_SECRET || "nhia_secret_change_in_prod";
 
@@ -30,4 +34,46 @@ const authorize = (...roles) => (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, authorize, JWT_SECRET };
+/**
+ * Create/update forms: allow anyone who can open the page except review-only roles.
+ * Page visibility is controlled by privileges (user.functionalities).
+ * Role flags can_create / can_review control create-only vs review-only UX.
+ */
+const requireCreateAccess = async (req, res, next) => {
+  try {
+    const allowed = await canSubmitForms(req.user?.role);
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        message: "Your role is review-only and cannot create or edit reports",
+      });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Allow any role with can_review_monthly (Admin → Roles).
+ */
+const requireReviewAccess = async (req, res, next) => {
+  try {
+    if (req.user?.role === "admin") return next();
+    const allowed = await canReviewMonthlyReport(req.user?.role);
+    if (!allowed) {
+      return res.status(403).json({ success: false, message: "Your role cannot review reports" });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = {
+  authenticate,
+  authorize,
+  requireCreateAccess,
+  requireReviewAccess,
+  JWT_SECRET,
+};

@@ -463,30 +463,60 @@ module.exports = {
 
   listInvestigatingOfficers: async (req, res, next) => {
     try {
-      const where = { is_active: true };
+      const escalationLevel = String(req.query.escalation_level || "").trim();
+      /** Registration "Assign To" — all active users. Escalation filters by level. */
+      const assignMode = !escalationLevel;
+
+      const and = [{ is_active: true }];
       if (req.query.q) {
-        where[Op.or] = [
-          { name: { [Op.like]: `%${req.query.q}%` } },
-          { staff_id: { [Op.like]: `%${req.query.q}%` } },
-        ];
+        and.push({
+          [Op.or]: [
+            { name: { [Op.like]: `%${req.query.q}%` } },
+            { staff_id: { [Op.like]: `%${req.query.q}%` } },
+          ],
+        });
       }
 
-      const escalationLevel = String(req.query.escalation_level || "").trim();
       const stateId = req.query.state_id || req.user?.state_id;
       const zoneId = req.query.zone_id || req.user?.zone_id;
 
-      if (escalationLevel === "State Internal" && stateId) {
-        where.state_id = stateId;
-      } else if (escalationLevel === "Zonal Office" && zoneId) {
-        where.zone_id = zoneId;
-      } else if (escalationLevel === "NHIA Headquarters") {
-        // HQ / directors — no state lock
-      } else if (stateId) {
-        where.state_id = stateId;
+      const enfDepts = await Department.findAll({
+        where: {
+          [Op.or]: [
+            { department_code: { [Op.in]: ["ENF", "AUD"] } },
+            { name: { [Op.like]: "%Enforcement%" } },
+          ],
+        },
+        attributes: ["id"],
+      });
+      const enfDeptIds = enfDepts.map((d) => d.id);
+
+      const enfUnitWhere = [
+        { unit_code: { [Op.like]: "ENF%" } },
+        { unit_code: "AUD-COMP" },
+        { name: { [Op.like]: "%Enforcement%" } },
+        { name: { [Op.like]: "%compliance & enforcement%" } },
+      ];
+      if (enfDeptIds.length) enfUnitWhere.push({ department_id: { [Op.in]: enfDeptIds } });
+
+      const enfUnits = await Unit.findAll({
+        where: { [Op.or]: enfUnitWhere },
+        attributes: ["id"],
+      });
+      const enfUnitIds = enfUnits.map((u) => u.id);
+
+      // Escalation: scope candidates by level geo
+      if (!assignMode) {
+        if (escalationLevel === "State Internal" && stateId) {
+          and.push({ state_id: stateId });
+        } else if (escalationLevel === "Zonal Office" && zoneId) {
+          and.push({ zone_id: zoneId });
+        }
+        // NHIA Headquarters: no geo lock
       }
 
       const rows = await User.findAll({
-        where,
+        where: { [Op.and]: and },
         attributes: ["id", "name", "staff_id", "role", "functionalities", "department_id", "unit_id", "state_id", "zone_id"],
         include: [
           { model: Department, as: "department", attributes: ["id", "name", "department_code"], required: false },
@@ -498,7 +528,7 @@ module.exports = {
 
       const assignableRoles = new Set([
         "state-officer", "state-coordinator", "zonal-coordinator",
-        "department-officer", "hq-department", "sdo", "admin",
+        "department-officer", "hq-department", "sdo", "admin", "reporting-officer",
       ]);
 
       const hasComplaintsAccess = (functionalities) => {
@@ -514,6 +544,8 @@ module.exports = {
       };
 
       const isEnforcementDept = (u) => {
+        if (enfDeptIds.includes(u.department_id)) return true;
+        if (enfUnitIds.includes(u.unit_id)) return true;
         const deptCode = String(u.department?.department_code || "").toUpperCase();
         const unitCode = String(u.unit?.unit_code || "").toUpperCase();
         const deptName = String(u.department?.name || "").toLowerCase();
@@ -541,7 +573,13 @@ module.exports = {
 
       const data = rows
         .map((row) => row.toJSON())
-        .filter((u) => (assignableRoles.has(u.role) || hasComplaintsAccess(u.functionalities) || isEnforcementDept(u)) && matchesEscalationLevel(u))
+        .filter((u) => {
+          // Assign To: every active user
+          if (assignMode) return true;
+          // Escalation: role/geo-appropriate candidates
+          return (assignableRoles.has(u.role) || hasComplaintsAccess(u.functionalities) || isEnforcementDept(u))
+            && matchesEscalationLevel(u);
+        })
         .sort((a, b) => {
           const aEnf = isEnforcementDept(a) ? 0 : 1;
           const bEnf = isEnforcementDept(b) ? 0 : 1;
@@ -566,25 +604,35 @@ module.exports = {
 
   listComplaints: async (req, res, next) => {
     try {
-      const shared = {};
-      if (req.query.status) shared.status = req.query.status;
-      if (req.query.category) shared.complaint_category = req.query.category;
-      if (req.query.priority) shared.priority_rating = req.query.priority;
+      const role = req.user?.role;
+      const stateInboxOnly = ["state-officer", "state-coordinator"].includes(role);
 
-      const geo = {};
-      if (req.query.state_id) geo.state_id = req.query.state_id;
-      if (req.query.zone_id) geo.zone_id = req.query.zone_id;
+      // State officers/coordinators: only complaints assigned or forwarded to them.
+      // National/other roles: geo filters from query (SDO sees all when unfiltered).
+      const where = stateInboxOnly
+        ? {}
+        : await buildServicomListWhere(req.user, {
+            state_id: req.query.state_id,
+            zone_id: req.query.zone_id,
+            status: req.query.status,
+          });
+      if (req.query.status) where.status = req.query.status;
+      if (req.query.category) where.complaint_category = req.query.category;
+      if (req.query.priority) where.priority_rating = req.query.priority;
 
-      const assignedOnly = req.query.assigned_to_me === "1" || req.query.assigned_to_me === "true";
+      const assignedOnly = stateInboxOnly
+        || req.query.assigned_to_me === "1"
+        || req.query.assigned_to_me === "true";
       const assigneeWhere = buildAssigneeWhere(req.user, Op);
-
-      let where;
-      if (assignedOnly && assigneeWhere) {
-        where = { ...shared, ...assigneeWhere };
-      } else if (assigneeWhere && Object.keys(geo).length) {
-        where = { ...shared, [Op.or]: [geo, assigneeWhere] };
-      } else {
-        where = { ...shared, ...geo };
+      if (assignedOnly) {
+        if (assigneeWhere) {
+          const and = Array.isArray(where[Op.and]) ? [...where[Op.and]] : [];
+          and.push(assigneeWhere);
+          where[Op.and] = and;
+        } else if (stateInboxOnly) {
+          // No name/staff match possible — return empty rather than all complaints
+          where.id = -1;
+        }
       }
       applyComplaintExtraFilters(where, req.query);
       const [rows, rulesMap] = await Promise.all([
@@ -623,6 +671,17 @@ module.exports = {
     try {
       const data = await listComplaintSlaRulesFormatted();
       res.json({ success: true, data });
+    } catch (err) { next(err); }
+  },
+
+  previewComplaintNumber: async (req, res, next) => {
+    try {
+      const complaint_number = await genComplaintNumber(ServicomComplaint, {
+        complaint_against: req.query.against || req.query.complaint_against,
+        complaint_type: req.query.complaint_type,
+        date_received: req.query.date_received || req.query.date,
+      }, null);
+      res.json({ success: true, data: { complaint_number } });
     } catch (err) { next(err); }
   },
 
@@ -712,9 +771,10 @@ module.exports = {
 
   dashboard: async (req, res, next) => {
     try {
-      const geoWhere = {};
-      if (req.query.state_id) geoWhere.state_id = req.query.state_id;
-      if (req.query.zone_id) geoWhere.zone_id = req.query.zone_id;
+      const geoWhere = await buildServicomListWhere(req.user, {
+        state_id: req.query.state_id,
+        zone_id: req.query.zone_id,
+      });
 
       const complaintWhere = applyComplaintExtraFilters({ ...geoWhere }, req.query);
 
@@ -865,9 +925,10 @@ module.exports = {
 
   listSatisfactionSurveys: async (req, res, next) => {
     try {
-      const where = {};
-      if (req.query.state_id) where.state_id = req.query.state_id;
-      if (req.query.zone_id) where.zone_id = req.query.zone_id;
+      const where = await buildServicomListWhere(req.user, {
+        state_id: req.query.state_id,
+        zone_id: req.query.zone_id,
+      });
       const rows = await ServicomSatisfactionSurvey.findAll({
         where,
         include: [
@@ -949,9 +1010,10 @@ module.exports = {
 
   listCommentCards: async (req, res, next) => {
     try {
-      const where = {};
-      if (req.query.state_id) where.state_id = req.query.state_id;
-      if (req.query.zone_id) where.zone_id = req.query.zone_id;
+      const where = await buildServicomListWhere(req.user, {
+        state_id: req.query.state_id,
+        zone_id: req.query.zone_id,
+      });
       const rows = await ServicomCommentCard.findAll({
         where,
         include: [

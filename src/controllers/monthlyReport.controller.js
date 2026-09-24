@@ -2,7 +2,7 @@ const sequelize = require("../config/database");
 const { FinanceMonthlyReport, ProgrammesMonthlyReport, SqaMonthlyReport, StateOffice } = require("../models");
 const {
   buildMonthlyListWhere,
-  canCreateMonthlyReport,
+  canSubmitForms,
   canReviewMonthlyReport,
 } = require("../utils/monthlyReportScope");
 
@@ -44,7 +44,7 @@ const makeController = (Model, prefix) => ({
     const t = await sequelize.transaction();
     try {
       if (req.user?.role !== "admin") {
-        const allowed = await canCreateMonthlyReport(req.user?.role);
+        const allowed = await canSubmitForms(req.user?.role);
         if (!allowed) {
           await t.rollback();
           return res.status(403).json({ success: false, message: "Your role cannot create monthly reports" });
@@ -87,7 +87,7 @@ const makeController = (Model, prefix) => ({
   update: async (req, res, next) => {
     try {
       if (req.user?.role !== "admin") {
-        const allowed = await canCreateMonthlyReport(req.user?.role);
+        const allowed = await canSubmitForms(req.user?.role);
         if (!allowed) {
           return res.status(403).json({ success: false, message: "Your role cannot edit monthly reports" });
         }

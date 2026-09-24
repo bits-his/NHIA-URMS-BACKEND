@@ -125,7 +125,7 @@ const sdoAccess = [
       "Stock Verification Dashboard",
       "Charter Performance",
       "Complaints Management",
-      "HCF Customer Satisfaction",
+      "HCF Customer Satisfaction Survey",
       "Customer Satisfaction Survey",
       "Physical Asset Verification",
       "Verification of Supply",

@@ -83,7 +83,7 @@ function enrichComplaintCodes(body) {
   return out;
 }
 
-/** Match complaints assigned to the logged-in user (name or staff id in stored label). */
+/** Match complaints assigned or escalated/forwarded to the logged-in user. */
 function buildAssigneeWhere(user, Op) {
   if (!user?.name && !user?.staff_id) return null;
   const clauses = [];
@@ -93,8 +93,10 @@ function buildAssigneeWhere(user, Op) {
       clauses.push(
         { officer_assigned: n },
         { assigned_officer: n },
+        { escalated_to: n },
         { officer_assigned: { [Op.like]: `${n}%` } },
         { assigned_officer: { [Op.like]: `${n}%` } },
+        { escalated_to: { [Op.like]: `${n}%` } },
       );
     }
   }
@@ -104,8 +106,10 @@ function buildAssigneeWhere(user, Op) {
       clauses.push(
         { officer_assigned: { [Op.like]: `%(${s})%` } },
         { assigned_officer: { [Op.like]: `%(${s})%` } },
+        { escalated_to: { [Op.like]: `%(${s})%` } },
         { officer_assigned: { [Op.like]: `%${s}%` } },
         { assigned_officer: { [Op.like]: `%${s}%` } },
+        { escalated_to: { [Op.like]: `%${s}%` } },
       );
     }
   }
@@ -140,7 +144,7 @@ async function genComplaintNumber(Model, body, t) {
   const rows = await Model.findAll({
     attributes: ["complaint_number"],
     where: { complaint_number: { [Op.like]: `${prefix}%` } },
-    transaction: t,
+    transaction: t || undefined,
     lock: t?.LOCK?.UPDATE,
   });
 
