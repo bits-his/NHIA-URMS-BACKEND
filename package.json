@@ -15,6 +15,7 @@
     "db:seed-all": "node src/scripts/seedAll.js",
     "db:seed": "node src/scripts/seedAll.js --seeds-only",
     "db:seed-complaint-sla": "node src/scripts/seedComplaintSla.js",
+    "db:seed-linking-dept": "node src/scripts/seedLinkingDepartmentsHeadOfUnit.js",
     "db:seed-servicom-batch": "node src/scripts/runServicomSurveyComplaintCharterSeed.js",
     "db:fix-servicom-fks": "node src/scripts/fixServicomForeignKeys.js",
     "db:sync-servicom-complaints": "node src/scripts/syncServicomComplaintsSchema.js",

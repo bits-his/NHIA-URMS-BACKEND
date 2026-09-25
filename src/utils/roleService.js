@@ -10,6 +10,7 @@ const DEFAULT_ROLES = [
   { key: "state-coordinator",   label: "State Coordinator",   staff_id_prefix: "SC",    report_scope: "state",    can_create_monthly: true,  can_review_monthly: true,  is_system: true },
   { key: "state-officer",       label: "State Officer",       staff_id_prefix: "SO",    report_scope: "state",    can_create_monthly: true,  can_review_monthly: false, is_system: true },
   { key: "department-officer",  label: "Department Officer",  staff_id_prefix: "DO",    report_scope: "state",    can_create_monthly: true,  can_review_monthly: false, is_system: true },
+  { key: "head-of-unit",        label: "Head of Unit",        staff_id_prefix: "HOU",   report_scope: "national", can_create_monthly: true,  can_review_monthly: true,  is_system: true },
 ];
 
 const KEY_RE = /^[a-z][a-z0-9-]*$/;

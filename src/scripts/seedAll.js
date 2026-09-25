@@ -35,6 +35,7 @@ const SEED_STEPS = [
   { script: "src/scripts/seedZonesStates.js", label: "Zones & states" },
   { script: "src/scripts/seedDepartmentsUnits.js", label: "Departments & units" },
   { script: "src/scripts/seedUsers.js", label: "Demo users" },
+  { script: "src/scripts/seedLinkingDepartmentsHeadOfUnit.js", label: "Head of Unit & Linking Dept accounts" },
   { script: "src/scripts/seedDirectorEnforcement.js", label: "Director Enforcement (HOD-0003)" },
   { script: "src/scripts/seedServicomIndicators.js", label: "SERVICOM indicators" },
   { script: "src/scripts/seedServicomData.js", label: "SERVICOM sample data" },
