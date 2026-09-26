@@ -1,5 +1,6 @@
 const sequelize = require("../config/database");
 const { AnnualReport, QuarterlyData, StateOffice, ZonalOffice } = require("../models");
+const { resolveApprovalChainKey, findActiveRole } = require("../utils/roleService");
 
 // ─── Approval chain definition ────────────────────────────────────────────────
 //
@@ -108,25 +109,25 @@ const listReports = async (req, res, next) => {
   try {
     const where = {};
     const role = req.user?.role;
+    const chainKey = await resolveApprovalChainKey(role);
+    const roleDef = await findActiveRole(role);
 
     // Explicit query filters (override role scope if provided by admin/sdo)
     if (req.query.state)  where.state = req.query.state;
     if (req.query.year)   where.reporting_year = req.query.year;
     if (req.query.status) where.status = req.query.status;
 
-    // Role-based scoping
-    if (role === "state-officer" || role === "state-coordinator") {
-      // Scope to the user's state name
+    const scope = roleDef?.report_scope;
+
+    if (scope === "state") {
       if (req.user.state_id && !req.query.state) {
         const stateOffice = await StateOffice.findByPk(req.user.state_id);
         if (stateOffice) where.state = stateOffice.description;
       }
-      // State coordinator only sees submitted+ (not drafts from other officers)
-      if (role === "state-coordinator" && !req.query.status) {
+      if (roleDef?.can_review_monthly && !req.query.status) {
         where.status = ["submitted", "under_review", "zonal_review", "approved", "rejected"];
       }
-    } else if (role === "zonal-coordinator") {
-      // Scope to states in the user's zone
+    } else if (scope === "zonal") {
       if (req.user.zone_id && !req.query.state) {
         const zoneStates = await StateOffice.findAll({
           where: { zonal_id: req.user.zone_id },
@@ -134,13 +135,11 @@ const listReports = async (req, res, next) => {
         });
         const stateNames = zoneStates.map(s => s.description);
         if (stateNames.length) where.state = stateNames;
-        // Zonal coordinator only sees under_review+ (state-coordinator already approved)
-        if (!req.query.status) {
+        if (roleDef?.can_review_monthly && !req.query.status) {
           where.status = ["under_review", "zonal_review", "approved", "rejected"];
         }
       }
-    } else if (role === "sdo") {
-      // SDO sees zonal_review+ (ready for final approval)
+    } else if (chainKey === "sdo") {
       if (!req.query.status) {
         where.status = ["zonal_review", "approved", "rejected"];
       }
@@ -229,7 +228,8 @@ const updateReport = async (req, res, next) => {
 const approveReport = async (req, res, next) => {
   try {
     const role = req.user?.role;
-    const chain = CHAIN[role];
+    const chainKey = await resolveApprovalChainKey(role);
+    const chain = chainKey ? CHAIN[chainKey] : null;
 
     if (!chain) {
       return res.status(403).json({ success: false, message: "Your role cannot approve reports" });
@@ -267,7 +267,8 @@ const approveReport = async (req, res, next) => {
 const rejectReport = async (req, res, next) => {
   try {
     const role = req.user?.role;
-    const chain = CHAIN[role];
+    const chainKey = await resolveApprovalChainKey(role);
+    const chain = chainKey ? CHAIN[chainKey] : null;
 
     if (!chain) {
       return res.status(403).json({ success: false, message: "Your role cannot reject reports" });

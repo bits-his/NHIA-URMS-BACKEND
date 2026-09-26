@@ -1,7 +1,7 @@
 const { Router } = require("express");
 const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
-const { authenticate, authorize } = require("../middleware/auth");
+const { authenticate, authorize, authorizeRoleFlag } = require("../middleware/auth");
 const {
   createReport,
   listReports,
@@ -49,14 +49,14 @@ router.get("/:referenceId", getReport);
 
 // Create — state officers and state coordinators can submit
 router.post("/",
-  authorize("state-officer", "state-coordinator", "admin"),
+  authorizeRoleFlag("can_create_monthly"),
   reportRules, validate,
   createReport
 );
 
 // Update — only on draft/rejected reports
 router.put("/:referenceId",
-  authorize("state-officer", "state-coordinator", "admin"),
+  authorizeRoleFlag("can_create_monthly"),
   reportRules, validate,
   updateReport
 );
@@ -65,7 +65,7 @@ router.put("/:referenceId",
 
 // Approve: state-coordinator → under_review, zonal-coordinator → zonal_review, sdo → approved
 router.patch("/:referenceId/approve",
-  authorize("state-coordinator", "zonal-coordinator", "sdo", "admin"),
+  authorizeRoleFlag("can_review_monthly"),
   body("note").optional().isString(),
   validate,
   approveReport
@@ -73,7 +73,7 @@ router.patch("/:referenceId/approve",
 
 // Reject: any reviewer can reject with a reason
 router.patch("/:referenceId/reject",
-  authorize("state-coordinator", "zonal-coordinator", "sdo", "admin"),
+  authorizeRoleFlag("can_review_monthly"),
   body("reason").notEmpty().withMessage("Rejection reason is required"),
   validate,
   rejectReport

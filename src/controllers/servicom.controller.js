@@ -4,14 +4,15 @@ const { Op } = require("sequelize");
 const sequelize = require("../config/database");
 const {
   MonitoringVisit, ServicomAssessmentIndicator, ServicomAssessmentScore,
-  ServicomKpiRecord, ServicomComplaint, ServicomSatisfactionSurvey, ServicomCommentCard,
+  ServicomKpiRecord, ServicomComplaint, ServicomComplaintComment, ServicomSatisfactionSurvey, ServicomCommentCard,
   ServicomFinding, ServicomRecommendation,
   ServicomEvidence, ServicomAuditLog, ServicomFacility,
   ZonalOffice, StateOffice, User, Department, Unit,
 } = require("../models");
 const { buildServicomListWhere, applyComplaintExtraFilters } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
-const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere } = require("../utils/complaintRegister");
+const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere, buildCreatedOrAssignedWhere, isStateCoordinatorRole, isReportingOfficerRole } = require("../utils/complaintRegister");
+const { nextComplaintNumber, previewComplaintNumber, monthYearParts } = require("../utils/complaintNumber");
 const {
   loadComplaintSlaRules,
   enrichComplaintWithSla,
@@ -511,6 +512,27 @@ module.exports = {
     } catch (err) { next(err); }
   },
 
+  previewComplaintNumber: async (req, res, next) => {
+    try {
+      const stateId = req.query.state_id || req.user?.state_id || null;
+      const against = req.query.against || req.query.complaint_against || "HCF";
+      const dateReceived = req.query.date_received || null;
+      if (!stateId) {
+        return res.json({
+          success: true,
+          data: { complaint_number: previewComplaintNumber(against, null, dateReceived) },
+        });
+      }
+      const complaint_number = await nextComplaintNumber({
+        against,
+        stateId,
+        dateReceived,
+        sequelizeModel: ServicomComplaint,
+      });
+      res.json({ success: true, data: { complaint_number } });
+    } catch (err) { next(err); }
+  },
+
   listComplaints: async (req, res, next) => {
     try {
       const shared = {};
@@ -522,11 +544,30 @@ module.exports = {
       if (req.query.state_id) geo.state_id = req.query.state_id;
       if (req.query.zone_id) geo.zone_id = req.query.zone_id;
 
+      const role = req.user?.role;
       const assignedOnly = req.query.assigned_to_me === "1" || req.query.assigned_to_me === "true";
+      const mineOnly = req.query.mine === "1" || req.query.mine === "true";
       const assigneeWhere = buildAssigneeWhere(req.user, Op);
+      const createdOrAssigned = buildCreatedOrAssignedWhere(req.user, Op);
 
       let where;
-      if (assignedOnly && assigneeWhere) {
+      if (isStateCoordinatorRole(role)) {
+        // State coordinators see every complaint in their state (ignore assigned_to_me).
+        const stateId = req.user?.state_id ?? geo.state_id ?? null;
+        where = {
+          ...shared,
+          state_id: stateId != null ? stateId : -1,
+        };
+        if (req.user?.zone_id) where.zone_id = req.user.zone_id;
+        else if (geo.zone_id) where.zone_id = geo.zone_id;
+      } else if (isReportingOfficerRole(role) || mineOnly) {
+        // Reporting officers: complaints they created OR that are assigned to them.
+        if (!createdOrAssigned) {
+          where = { ...shared, id: -1 };
+        } else {
+          where = { ...shared, ...createdOrAssigned };
+        }
+      } else if (assignedOnly && assigneeWhere) {
         where = { ...shared, ...assigneeWhere };
       } else if (assigneeWhere && Object.keys(geo).length) {
         where = { ...shared, [Op.or]: [geo, assigneeWhere] };
@@ -576,27 +617,33 @@ module.exports = {
   createComplaint: async (req, res, next) => {
     const t = await sequelize.transaction();
     try {
-      let complaint_number = String(req.body.complaint_number || "").trim();
-      if (complaint_number) {
-        const existing = await ServicomComplaint.findOne({ where: { complaint_number }, transaction: t });
-        if (existing) {
-          await t.rollback();
-          return res.status(400).json({ success: false, message: "Complaint ID already exists" });
-        }
-      } else {
-        complaint_number = await genRefId(ServicomComplaint, "CMP", t, "complaint_number");
+      const state_id = req.body.state_id ?? req.user?.state_id ?? null;
+      if (!state_id) {
+        await t.rollback();
+        return res.status(400).json({ success: false, message: "State is required to generate a complaint ID" });
       }
+      const dateReceived = req.body.date_received || req.body.complaint_date || null;
+      const { month, year } = monthYearParts(dateReceived);
+      const complaint_number = await nextComplaintNumber({
+        against: req.body.complaint_against || req.body.complaint_type || "HCF",
+        stateId: state_id,
+        dateReceived,
+        sequelizeModel: ServicomComplaint,
+        transaction: t,
+      });
       const metrics = await computeComplaintMetrics(req.body);
       const row = await ServicomComplaint.create({
-        complaint_number,
         ...pickComplaintFields(req.body),
         ...enrichComplaintCodes(req.body),
         ...metrics,
+        complaint_number,
         zone_id: req.body.zone_id ?? req.user?.zone_id ?? null,
-        state_id: req.body.state_id ?? req.user?.state_id ?? null,
-        reporting_year: req.body.reporting_year ?? new Date().getFullYear(),
+        state_id,
+        reporting_month: req.body.reporting_month ?? month,
+        reporting_year: req.body.reporting_year ?? year,
         escalated: !!req.body.escalated,
         created_by: req.user?.name || null,
+        created_by_staff_id: req.user?.staff_id || null,
       }, { transaction: t });
       await logAudit("servicom_complaint", row.id, "created", req.user?.name, null, t);
       await t.commit();
@@ -620,6 +667,37 @@ module.exports = {
       await logAudit("servicom_complaint", row.id, "updated", req.user?.name, req.body);
       const rulesMap = await loadComplaintSlaRules(true);
       res.json({ success: true, data: await enrichComplaintWithSla(row, rulesMap) });
+    } catch (err) { next(err); }
+  },
+
+  listComplaintComments: async (req, res, next) => {
+    try {
+      const complaint = await ServicomComplaint.findByPk(req.params.id, { attributes: ["id"] });
+      if (!complaint) return res.status(404).json({ success: false, message: "Complaint not found" });
+      const data = await ServicomComplaintComment.findAll({
+        where: { complaint_id: req.params.id },
+        order: [["created_at", "ASC"]],
+      });
+      res.json({ success: true, data });
+    } catch (err) { next(err); }
+  },
+
+  addComplaintComment: async (req, res, next) => {
+    try {
+      const body = String(req.body?.body ?? req.body?.comment ?? "").trim();
+      if (!body) {
+        return res.status(400).json({ success: false, message: "Comment is required" });
+      }
+      const complaint = await ServicomComplaint.findByPk(req.params.id, { attributes: ["id"] });
+      if (!complaint) return res.status(404).json({ success: false, message: "Complaint not found" });
+      const row = await ServicomComplaintComment.create({
+        complaint_id: complaint.id,
+        body,
+        created_by: req.user?.name || null,
+        created_by_staff_id: req.user?.staff_id || null,
+      });
+      await logAudit("servicom_complaint", complaint.id, "comment_added", req.user?.name, { comment_id: row.id });
+      res.status(201).json({ success: true, data: row });
     } catch (err) { next(err); }
   },
 

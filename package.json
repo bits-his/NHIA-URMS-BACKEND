@@ -11,7 +11,7 @@
     "db:update-store": "node src/scripts/updateStoreDb.js",
     "db:seed-store": "node src/scripts/seedStoreManagement.js",
     "db:seed-all": "node src/scripts/seedAll.js",
-    "db:seed": "node src/scripts/seedAll.js --seeds-only",
+    "db:reset-org": "node src/scripts/resetOrgKeepAdminSdo.js",
     "db:seed-complaint-sla": "node src/scripts/seedComplaintSla.js",
     "db:seed-servicom-batch": "node src/scripts/runServicomSurveyComplaintCharterSeed.js",
     "db:fix-servicom-fks": "node src/scripts/fixServicomForeignKeys.js",

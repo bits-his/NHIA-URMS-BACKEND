@@ -1,6 +1,7 @@
 const sequelize = require("../config/database");
 const { FinanceMonthlyReport, ProgrammesMonthlyReport, SqaMonthlyReport, StateOffice } = require("../models");
 const { buildMonthlyListWhere } = require("../utils/monthlyReportScope");
+const { resolveApprovalChainKey } = require("../utils/roleService");
 
 const MONTH_NAMES = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -89,7 +90,8 @@ const makeController = (Model, prefix) => ({
   approve: async (req, res, next) => {
     try {
       const role = req.user?.role;
-      const chain = CHAIN[role];
+      const chainKey = await resolveApprovalChainKey(role);
+      const chain = chainKey ? CHAIN[chainKey] : null;
       if (!chain) return res.status(403).json({ success: false, message: "Your role cannot approve reports" });
 
       const record = await Model.findByPk(req.params.id);
@@ -117,7 +119,8 @@ const makeController = (Model, prefix) => ({
   reject: async (req, res, next) => {
     try {
       const role = req.user?.role;
-      const chain = CHAIN[role];
+      const chainKey = await resolveApprovalChainKey(role);
+      const chain = chainKey ? CHAIN[chainKey] : null;
       if (!chain) return res.status(403).json({ success: false, message: "Your role cannot reject reports" });
 
       const record = await Model.findByPk(req.params.id);

@@ -1,15 +1,14 @@
 const { Role, User } = require("../models");
+const { DEPARTMENT_ROLES } = require("./departmentRoleAccess");
+
+const CORE_ROLES = [
+  { key: "admin", label: "Admin", staff_id_prefix: "ADMIN", report_scope: "national", can_create_monthly: true,  can_review_monthly: true,  is_system: true },
+  { key: "sdo",   label: "SDO",   staff_id_prefix: "SDO",   report_scope: "national", can_create_monthly: false, can_review_monthly: true,  is_system: true },
+];
 
 const DEFAULT_ROLES = [
-  { key: "admin",               label: "Admin",               staff_id_prefix: "ADMIN", report_scope: "national", can_create_monthly: true,  can_review_monthly: true,  is_system: true },
-  { key: "sdo",                 label: "SDO",                 staff_id_prefix: "SDO",   report_scope: "national", can_create_monthly: false, can_review_monthly: true,  is_system: true },
-  { key: "hq-department",       label: "HQ Department",       staff_id_prefix: "HQ",    report_scope: "national", can_create_monthly: false, can_review_monthly: false, is_system: true },
-  { key: "dg-ceo",              label: "DG-CEO",              staff_id_prefix: "DG",    report_scope: "national", can_create_monthly: false, can_review_monthly: false, is_system: true },
-  { key: "zonal-coordinator",   label: "Zonal Coordinator",   staff_id_prefix: "ZC",    report_scope: "zonal",    can_create_monthly: false, can_review_monthly: true,  is_system: true },
-  { key: "zonal-officer",       label: "Zonal Officer",       staff_id_prefix: "ZO",    report_scope: "zonal",    can_create_monthly: true,  can_review_monthly: false, is_system: true },
-  { key: "state-coordinator",   label: "State Coordinator",   staff_id_prefix: "SC",    report_scope: "state",    can_create_monthly: true,  can_review_monthly: true,  is_system: true },
-  { key: "state-officer",       label: "State Officer",       staff_id_prefix: "SO",    report_scope: "state",    can_create_monthly: true,  can_review_monthly: false, is_system: true },
-  { key: "department-officer",  label: "Department Officer",  staff_id_prefix: "DO",    report_scope: "state",    can_create_monthly: true,  can_review_monthly: false, is_system: true },
+  ...CORE_ROLES,
+  ...DEPARTMENT_ROLES.map(({ department_code, ...role }) => role),
 ];
 
 const KEY_RE = /^[a-z][a-z0-9-]*$/;
@@ -55,10 +54,25 @@ async function seedDefaultRoles() {
         report_scope: r.report_scope,
         can_create_monthly: r.can_create_monthly,
         can_review_monthly: r.can_review_monthly,
+        description: r.description ?? role.description,
         is_system: true,
       });
     }
   }
+}
+
+/** Map any role onto the SC → ZC → SDO approval step. */
+async function resolveApprovalChainKey(roleKey) {
+  if (!roleKey) return null;
+  if (roleKey === "state-coordinator" || roleKey === "zonal-coordinator" || roleKey === "sdo") {
+    return roleKey;
+  }
+  const role = await findActiveRole(roleKey);
+  if (!role) return null;
+  if (role.report_scope === "state" && role.can_review_monthly) return "state-coordinator";
+  if (role.report_scope === "zonal" && role.can_review_monthly) return "zonal-coordinator";
+  if (role.report_scope === "national" && role.can_review_monthly && !role.can_create_monthly) return "sdo";
+  return null;
 }
 
 module.exports = {
@@ -69,4 +83,5 @@ module.exports = {
   validateRoleKey,
   generateStaffId,
   seedDefaultRoles,
+  resolveApprovalChainKey,
 };

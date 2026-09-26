@@ -27,6 +27,14 @@ const ZONAL_CANONICAL = new Set([
   "IGR",
   "SSHIA Financial Report",
   "Expenditure Profile",
+  "ICT Support",
+  "Meetings",
+  "ETMC Cascading",
+  "Accommodation",
+  "Utilities",
+  "Vehicles",
+  "Staff Feedback",
+  "Infractions",
 ]);
 
 const LEGACY_TO_CANONICAL = {
@@ -181,7 +189,18 @@ function renameOthersToZonal(access) {
           ? [...access[zonalIdx].functionalities]
           : [];
         let funcChanged = false;
-        for (const f of ["Additional / Extra Dependant", "Change of HCF"]) {
+        for (const f of [
+          "Additional / Extra Dependant",
+          "Change of HCF",
+          "ICT Support",
+          "Meetings",
+          "ETMC Cascading",
+          "Accommodation",
+          "Utilities",
+          "Vehicles",
+          "Staff Feedback",
+          "Infractions",
+        ]) {
           if (!funcs.includes(f)) {
             funcs.push(f);
             funcChanged = true;

@@ -111,6 +111,53 @@ function buildAssigneeWhere(user, Op) {
   return clauses.length ? { [Op.or]: clauses } : null;
 }
 
+/** Match complaints created by the logged-in user. */
+function buildCreatorWhere(user, Op) {
+  if (!user?.name && !user?.staff_id) return null;
+  const clauses = [];
+  if (user.name) {
+    const n = String(user.name).trim();
+    if (n) {
+      clauses.push(
+        { created_by: n },
+        { created_by: { [Op.like]: `${n}%` } },
+      );
+    }
+  }
+  if (user.staff_id) {
+    const s = String(user.staff_id).trim();
+    if (s) {
+      clauses.push(
+        { created_by_staff_id: s },
+        { created_by: { [Op.like]: `%(${s})%` } },
+      );
+    }
+  }
+  return clauses.length ? { [Op.or]: clauses } : null;
+}
+
+function isStateCoordinatorRole(role) {
+  const r = String(role || "");
+  return r === "state-coordinator" || r.endsWith("-state-coordinator");
+}
+
+function isReportingOfficerRole(role) {
+  const r = String(role || "");
+  return r === "reporting-officer" || r.endsWith("-reporting-officer");
+}
+
+/** Combine assignee + creator OR clauses for inbox/mine scope. */
+function buildCreatedOrAssignedWhere(user, Op) {
+  const parts = [];
+  const assignee = buildAssigneeWhere(user, Op);
+  const creator = buildCreatorWhere(user, Op);
+  if (assignee?.[Op.or]) parts.push(...assignee[Op.or]);
+  else if (assignee) parts.push(assignee);
+  if (creator?.[Op.or]) parts.push(...creator[Op.or]);
+  else if (creator) parts.push(creator);
+  return parts.length ? { [Op.or]: parts } : null;
+}
+
 function pickComplaintFields(body) {
   const fields = [
     "complaint_number", "zone_id", "state_id", "reporting_month", "reporting_year", "entry_date",
@@ -136,6 +183,10 @@ module.exports = {
   computeComplaintMetrics,
   computeComplaintMetricsSync,
   buildAssigneeWhere,
+  buildCreatorWhere,
+  buildCreatedOrAssignedWhere,
+  isStateCoordinatorRole,
+  isReportingOfficerRole,
   pickComplaintFields,
   enrichComplaintCodes,
   daysBetween,

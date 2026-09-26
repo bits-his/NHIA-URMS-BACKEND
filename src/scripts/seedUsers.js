@@ -78,6 +78,14 @@ const zonalAccess = [{
     "IGR",
     "SSHIA Financial Report",
     "Expenditure Profile",
+    "ICT Support",
+    "Meetings",
+    "ETMC Cascading",
+    "Accommodation",
+    "Utilities",
+    "Vehicles",
+    "Staff Feedback",
+    "Infractions",
   ],
 }];
 
@@ -297,7 +305,14 @@ async function buildUserSpecs(deptMap, unitMap) {
     console.log("✅  DB connected\n");
 
     await seedDefaultRoles();
-    console.log("✅  Roles synced (department-officer can now submit monthly reports)\n");
+
+    if (!process.argv.includes("--demo-users")) {
+      console.log("ℹ️   Skipping bulk demo users so ADMIN001 and SDO-0001 stay the only accounts.");
+      console.log("    Pass --demo-users to seed the old sample coordinators/officers.\n");
+      process.exit(0);
+    }
+
+    console.log("✅  Roles synced\n");
 
     await removeLegacyPilotUsers();
 

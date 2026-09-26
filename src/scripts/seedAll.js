@@ -30,11 +30,13 @@ const MIGRATE_STEPS = [
   { script: "src/scripts/updateStoreDb.js", label: "Store / Asset Management schema" },
 ];
 
+const demoUsers = process.argv.includes("--demo-users");
+
 const SEED_STEPS = [
   { script: "src/scripts/seedZonesStates.js", label: "Zones & states" },
   { script: "src/scripts/seedDepartmentsUnits.js", label: "Departments & units" },
-  { script: "src/scripts/seedUsers.js", label: "Demo users" },
-  { script: "src/scripts/seedDirectorEnforcement.js", label: "Director Enforcement (HOD-0003)" },
+  { script: "src/scripts/seedUsers.js", label: "Demo users", forwardDemo: true },
+  { script: "src/scripts/seedDirectorEnforcement.js", label: "Director Enforcement (HOD-0003)", demoOnly: true },
   { script: "src/scripts/seedServicomIndicators.js", label: "SERVICOM indicators" },
   { script: "src/scripts/seedServicomData.js", label: "SERVICOM sample data" },
   { script: "src/scripts/seedComplaintSla.js", label: "Complaint SLA rules + demo complaints" },
@@ -66,7 +68,13 @@ const steps = seedsOnly
 
 function runStep(step) {
   console.log(`\n── ${step.label} ──`);
-  const result = spawnSync(node, [step.script], {
+  if (step.demoOnly && !demoUsers) {
+    console.log("ℹ️   Skipped (pass --demo-users to seed demo accounts)\n");
+    return;
+  }
+  const args = [step.script];
+  if (step.forwardDemo && demoUsers) args.push("--demo-users");
+  const result = spawnSync(node, args, {
     cwd: ROOT,
     stdio: "inherit",
     env: process.env,

@@ -70,7 +70,8 @@ async function buildMonthlyListWhere(user, query, StateOffice) {
       return where;
     }
     where.state_id = userStateId;
-    if (roleKey === "state-coordinator" && !query.status) {
+    const roleDef = await findActiveRole(roleKey);
+    if (roleDef?.can_review_monthly && !query.status) {
       where.status = { [Op.in]: STATUS.INBOX_COORDINATOR };
     }
     return where;

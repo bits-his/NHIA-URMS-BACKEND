@@ -7,7 +7,7 @@ const {
   listStates, createState, updateState, deleteState,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listUnits, createUnit, updateUnit, deleteUnit,
-  listRoles, createRole, updateRole, deleteRole,
+  listRoles, createRole, updateRole, deleteRole, getAccessTemplate,
 } = require("../controllers/admin.controller");
 
 const router = Router();
@@ -99,6 +99,7 @@ router.put("/units/:id",     updateUnit);
 router.delete("/units/:id",  deleteUnit);
 
 // Roles (write)
+router.get("/access-template", getAccessTemplate);
 router.post("/roles",        createRole);
 router.put("/roles/:id",     updateRole);
 router.delete("/roles/:id",  deleteRole);

@@ -18,6 +18,7 @@ const MonitoringVisit             = require("./MonitoringVisit");
 const ServicomAssessmentScore     = require("./ServicomAssessmentScore");
 const ServicomKpiRecord           = require("./ServicomKpiRecord");
 const ServicomComplaint           = require("./ServicomComplaint");
+const ServicomComplaintComment    = require("./ServicomComplaintComment");
 const ComplaintSlaRule            = require("./ComplaintSlaRule");
 const ServicomFinding             = require("./ServicomFinding");
 const ServicomRecommendation      = require("./ServicomRecommendation");
@@ -252,6 +253,8 @@ ServicomFacility.hasMany(ServicomComplaint, { foreignKey: "facility_id", as: "co
 ServicomComplaint.belongsTo(ServicomFacility, { foreignKey: "facility_id", as: "facility"  });
 MonitoringVisit.hasMany(ServicomComplaint, { foreignKey: "visit_id", as: "complaints" });
 ServicomComplaint.belongsTo(MonitoringVisit, { foreignKey: "visit_id", as: "visit" });
+ServicomComplaint.hasMany(ServicomComplaintComment, { foreignKey: "complaint_id", as: "comments" });
+ServicomComplaintComment.belongsTo(ServicomComplaint, { foreignKey: "complaint_id", as: "complaint" });
 
 ZonalOffice.hasMany(ServicomSatisfactionSurvey,   { foreignKey: "zone_id",  as: "servicom_satisfaction_surveys" });
 ServicomSatisfactionSurvey.belongsTo(ZonalOffice,  { foreignKey: "zone_id",  as: "zone" });
@@ -291,7 +294,7 @@ module.exports = {
   StockAsset, StockVerification, StockVerificationItem,
   FinanceMonthlyReport, ProgrammesMonthlyReport, SqaMonthlyReport,
   ServicomAssessmentIndicator, ServicomFacility, MonitoringVisit,
-  ServicomAssessmentScore, ServicomKpiRecord, ServicomComplaint, ComplaintSlaRule,
+  ServicomAssessmentScore, ServicomKpiRecord, ServicomComplaint, ServicomComplaintComment, ComplaintSlaRule,
   ServicomFinding, ServicomRecommendation, ServicomEvidence, ServicomAuditLog,
   ServicomSatisfactionSurvey, ServicomCommentCard,
   EnrolmentReport, EnrolmentReportLine, MigrationReport, MigrationReportLine,

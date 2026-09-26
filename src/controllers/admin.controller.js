@@ -2,6 +2,7 @@ const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
 const { User, ZonalOffice, StateOffice, Department, Unit, Role } = require("../models");
 const { validateRoleKey, generateStaffId, KEY_RE, slugify } = require("../utils/roleService");
+const { getDefaultAccess, getDepartmentCodeForRole } = require("../utils/departmentRoleAccess");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const paginate = (query) => {
@@ -100,10 +101,31 @@ const createUser = async (req, res, next) => {
     }
     const staff_id = await generateStaffId(role);
     const hashed = await bcrypt.hash(password, 12);
+
+    let departmentId = department_id || null;
+    if (!departmentId) {
+      const deptCode = getDepartmentCodeForRole(role);
+      if (deptCode) {
+        const dept = await Department.findOne({ where: { department_code: deptCode } });
+        if (dept) departmentId = dept.id;
+      }
+    }
+
+    let unitCode = null;
+    if (unit_id) {
+      const unit = await Unit.findByPk(unit_id);
+      unitCode = unit?.unit_code || null;
+    }
+
+    let accessPayload = Array.isArray(access) ? access : [];
+    if (!accessPayload.length) {
+      accessPayload = getDefaultAccess(role, unitCode) || [];
+    }
+
     const user = await User.create({
       name, staff_id, email, password: hashed, role,
-      zone_id, state_id, department_id, unit_id,
-      functionalities: Array.isArray(access) ? access : [],
+      zone_id, state_id, department_id: departmentId, unit_id,
+      functionalities: accessPayload,
     });
     const { password: _pw, ...data } = user.toJSON();
     res.status(201).json({ success: true, data });
@@ -396,7 +418,13 @@ const listRoles = async (req, res, next) => {
     const where = {};
     if (req.query.active === "true") where.is_active = true;
     const roles = await Role.findAll({ where, order: [["label", "ASC"]] });
-    res.json({ success: true, data: roles });
+    const data = roles.map((r) => {
+      const json = r.toJSON();
+      json.department_code = getDepartmentCodeForRole(json.key);
+      json.default_access = getDefaultAccess(json.key);
+      return json;
+    });
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 };
 
@@ -473,13 +501,28 @@ const deleteRole = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const getAccessTemplate = async (req, res, next) => {
+  try {
+    const roleKey = String(req.query.role || "");
+    const unitCode = req.query.unit_code ? String(req.query.unit_code) : undefined;
+    if (!roleKey) {
+      return res.status(400).json({ success: false, message: "role is required" });
+    }
+    res.json({
+      success: true,
+      data: getDefaultAccess(roleKey, unitCode) || [],
+      department_code: getDepartmentCodeForRole(roleKey),
+    });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   listUsers, getUser, createUser, updateUser, deactivateUser, activateUser, updatePrivileges,
   listZones, createZone, updateZone, deleteZone,
   listStates, createState, updateState, deleteState,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listUnits, createUnit, updateUnit, deleteUnit,
-  listRoles, createRole, updateRole, deleteRole,
+  listRoles, createRole, updateRole, deleteRole, getAccessTemplate,
 };
 
 const notFound = (res, entity) =>

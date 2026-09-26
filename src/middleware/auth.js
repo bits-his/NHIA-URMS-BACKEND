@@ -30,4 +30,19 @@ const authorize = (...roles) => (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, authorize, JWT_SECRET };
+/** Allow admin, listed extras, or any active role with the given flag. */
+const authorizeRoleFlag = (flag, extraKeys = []) => async (req, res, next) => {
+  try {
+    const key = req.user?.role;
+    if (!key) return res.status(403).json({ success: false, message: "Access denied" });
+    if (key === "admin" || extraKeys.includes(key)) return next();
+    const { findActiveRole } = require("../utils/roleService");
+    const role = await findActiveRole(key);
+    if (role?.[flag]) return next();
+    return res.status(403).json({ success: false, message: "Access denied" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { authenticate, authorize, authorizeRoleFlag, JWT_SECRET };

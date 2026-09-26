@@ -61,6 +61,7 @@ const ServicomComplaint = sequelize.define("ServicomComplaint", {
   resolution_notes: { type: DataTypes.TEXT, allowNull: true },
   resolution_date:  { type: DataTypes.DATEONLY, allowNull: true },
   created_by:       { type: DataTypes.STRING(100), allowNull: true },
+  created_by_staff_id: { type: DataTypes.STRING(50), allowNull: true },
 }, { tableName: "servicom_complaints", modelName: "ServicomComplaint" });
 
 module.exports = ServicomComplaint;
