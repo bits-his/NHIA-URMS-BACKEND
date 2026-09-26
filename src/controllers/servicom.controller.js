@@ -13,6 +13,7 @@ const { buildServicomListWhere, applyComplaintExtraFilters } = require("../utils
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
 const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere, buildCreatedOrAssignedWhere, isStateCoordinatorRole, isReportingOfficerRole } = require("../utils/complaintRegister");
 const { nextComplaintNumber, previewComplaintNumber, monthYearParts } = require("../utils/complaintNumber");
+const { notifyOfficerLabel } = require("../utils/notify");
 const {
   loadComplaintSlaRules,
   enrichComplaintWithSla,
@@ -291,6 +292,10 @@ const SATISFACTION_QUESTIONS = [
   { id: "Q11", category: "INFORMATION" },
   { id: "Q12", category: "PROFESSIONALISM" },
   { id: "Q13", category: "PROFESSIONALISM" },
+  { id: "Q14", category: "PROFESSIONALISM" },
+  { id: "Q15", category: "STAFF ATTITUDE" },
+  { id: "Q16", category: "STAFF ATTITUDE" },
+  { id: "Q17", category: "STAFF ATTITUDE" },
 ];
 
 const COMMENT_CARD_QUESTIONS = [
@@ -459,17 +464,61 @@ module.exports = {
 
   listInvestigatingOfficers: async (req, res, next) => {
     try {
-      const where = { is_active: true };
+      const escalationLevel = String(req.query.escalation_level || "").trim();
+      /** Registration "Assign To" — all active users. Escalation filters by level. */
+      const assignMode = !escalationLevel;
+
+      const and = [{ is_active: true }];
       if (req.query.q) {
-        where[Op.or] = [
-          { name: { [Op.like]: `%${req.query.q}%` } },
-          { staff_id: { [Op.like]: `%${req.query.q}%` } },
-        ];
+        and.push({
+          [Op.or]: [
+            { name: { [Op.like]: `%${req.query.q}%` } },
+            { staff_id: { [Op.like]: `%${req.query.q}%` } },
+          ],
+        });
+      }
+
+      const stateId = req.query.state_id || req.user?.state_id;
+      const zoneId = req.query.zone_id || req.user?.zone_id;
+
+      const enfDepts = await Department.findAll({
+        where: {
+          [Op.or]: [
+            { department_code: { [Op.in]: ["ENF", "AUD"] } },
+            { name: { [Op.like]: "%Enforcement%" } },
+          ],
+        },
+        attributes: ["id"],
+      });
+      const enfDeptIds = enfDepts.map((d) => d.id);
+
+      const enfUnitWhere = [
+        { unit_code: { [Op.like]: "ENF%" } },
+        { unit_code: "AUD-COMP" },
+        { name: { [Op.like]: "%Enforcement%" } },
+        { name: { [Op.like]: "%compliance & enforcement%" } },
+      ];
+      if (enfDeptIds.length) enfUnitWhere.push({ department_id: { [Op.in]: enfDeptIds } });
+
+      const enfUnits = await Unit.findAll({
+        where: { [Op.or]: enfUnitWhere },
+        attributes: ["id"],
+      });
+      const enfUnitIds = enfUnits.map((u) => u.id);
+
+      // Escalation: scope candidates by level geo
+      if (!assignMode) {
+        if (escalationLevel === "State Internal" && stateId) {
+          and.push({ state_id: stateId });
+        } else if (escalationLevel === "Zonal Office" && zoneId) {
+          and.push({ zone_id: zoneId });
+        }
+        // NHIA Headquarters: no geo lock
       }
 
       const rows = await User.findAll({
-        where,
-        attributes: ["id", "name", "staff_id", "role", "functionalities", "department_id", "unit_id"],
+        where: { [Op.and]: and },
+        attributes: ["id", "name", "staff_id", "role", "functionalities", "department_id", "unit_id", "state_id", "zone_id"],
         include: [
           { model: Department, as: "department", attributes: ["id", "name", "department_code"], required: false },
           { model: Unit, as: "unit", attributes: ["id", "name", "unit_code"], required: false },
@@ -480,7 +529,7 @@ module.exports = {
 
       const assignableRoles = new Set([
         "state-officer", "state-coordinator", "zonal-coordinator",
-        "department-officer", "hq-department", "sdo", "admin",
+        "department-officer", "hq-department", "sdo", "admin", "reporting-officer",
       ]);
 
       const hasComplaintsAccess = (functionalities) => {
@@ -495,14 +544,56 @@ module.exports = {
         });
       };
 
+      const isEnforcementDept = (u) => {
+        if (enfDeptIds.includes(u.department_id)) return true;
+        if (enfUnitIds.includes(u.unit_id)) return true;
+        const deptCode = String(u.department?.department_code || "").toUpperCase();
+        const unitCode = String(u.unit?.unit_code || "").toUpperCase();
+        const deptName = String(u.department?.name || "").toLowerCase();
+        const unitName = String(u.unit?.name || "").toLowerCase();
+        if (deptCode === "AUD" || deptCode === "ENF") return true;
+        if (unitCode === "AUD-COMP" || unitCode.startsWith("ENF")) return true;
+        if (deptName.includes("enforcement") || unitName.includes("enforcement")) return true;
+        if (unitName.includes("compliance & enforcement")) return true;
+        return false;
+      };
+
+      const matchesEscalationLevel = (u) => {
+        if (!escalationLevel) return true;
+        if (escalationLevel === "State Internal") {
+          return ["state-officer", "state-coordinator"].includes(u.role) || isEnforcementDept(u) || hasComplaintsAccess(u.functionalities);
+        }
+        if (escalationLevel === "Zonal Office") {
+          return u.role === "zonal-coordinator" || isEnforcementDept(u) || hasComplaintsAccess(u.functionalities);
+        }
+        if (escalationLevel === "NHIA Headquarters") {
+          return ["hq-department", "department-officer", "sdo", "admin"].includes(u.role) || isEnforcementDept(u);
+        }
+        return isEnforcementDept(u) || hasComplaintsAccess(u.functionalities);
+      };
+
       const data = rows
         .map((row) => row.toJSON())
-        .filter((u) => assignableRoles.has(u.role) || hasComplaintsAccess(u.functionalities))
+        .filter((u) => {
+          // Assign To: every active user
+          if (assignMode) return true;
+          // Escalation: role/geo-appropriate candidates
+          return (assignableRoles.has(u.role) || hasComplaintsAccess(u.functionalities) || isEnforcementDept(u))
+            && matchesEscalationLevel(u);
+        })
+        .sort((a, b) => {
+          const aEnf = isEnforcementDept(a) ? 0 : 1;
+          const bEnf = isEnforcementDept(b) ? 0 : 1;
+          if (aEnf !== bEnf) return aEnf - bEnf;
+          return String(a.name || "").localeCompare(String(b.name || ""));
+        })
         .map((u) => ({
           id: u.id,
           name: u.name,
           staff_id: u.staff_id,
           role: u.role,
+          state_id: u.state_id ?? null,
+          zone_id: u.zone_id ?? null,
           department: u.department?.name ?? null,
           department_code: u.department?.department_code ?? null,
           unit: u.unit?.name ?? null,
@@ -647,6 +738,16 @@ module.exports = {
       }, { transaction: t });
       await logAudit("servicom_complaint", row.id, "created", req.user?.name, null, t);
       await t.commit();
+      if (row.officer_assigned) {
+        await notifyOfficerLabel(row.officer_assigned, {
+          title: "Complaint assigned to you",
+          body: `${row.complaint_number || "A complaint"} has been assigned to you for investigation.`,
+          type: "alert",
+          link: "/sdo/servicom/complaints",
+          entity_type: "servicom_complaint",
+          entity_id: row.id,
+        }).catch(() => {});
+      }
       const rulesMap = await loadComplaintSlaRules(true);
       res.status(201).json({ success: true, data: await enrichComplaintWithSla(row, rulesMap) });
     } catch (err) { await t.rollback(); next(err); }
@@ -656,8 +757,17 @@ module.exports = {
     try {
       const row = await ServicomComplaint.findByPk(req.params.id);
       if (!row) return res.status(404).json({ success: false, message: "Complaint not found" });
+      const prevOfficer = row.officer_assigned || row.assigned_officer;
       const merged = { ...row.toJSON(), ...req.body };
       const metrics = await computeComplaintMetrics(merged);
+
+      // Escalation hands the complaint to the escalation officer
+      const becomingEscalated = req.body.escalated === true || req.body.escalated === "true" || req.body.escalated === 1;
+      if (becomingEscalated && req.body.escalated_to) {
+        metrics.officer_assigned = req.body.escalated_to;
+        metrics.assigned_officer = req.body.escalated_to;
+      }
+
       await row.update({
         ...pickComplaintFields(req.body),
         ...enrichComplaintCodes(merged),
@@ -665,6 +775,21 @@ module.exports = {
         escalated: req.body.escalated !== undefined ? !!req.body.escalated : row.escalated,
       });
       await logAudit("servicom_complaint", row.id, "updated", req.user?.name, req.body);
+
+      const nextOfficer = row.officer_assigned || row.assigned_officer;
+      if (nextOfficer && nextOfficer !== prevOfficer) {
+        await notifyOfficerLabel(nextOfficer, {
+          title: becomingEscalated ? "Complaint escalated to you" : "Complaint assigned to you",
+          body: becomingEscalated
+            ? `${row.complaint_number || "A complaint"} was escalated to you (${req.body.escalation_level || "escalation"}). Immediate attention required.`
+            : `${row.complaint_number || "A complaint"} has been assigned to you.`,
+          type: becomingEscalated ? "directive" : "alert",
+          link: "/sdo/servicom/complaints",
+          entity_type: "servicom_complaint",
+          entity_id: row.id,
+        }).catch(() => {});
+      }
+
       const rulesMap = await loadComplaintSlaRules(true);
       res.json({ success: true, data: await enrichComplaintWithSla(row, rulesMap) });
     } catch (err) { next(err); }
@@ -703,9 +828,10 @@ module.exports = {
 
   dashboard: async (req, res, next) => {
     try {
-      const geoWhere = {};
-      if (req.query.state_id) geoWhere.state_id = req.query.state_id;
-      if (req.query.zone_id) geoWhere.zone_id = req.query.zone_id;
+      const geoWhere = await buildServicomListWhere(req.user, {
+        state_id: req.query.state_id,
+        zone_id: req.query.zone_id,
+      });
 
       const complaintWhere = applyComplaintExtraFilters({ ...geoWhere }, req.query);
 
@@ -856,9 +982,10 @@ module.exports = {
 
   listSatisfactionSurveys: async (req, res, next) => {
     try {
-      const where = {};
-      if (req.query.state_id) where.state_id = req.query.state_id;
-      if (req.query.zone_id) where.zone_id = req.query.zone_id;
+      const where = await buildServicomListWhere(req.user, {
+        state_id: req.query.state_id,
+        zone_id: req.query.zone_id,
+      });
       const rows = await ServicomSatisfactionSurvey.findAll({
         where,
         include: [
@@ -940,9 +1067,10 @@ module.exports = {
 
   listCommentCards: async (req, res, next) => {
     try {
-      const where = {};
-      if (req.query.state_id) where.state_id = req.query.state_id;
-      if (req.query.zone_id) where.zone_id = req.query.zone_id;
+      const where = await buildServicomListWhere(req.user, {
+        state_id: req.query.state_id,
+        zone_id: req.query.zone_id,
+      });
       const rows = await ServicomCommentCard.findAll({
         where,
         include: [

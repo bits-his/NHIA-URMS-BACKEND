@@ -1,7 +1,7 @@
 const { Router } = require("express");
 const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
-const { authenticate, authorize, authorizeRoleFlag } = require("../middleware/auth");
+const { authenticate, authorize, requireCreateAccess, requireReviewAccess } = require("../middleware/auth");
 const ctrl = require("../controllers/monthlyReport.controller");
 
 const router = Router();
@@ -15,37 +15,34 @@ const baseRules = [
   body("reporting_month").isInt({ min: 1, max: 12 }).withMessage("Month must be 1-12"),
 ];
 
-const reviewers = authorizeRoleFlag("can_review_monthly");
-const submitters = authorizeRoleFlag("can_create_monthly");
-
 // ── Finance ───────────────────────────────────────────────────────────────────
 router.get("/finance",                ctrl.finance.list);
 router.get("/finance/aggregate",      ctrl.finance.aggregate);
 router.get("/finance/:id",            ctrl.finance.get);
-router.post("/finance",               submitters, baseRules, validate, ctrl.finance.create);
-router.put("/finance/:id",            submitters, ctrl.finance.update);
-router.patch("/finance/:id/approve",  reviewers, body("note").optional(), validate, ctrl.finance.approve);
-router.patch("/finance/:id/reject",   reviewers, body("reason").notEmpty(), validate, ctrl.finance.reject);
+router.post("/finance",               requireCreateAccess, baseRules, validate, ctrl.finance.create);
+router.put("/finance/:id",            requireCreateAccess, ctrl.finance.update);
+router.patch("/finance/:id/approve",  requireReviewAccess, body("note").optional(), validate, ctrl.finance.approve);
+router.patch("/finance/:id/reject",   requireReviewAccess, body("reason").notEmpty(), validate, ctrl.finance.reject);
 router.patch("/finance/:id/status",   authorize("admin"), body("status").notEmpty(), validate, ctrl.finance.updateStatus);
 
 // ── Programmes ────────────────────────────────────────────────────────────────
 router.get("/programmes",                ctrl.programmes.list);
 router.get("/programmes/aggregate",      ctrl.programmes.aggregate);
 router.get("/programmes/:id",            ctrl.programmes.get);
-router.post("/programmes",               submitters, baseRules, validate, ctrl.programmes.create);
-router.put("/programmes/:id",            submitters, ctrl.programmes.update);
-router.patch("/programmes/:id/approve",  reviewers, body("note").optional(), validate, ctrl.programmes.approve);
-router.patch("/programmes/:id/reject",   reviewers, body("reason").notEmpty(), validate, ctrl.programmes.reject);
+router.post("/programmes",               requireCreateAccess, baseRules, validate, ctrl.programmes.create);
+router.put("/programmes/:id",            requireCreateAccess, ctrl.programmes.update);
+router.patch("/programmes/:id/approve",  requireReviewAccess, body("note").optional(), validate, ctrl.programmes.approve);
+router.patch("/programmes/:id/reject",   requireReviewAccess, body("reason").notEmpty(), validate, ctrl.programmes.reject);
 router.patch("/programmes/:id/status",   authorize("admin"), body("status").notEmpty(), validate, ctrl.programmes.updateStatus);
 
 // ── SQA ───────────────────────────────────────────────────────────────────────
 router.get("/sqa",                ctrl.sqa.list);
 router.get("/sqa/aggregate",      ctrl.sqa.aggregate);
 router.get("/sqa/:id",            ctrl.sqa.get);
-router.post("/sqa",               submitters, baseRules, validate, ctrl.sqa.create);
-router.put("/sqa/:id",            submitters, ctrl.sqa.update);
-router.patch("/sqa/:id/approve",  reviewers, body("note").optional(), validate, ctrl.sqa.approve);
-router.patch("/sqa/:id/reject",   reviewers, body("reason").notEmpty(), validate, ctrl.sqa.reject);
+router.post("/sqa",               requireCreateAccess, baseRules, validate, ctrl.sqa.create);
+router.put("/sqa/:id",            requireCreateAccess, ctrl.sqa.update);
+router.patch("/sqa/:id/approve",  requireReviewAccess, body("note").optional(), validate, ctrl.sqa.approve);
+router.patch("/sqa/:id/reject",   requireReviewAccess, body("reason").notEmpty(), validate, ctrl.sqa.reject);
 router.patch("/sqa/:id/status",   authorize("admin"), body("status").notEmpty(), validate, ctrl.sqa.updateStatus);
 
 module.exports = router;

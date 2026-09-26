@@ -3,7 +3,7 @@ const sequelize = require("../config/database");
 
 const ServicomComplaint = sequelize.define("ServicomComplaint", {
   id:               { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
-  complaint_number: { type: DataTypes.STRING(30), allowNull: false, unique: true },
+  complaint_number: { type: DataTypes.STRING(60), allowNull: false, unique: true },
   zone_id:          { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
   state_id:         { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
   reporting_month:  { type: DataTypes.TINYINT.UNSIGNED, allowNull: true },
@@ -23,6 +23,7 @@ const ServicomComplaint = sequelize.define("ServicomComplaint", {
   complainant_category: { type: DataTypes.STRING(80), allowNull: true },
   complainant_id:   { type: DataTypes.STRING(100), allowNull: true },
   complainant_name: { type: DataTypes.STRING(200), allowNull: true },
+  complainant_organization: { type: DataTypes.STRING(200), allowNull: true },
   complainant_phone: { type: DataTypes.STRING(80), allowNull: true },
   complainant_nhis_id: { type: DataTypes.STRING(100), allowNull: true },
   complainant_hmo_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
@@ -30,6 +31,7 @@ const ServicomComplaint = sequelize.define("ServicomComplaint", {
   respondent_category: { type: DataTypes.STRING(80), allowNull: true },
   respondent_id:    { type: DataTypes.STRING(100), allowNull: true },
   respondent_name:  { type: DataTypes.STRING(200), allowNull: true },
+  respondent_organization: { type: DataTypes.STRING(200), allowNull: true },
   respondent_phone: { type: DataTypes.STRING(80), allowNull: true },
   respondent_nhis_id: { type: DataTypes.STRING(100), allowNull: true },
   respondent_hmo_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },

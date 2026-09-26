@@ -2,7 +2,7 @@
  * Seed demo users for the monthly-report workflow.
  *
  * Workflow:
- *   department-officer  → fills their department's monthly report (Finance / Programmes / SQA)
+ *   department-officer  → fills their department's monthly report (AFD / FSD / SQA)
  *   state-coordinator   → fills any section + reviews state submissions → zonal
  *   zonal-coordinator   → reviews state-approved reports → SDO
  *   sdo                 → final approval
@@ -69,6 +69,8 @@ const zonalAccess = [{
     "Migration / Update Requests",
     "CEmONC & FFP Beneficiaries",
     "Monitoring Visits",
+    "Mystery Shopping",
+    "HMO Indebtedness Collation",
     "Accreditation / Reaccreditation",
     "Stakeholder Engagement",
     "HMO Selection Process",
@@ -78,7 +80,7 @@ const zonalAccess = [{
     "IGR",
     "SSHIA Financial Report",
     "Expenditure Profile",
-    "ICT Support",
+    "ICT Support Register",
     "Meetings",
     "ETMC Cascading",
     "Accommodation",
@@ -130,15 +132,16 @@ const sdoAccess = [
       "Stock Verification Dashboard",
       "Charter Performance",
       "Complaints Management",
+      "HCF Customer Satisfaction Survey",
       "Customer Satisfaction Survey",
       "Physical Asset Verification",
       "Verification of Supply",
-      "Special Project",
+      "Ad-hoc / Special Assignment",
     ],
   },
   {
     access_to: "Zonal",
-    functionalities: ["Monitoring Visits"],
+    functionalities: ["Monitoring Visits", "Mystery Shopping", "HMO Indebtedness Collation", "ICT Support Register"],
   },
   ...notifications,
 ];
@@ -262,8 +265,8 @@ async function buildUserSpecs(deptMap, unitMap) {
       zone_id: zoneId,
       state_id: state.id,
       state_label: label,
-      department_id: deptMap.FIN || null,
-      unit_id: unitMap["FIN-REV"] || null,
+      department_id: deptMap.AFD || null,
+      unit_id: null,
       functionalities: [...dashboard, ...financeMonthly, ...notifications],
     });
 
@@ -275,8 +278,8 @@ async function buildUserSpecs(deptMap, unitMap) {
       zone_id: zoneId,
       state_id: state.id,
       state_label: label,
-      department_id: deptMap.HI || null,
-      unit_id: unitMap["HI-ENR"] || null,
+      department_id: deptMap.FSD || null,
+      unit_id: null,
       functionalities: [...dashboard, ...programmesMonthly, ...notifications],
     });
 
@@ -288,8 +291,8 @@ async function buildUserSpecs(deptMap, unitMap) {
       zone_id: zoneId,
       state_id: state.id,
       state_label: label,
-      department_id: deptMap.HI || null,
-      unit_id: unitMap["HI-QA"] || null,
+      department_id: deptMap.SQA || null,
+      unit_id: null,
       functionalities: [...dashboard, ...sqaMonthly, ...notifications],
     });
   }

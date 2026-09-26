@@ -28,6 +28,7 @@ const MIGRATE_STEPS = [
   { script: "src/scripts/legacy/migrateOthersPrivileges.js", label: "Zonal module privileges" },
   { script: "src/scripts/legacy/migrateSectionDashboards.js", label: "Section dashboards privileges" },
   { script: "src/scripts/updateStoreDb.js", label: "Store / Asset Management schema" },
+  { script: "src/scripts/updateAdminHrDb.js", label: "Admin / HR reports schema" },
 ];
 
 const demoUsers = process.argv.includes("--demo-users");
@@ -36,6 +37,7 @@ const SEED_STEPS = [
   { script: "src/scripts/seedZonesStates.js", label: "Zones & states" },
   { script: "src/scripts/seedDepartmentsUnits.js", label: "Departments & units" },
   { script: "src/scripts/seedUsers.js", label: "Demo users", forwardDemo: true },
+  { script: "src/scripts/seedLinkingDepartmentsHeadOfUnit.js", label: "Head of Unit & Linking Dept accounts" },
   { script: "src/scripts/seedDirectorEnforcement.js", label: "Director Enforcement (HOD-0003)", demoOnly: true },
   { script: "src/scripts/seedServicomIndicators.js", label: "SERVICOM indicators" },
   { script: "src/scripts/seedServicomData.js", label: "SERVICOM sample data" },
@@ -46,6 +48,7 @@ const SEED_STEPS = [
   { script: "src/scripts/seedHcfMasterFacilities.js", label: "HCF Master facilities (Excel)" },
   { script: "src/scripts/seedHmoProviders.js", label: "Accredited HMOs (Excel June 2025)" },
   { script: "src/scripts/seedStoreManagement.js", label: "Store / Asset Management sample data" },
+  { script: "src/scripts/seedAdminHr.js", label: "Admin / HR sample reports" },
 ];
 
 const INCREMENTAL_MIGRATE_STEPS = [
@@ -60,6 +63,7 @@ const INCREMENTAL_MIGRATE_STEPS = [
   { script: "src/scripts/legacy/migrateOthersPrivileges.js", label: "Zonal module privileges" },
   { script: "src/scripts/legacy/migrateSectionDashboards.js", label: "Section dashboards privileges" },
   { script: "src/scripts/updateStoreDb.js", label: "Store / Asset Management schema" },
+  { script: "src/scripts/updateAdminHrDb.js", label: "Admin / HR reports schema" },
 ];
 
 const steps = seedsOnly

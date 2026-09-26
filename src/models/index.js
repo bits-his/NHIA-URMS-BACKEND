@@ -43,6 +43,9 @@ const HmoSelectionReportLine      = require("./HmoSelectionReportLine");
 const ChallengesReport            = require("./ChallengesReport");
 const StateOfficeComplaint        = require("./StateOfficeComplaint");
 const StateOfficeComplianceVisit  = require("./StateOfficeComplianceVisit");
+const StateOfficeMysteryShopping  = require("./StateOfficeMysteryShopping");
+const StateOfficeHmoIndebtedness  = require("./StateOfficeHmoIndebtedness");
+const StateOfficeHmoIndebtednessLine = require("./StateOfficeHmoIndebtednessLine");
 const StateOfficeReconciliationMeeting = require("./StateOfficeReconciliationMeeting");
 const NhiaAccreditedProvider          = require("./NhiaAccreditedProvider");
 const HcfFacility                     = require("./HcfFacility");
@@ -57,6 +60,10 @@ const WeeklyActionableReport       = require("./WeeklyActionableReport");
 const WeeklyActionableReportLine   = require("./WeeklyActionableReportLine");
 const ContractedServicesReport     = require("./ContractedServicesReport");
 const ContractedServicesReportLine = require("./ContractedServicesReportLine");
+const IctSupportReport             = require("./IctSupportReport");
+const IctSupportReportLine         = require("./IctSupportReportLine");
+const AdhocAssignmentReport        = require("./AdhocAssignmentReport");
+const AdhocAssignmentReportLine    = require("./AdhocAssignmentReportLine");
 const MonthlyEnrolleeRegister      = require("./MonthlyEnrolleeRegister");
 const ExtraDependantReport         = require("./ExtraDependantReport");
 const ExtraDependantReportLine     = require("./ExtraDependantReportLine");
@@ -81,6 +88,8 @@ const AssetDisposal               = require("./AssetDisposal");
 const PhysicalAssetVerification   = require("./PhysicalAssetVerification");
 const PhysicalAssetVerificationItem = require("./PhysicalAssetVerificationItem");
 const StockConversion             = require("./StockConversion");
+const PrepaymentAnalysis          = require("./PrepaymentAnalysis");
+const AdminHrReport               = require("./AdminHrReport");
 
 const bindStateOfficeReport = (Model, alias) => {
   ZonalOffice.hasMany(Model, { foreignKey: "zone_id", as: `${alias}_zone` });
@@ -163,6 +172,16 @@ StateOfficeComplianceVisit.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "
 StateOffice.hasMany(StateOfficeComplianceVisit, { foreignKey: "state_id", as: "state_compliance_visits" });
 StateOfficeComplianceVisit.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+ZonalOffice.hasMany(StateOfficeMysteryShopping, { foreignKey: "zone_id", as: "state_mystery_shopping" });
+StateOfficeMysteryShopping.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(StateOfficeMysteryShopping, { foreignKey: "state_id", as: "state_mystery_shopping" });
+StateOfficeMysteryShopping.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(StateOfficeHmoIndebtedness, { foreignKey: "zone_id", as: "hmo_indebtedness" });
+StateOfficeHmoIndebtedness.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(StateOfficeHmoIndebtedness, { foreignKey: "state_id", as: "hmo_indebtedness" });
+StateOfficeHmoIndebtedness.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 ZonalOffice.hasMany(StateOfficeReconciliationMeeting, { foreignKey: "zone_id", as: "state_reconciliation_meetings" });
 StateOfficeReconciliationMeeting.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
 StateOffice.hasMany(StateOfficeReconciliationMeeting, { foreignKey: "state_id", as: "state_reconciliation_meetings" });
@@ -191,6 +210,16 @@ ZonalOffice.hasMany(ContractedServicesReport,   { foreignKey: "zone_id",  as: "c
 ContractedServicesReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
 StateOffice.hasMany(ContractedServicesReport,   { foreignKey: "state_id", as: "contracted_services_reports" });
 ContractedServicesReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(IctSupportReport,   { foreignKey: "zone_id",  as: "ict_support_reports" });
+IctSupportReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(IctSupportReport,   { foreignKey: "state_id", as: "ict_support_reports" });
+IctSupportReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
+ZonalOffice.hasMany(AdhocAssignmentReport,   { foreignKey: "zone_id",  as: "adhoc_assignment_reports" });
+AdhocAssignmentReport.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
+StateOffice.hasMany(AdhocAssignmentReport,   { foreignKey: "state_id", as: "adhoc_assignment_reports" });
+AdhocAssignmentReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
 ZonalOffice.hasMany(MonthlyEnrolleeRegister,   { foreignKey: "zone_id",  as: "monthly_enrollee_registers" });
 MonthlyEnrolleeRegister.belongsTo(ZonalOffice, { foreignKey: "zone_id",  as: "zone"  });
@@ -288,6 +317,11 @@ HcfFacility.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
 StateOffice.hasMany(HcfFacility, { foreignKey: "state_id", as: "hcf_facilities" });
 HcfFacility.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 
+ZonalOffice.hasMany(AdminHrReport, { foreignKey: "zone_id", as: "admin_hr_reports" });
+AdminHrReport.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
+StateOffice.hasMany(AdminHrReport, { foreignKey: "state_id", as: "admin_hr_reports" });
+AdminHrReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+
 module.exports = {
   AnnualReport, QuarterlyData,
   ZonalOffice, StateOffice, Department, Unit, User, Role,
@@ -302,18 +336,23 @@ module.exports = {
   ComplaintsComplianceReport, AccreditationReport, AccreditationReportLine,
   StakeholderReport, StakeholderReportLine, HmoSelectionReport, HmoSelectionReportLine,
   ChallengesReport,
-  StateOfficeComplaint, StateOfficeComplianceVisit,
+  StateOfficeComplaint, StateOfficeComplianceVisit, StateOfficeMysteryShopping,
+  StateOfficeHmoIndebtedness, StateOfficeHmoIndebtednessLine,
   StateOfficeReconciliationMeeting, NhiaAccreditedProvider, HcfFacility, HmoProvider,
   IgrReport, IgrReportLine,
   SshiaFinancialReport, SshiaFinancialReportLine,
   ExpenditureProfileReport, ExpenditureProfileReportLine,
   WeeklyActionableReport, WeeklyActionableReportLine,
   ContractedServicesReport, ContractedServicesReportLine,
+  IctSupportReport, IctSupportReportLine,
+  AdhocAssignmentReport, AdhocAssignmentReportLine,
   MonthlyEnrolleeRegister,
   ExtraDependantReport, ExtraDependantReportLine,
   HcpChangeReport, HcpChangeReportLine,
   EtmcTmcActionPointRegister, EtmcTmcActionPointLine,
   ComplianceReport, ComplianceFinding, ComplianceViolation, ComplianceEnforcementAction,
-  StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification, StateZonalOfficeProfile, StateZonalFocalPerson, AssetMaintenance, AssetDisposal,
-  PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion,
+  StoreAsset, StoreInventoryItem, GoodsReceiptNote, StockIssueVoucher, AssetTransfer, SupplyVerification,
+  StateZonalOfficeProfile, StateZonalFocalPerson, AssetMaintenance, AssetDisposal,
+  PhysicalAssetVerification, PhysicalAssetVerificationItem, StockConversion, PrepaymentAnalysis,
+  AdminHrReport,
 };

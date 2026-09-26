@@ -1,5 +1,6 @@
 const SOC_ZONES_MODULE = "SOC/Zones";
 const ZONAL_MODULE = "Zonal";
+const SDO_MODULE = "SDO";
 const LEGACY_MODULE = "State Offices";
 const ZONAL_LEGACY = "Others";
 
@@ -11,6 +12,8 @@ const ROUTE_FUNCTIONALITY = {
   complaints: "Complaints & Compliance Monitoring",
   "enrollee-complaints": "Enrollee Complaints",
   "compliance-visits": "Monitoring Visits",
+  "mystery-shopping": "Mystery Shopping",
+  "hmo-indebtedness": "HMO Indebtedness Collation",
   "reconciliation-meetings": "Reconciliation Meetings",
   accreditation: "Accreditation / Reaccreditation",
   stakeholder: "Stakeholder Engagement",
@@ -23,11 +26,20 @@ const ROUTE_FUNCTIONALITY = {
   "expenditure-profile": "Expenditure Profile",
   "weekly-actionable": "Weekly Actionable",
   "contracted-services": "Contracted Services",
+  "ict-support-register": "ICT Support Register",
+  "adhoc-special-assignment": "Ad-hoc / Special Assignment",
   "enrollee-register": "Monthly Enrollee Register",
   "etmc-tmc-action-point": "ETMC/TMC Action-Point Register",
   dashboard: "SOC/Zones Dashboard",
   "office-profiles": "State/Zonal Office Profile",
   "focal-persons": "State/Zonal Focal Persons Register",
+  "office-meeting": "State Office Meeting Report",
+  "etmc-cascading": "ETMC Cascading Report",
+  "office-accommodation": "Office Accommodation",
+  "utility-services": "Utility Services",
+  "vehicle-maintenance": "Vehicle Maintenance",
+  "conflict-infraction": "Conflict / Infraction Report",
+  "enrollee-feedback": "Enrollee Feedback Survey",
 };
 
 const SOC_ONLY_FUNCTIONALITIES = new Set([
@@ -40,6 +52,11 @@ const SOC_ONLY_FUNCTIONALITIES = new Set([
   "ETMC/TMC Action-Point Register",
   "Operation Monitoring Visit",
   "Spot Check Visit",
+]);
+
+/** Privileges granted under SDO (still served by state-office APIs) */
+const SDO_FUNCTIONALITIES = new Set([
+  "Ad-hoc / Special Assignment",
 ]);
 
 /** Canonical title → legacy names stored in older user.functionalities rows */
@@ -75,6 +92,19 @@ const FUNCTIONALITY_ALIASES = {
   ],
   "Enrollee Complaints": ["Complaints Register", "Complaints"],
   "Reconciliation Meetings": ["Reconciliation"],
+  "ICT Support Register": ["ICT Support", "Support"],
+  "Ad-hoc / Special Assignment": [
+    "SPECIAL PROJECT",
+    "Special Project",
+    "Ad-hoc Project",
+  ],
+  "State Office Meeting Report": ["Meetings", "State Office Meeting"],
+  "ETMC Cascading Report": ["ETMC Cascading"],
+  "Office Accommodation": ["Accommodation"],
+  "Utility Services": ["Utilities"],
+  "Vehicle Maintenance": ["Vehicles"],
+  "Conflict / Infraction Report": ["Infractions", "Conflict Report"],
+  "Enrollee Feedback Survey": ["Staff Feedback", "Feedback", "Enrollee Feedback"],
 };
 
 /** Legacy path — also allow these sections to search NHIA lists */
@@ -84,6 +114,8 @@ const ACCREDITED_PROVIDER_SECTIONS = [
   "Reconciliation Meetings",
   "Compliance Monitoring",
   "Monitoring Visits",
+  "Mystery Shopping",
+  "HMO Indebtedness Collation",
 ];
 
 const STATE_OFFICE_ACCESS_MODULES = new Set([
@@ -117,6 +149,10 @@ function findZonalEntry(access) {
   );
 }
 
+function findSdoEntry(access) {
+  return access.find((e) => e?.access_to === SDO_MODULE);
+}
+
 function hasFunctionality(entry, title) {
   const funcs = Array.isArray(entry?.functionalities) ? entry.functionalities : [];
   const accepted = acceptedFunctionalityNames(title);
@@ -127,6 +163,15 @@ function grantForFunctionality(access, requiredFunctionality) {
   if (SOC_ONLY_FUNCTIONALITIES.has(requiredFunctionality)) {
     const socEntry = findSocZonesEntry(access);
     return !!socEntry && hasFunctionality(socEntry, requiredFunctionality);
+  }
+
+  if (SDO_FUNCTIONALITIES.has(requiredFunctionality)) {
+    const sdoEntry = findSdoEntry(access);
+    if (sdoEntry && hasFunctionality(sdoEntry, requiredFunctionality)) return true;
+    // Legacy: previously under SOC/Zones
+    const socEntry = findSocZonesEntry(access);
+    if (socEntry && hasFunctionality(socEntry, requiredFunctionality)) return true;
+    return false;
   }
 
   // Prefer Zonal / SOC entries, then any state-office-related module row

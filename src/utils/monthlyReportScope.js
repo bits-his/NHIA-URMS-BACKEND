@@ -90,8 +90,24 @@ async function canReviewMonthlyReport(roleKey) {
   return !!role?.can_review_monthly;
 }
 
+/**
+ * Who may create/update form records.
+ * - Review-only roles (can_review, no can_create) are blocked.
+ * - Everyone else who can open a page (authenticated + privileges on FE/state-office)
+ *   may submit — including custom roles with page access and no review flag.
+ */
+async function canSubmitForms(roleKey) {
+  if (!roleKey) return false;
+  if (roleKey === "admin") return true;
+  const canCreate = await canCreateMonthlyReport(roleKey);
+  const canReview = await canReviewMonthlyReport(roleKey);
+  if (canReview && !canCreate) return false;
+  return true;
+}
+
 module.exports = {
   buildMonthlyListWhere,
   canCreateMonthlyReport,
   canReviewMonthlyReport,
+  canSubmitForms,
 };

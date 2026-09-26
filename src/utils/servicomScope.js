@@ -49,8 +49,9 @@ async function buildServicomListWhere(user, query = {}) {
       where.state_id = -1;
       return where;
     }
+    // State alone is enough — AND-ing zone_id drops rows with missing/mismatched zone.
     where.state_id = userStateId;
-    if (userZoneId) where.zone_id = userZoneId;
+    delete where.zone_id;
     return where;
   }
 

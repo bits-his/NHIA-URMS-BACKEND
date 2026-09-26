@@ -37,6 +37,8 @@ const GEO_CLEANUP = [
   { table: "supply_verifications", columns: ["state_id", "zone_id"] },
   { table: "state_zonal_office_profiles", columns: ["state_id", "zone_id"] },
   { table: "state_zonal_focal_persons", columns: ["state_id", "zone_id"] },
+  { table: "state_office_mystery_shopping", columns: ["state_id", "zone_id"] },
+  { table: "state_office_hmo_indebtedness", columns: ["state_id", "zone_id"] },
 ];
 
 /** Child INT columns that must match parent PK signedness before ALTER TABLE ADD FOREIGN KEY. */

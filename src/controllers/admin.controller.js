@@ -87,6 +87,7 @@ const ROLE_PREFIX = {
   "sdo":                 "SDO",
   "hq-department":       "HQ",
   "dg-ceo":              "DG",
+  "head-of-unit":        "HOU",
 };
 
 const createUser = async (req, res, next) => {

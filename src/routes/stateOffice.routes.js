@@ -6,14 +6,18 @@ const { requireStateOfficeRoute } = require("../middleware/stateOfficeAccess");
 const {
   enrolment, migration, cemonc,
   accreditation, stakeholder, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile,
-  weeklyActionable, contractedServices, enrolleeRegister, etmcTmcActionPoint,
+  weeklyActionable, contractedServices, ictSupport, adhocAssignment,
+  enrolleeRegister, etmcTmcActionPoint,
   extraDependant, hcpChange,
 } = require("../controllers/stateOfficeReport.controller");
 const enrolleeComplaints = require("../controllers/stateOfficeComplaint.controller");
 const complianceVisits = require("../controllers/stateOfficeComplianceVisit.controller");
+const mysteryShopping = require("../controllers/stateOfficeMysteryShopping.controller");
+const hmoIndebtedness = require("../controllers/stateOfficeHmoIndebtedness.controller");
 const reconciliation = require("../controllers/stateOfficeReconciliation.controller");
 const nhiaAccreditation = require("../controllers/nhiaAccreditation.controller");
 const stateOfficeDashboard = require("../controllers/stateOfficeDashboard.controller");
+const adminHr = require("../controllers/adminHrReport.controller");
 const officeProfiles = require("../controllers/stateZonalOfficeProfile.controller");
 const focalPersons = require("../controllers/stateZonalFocalPerson.controller");
 const { optionalAopUpload } = require("../middleware/officeProfileUpload");
@@ -73,6 +77,8 @@ mount("sshia-financial", sshiaFinancial);
 mount("expenditure-profile", expenditureProfile);
 mount("weekly-actionable", weeklyActionable);
 mount("contracted-services", contractedServices);
+mount("ict-support-register", ictSupport);
+mount("adhoc-special-assignment", adhocAssignment);
 mount("enrollee-register", enrolleeRegister);
 mount("etmc-tmc-action-point", etmcTmcActionPoint);
 mount("extra-dependant", extraDependant);
@@ -96,6 +102,14 @@ router.post(
   etmcTmcActionPoint.uploadDocument,
 );
 
+mount("office-meeting", adminHr.officeMeeting);
+mount("etmc-cascading", adminHr.etmcCascading);
+mount("office-accommodation", adminHr.officeAccommodation);
+mount("utility-services", adminHr.utilityServices);
+mount("vehicle-maintenance", adminHr.vehicleMaintenance);
+mount("conflict-infraction", adminHr.conflictInfraction);
+mount("enrollee-feedback", adminHr.enrolleeFeedback);
+
 router.get("/enrollee-complaints/summary", enrolleeComplaints.getSummary);
 router.get("/enrollee-complaints", enrolleeComplaints.listComplaints);
 router.get("/enrollee-complaints/:id", enrolleeComplaints.getComplaint);
@@ -117,6 +131,26 @@ router.post("/compliance-visits", [
   body("facility_visited").notEmpty(),
 ], validate, complianceVisits.createVisit);
 router.put("/compliance-visits/:id", complianceVisits.updateVisit);
+
+router.get("/mystery-shopping", mysteryShopping.listVisits);
+router.get("/mystery-shopping/:id", mysteryShopping.getVisit);
+router.post("/mystery-shopping", [
+  body("zone_id").notEmpty(),
+  body("state_id").notEmpty(),
+  body("email").isEmail().withMessage("Valid email is required"),
+  body("facility_name").notEmpty(),
+], validate, mysteryShopping.createVisit);
+router.put("/mystery-shopping/:id", mysteryShopping.updateVisit);
+
+router.get("/hmo-indebtedness", hmoIndebtedness.listSheets);
+router.get("/hmo-indebtedness/:id", hmoIndebtedness.getSheet);
+router.post("/hmo-indebtedness", [
+  body("zone_id").notEmpty(),
+  body("state_id").notEmpty(),
+  body("reporting_year").isInt({ min: 2000 }),
+  body("reporting_month").isInt({ min: 1, max: 12 }),
+], validate, hmoIndebtedness.createSheet);
+router.put("/hmo-indebtedness/:id", hmoIndebtedness.updateSheet);
 
 router.get("/accredited-providers", nhiaAccreditation.listProviders);
 router.post("/accredited-providers/sync", nhiaAccreditation.syncProviders);

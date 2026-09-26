@@ -1,3 +1,4 @@
+const { Op } = require("sequelize");
 const {
   getRuleForPriority,
   loadComplaintSlaRules,
@@ -82,7 +83,7 @@ function enrichComplaintCodes(body) {
   return out;
 }
 
-/** Match complaints assigned to the logged-in user (name or staff id in stored label). */
+/** Match complaints assigned or escalated/forwarded to the logged-in user. */
 function buildAssigneeWhere(user, Op) {
   if (!user?.name && !user?.staff_id) return null;
   const clauses = [];
@@ -92,8 +93,10 @@ function buildAssigneeWhere(user, Op) {
       clauses.push(
         { officer_assigned: n },
         { assigned_officer: n },
+        { escalated_to: n },
         { officer_assigned: { [Op.like]: `${n}%` } },
         { assigned_officer: { [Op.like]: `${n}%` } },
+        { escalated_to: { [Op.like]: `${n}%` } },
       );
     }
   }
@@ -103,8 +106,10 @@ function buildAssigneeWhere(user, Op) {
       clauses.push(
         { officer_assigned: { [Op.like]: `%(${s})%` } },
         { assigned_officer: { [Op.like]: `%(${s})%` } },
+        { escalated_to: { [Op.like]: `%(${s})%` } },
         { officer_assigned: { [Op.like]: `%${s}%` } },
         { assigned_officer: { [Op.like]: `%${s}%` } },
+        { escalated_to: { [Op.like]: `%${s}%` } },
       );
     }
   }
@@ -164,9 +169,11 @@ function pickComplaintFields(body) {
     "complaint_type", "complaint_against", "complaint_category", "category_code", "complaint_domain", "domain_code",
     "offence_reference",
     "priority_rating", "date_received", "transmission_route",
-    "complainant_category", "complainant_id", "complainant_name", "complainant_phone", "complainant_nhis_id",
+    "complainant_category", "complainant_id", "complainant_name", "complainant_organization",
+    "complainant_phone", "complainant_nhis_id",
     "complainant_hmo_id", "complainant_hcf_id",
-    "respondent_category", "respondent_id", "respondent_name", "respondent_phone", "respondent_nhis_id",
+    "respondent_category", "respondent_id", "respondent_name", "respondent_organization",
+    "respondent_phone", "respondent_nhis_id",
     "respondent_hmo_id", "respondent_hcf_id",
     "officer_assigned", "investigation_start_date", "status", "actions_taken", "actions_details",
     "escalated", "escalation_level", "escalation_date", "escalated_to",
