@@ -146,6 +146,11 @@ function isStateCoordinatorRole(role) {
   return r === "state-coordinator" || r.endsWith("-state-coordinator");
 }
 
+function isZonalCoordinatorRole(role) {
+  const r = String(role || "");
+  return r === "zonal-coordinator" || r.endsWith("-zonal-coordinator");
+}
+
 function isReportingOfficerRole(role) {
   const r = String(role || "");
   return r === "reporting-officer" || r.endsWith("-reporting-officer");
@@ -193,6 +198,7 @@ module.exports = {
   buildCreatorWhere,
   buildCreatedOrAssignedWhere,
   isStateCoordinatorRole,
+  isZonalCoordinatorRole,
   isReportingOfficerRole,
   pickComplaintFields,
   enrichComplaintCodes,

@@ -1,7 +1,7 @@
 const sequelize = require("../config/database");
 const { ZonalOffice, StateOffice, StateOfficeMysteryShopping } = require("../models");
 const {
-  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+  buildStateOfficeListWhere, withCoordinatorTeam, assertRecordAccess, applyScopeToBody,
 } = require("../utils/stateOfficeScope");
 const { computeScores } = require("../utils/mysteryShoppingScore");
 
@@ -42,7 +42,7 @@ const pickFields = (body = {}) => ({
 
 const listVisits = async (req, res, next) => {
   try {
-    const where = await buildStateOfficeListWhere(req.user, req.query);
+    const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), StateOfficeMysteryShopping);
     const rows = await StateOfficeMysteryShopping.findAll({
       where,
       include: includeGeo,

@@ -85,8 +85,19 @@ const requireReviewAccess = async (req, res, next) => {
   }
 };
 
+/** State & zonal coordinators are view-only on state-office records. */
+const blockCoordinatorWrites = (req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
+  const role = String(req.user?.role || "");
+  if (/(^|-)(state|zonal)-coordinator$/.test(role)) {
+    return res.status(403).json({ success: false, message: "Coordinators have view-only access" });
+  }
+  next();
+};
+
 module.exports = {
   authenticate,
+  blockCoordinatorWrites,
   authorize,
   authorizeRoleFlag,
   requireCreateAccess,

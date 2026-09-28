@@ -3,7 +3,7 @@ const {
   ZonalOffice, StateOffice, StateOfficeHmoIndebtedness, StateOfficeHmoIndebtednessLine,
 } = require("../models");
 const {
-  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+  buildStateOfficeListWhere, withCoordinatorTeam, assertRecordAccess, applyScopeToBody,
 } = require("../utils/stateOfficeScope");
 
 const genRefId = async (t) => {
@@ -45,7 +45,7 @@ const mapLines = (sheetId, lines = []) =>
 
 const listSheets = async (req, res, next) => {
   try {
-    const where = await buildStateOfficeListWhere(req.user, req.query);
+    const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), StateOfficeHmoIndebtedness);
     const rows = await StateOfficeHmoIndebtedness.findAll({
       where,
       include: includeAll,

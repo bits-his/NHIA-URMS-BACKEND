@@ -11,7 +11,7 @@ const {
 } = require("../models");
 const { buildServicomListWhere, applyComplaintExtraFilters } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
-const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere, buildCreatedOrAssignedWhere, isStateCoordinatorRole, isReportingOfficerRole } = require("../utils/complaintRegister");
+const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere, buildCreatedOrAssignedWhere, isStateCoordinatorRole, isZonalCoordinatorRole, isReportingOfficerRole } = require("../utils/complaintRegister");
 const { nextComplaintNumber, previewComplaintNumber, monthYearParts } = require("../utils/complaintNumber");
 const { notifyOfficerLabel } = require("../utils/notify");
 const {
@@ -540,7 +540,8 @@ module.exports = {
         if (!Array.isArray(access)) return false;
         return access.some((entry) => {
           const funcs = entry?.functionalities;
-          return Array.isArray(funcs) && funcs.includes("Complaints Management");
+          return Array.isArray(funcs)
+            && (funcs.includes("Complaints Management") || funcs.includes("State Complaints Register"));
         });
       };
 
@@ -641,16 +642,48 @@ module.exports = {
       const assigneeWhere = buildAssigneeWhere(req.user, Op);
       const createdOrAssigned = buildCreatedOrAssignedWhere(req.user, Op);
 
+      const isZonalCoordinator = isZonalCoordinatorRole(role) && !!req.user?.zone_id;
+      const nationalRole = ["admin", "sdo", "hq-department"].includes(role)
+        || /director/i.test(String(role || ""))
+        || /director/i.test(String(req.user?.name || ""))
+        || (!req.user?.state_id && !isZonalCoordinator);
+      const stateScope = req.query.scope === "state" && !nationalRole && !isZonalCoordinator;
+      /** Own area, plus anything the user created or is assigned to (even outside that area). */
+      const areaOrMine = (area, extra = []) => {
+        const parts = [area, ...(createdOrAssigned ? [createdOrAssigned] : []), ...extra];
+        return parts.length > 1 ? { ...shared, [Op.or]: parts } : { ...shared, ...area };
+      };
+      /**
+       * Coordinators also see complaints created by / assigned to officers on their team
+       * (same department prefix or department, in their state/zone), wherever the complaint was filed.
+       */
+      const teamClauses = async (geoKey) => {
+        const geoVal = req.user?.[geoKey];
+        if (!geoVal) return [];
+        const prefix = String(role || "").match(/^([a-z0-9]+)-(state|zonal)-coordinator$/)?.[1];
+        const teamWhere = { [geoKey]: geoVal, id: { [Op.ne]: req.user.id }, is_active: true };
+        if (prefix) teamWhere.role = { [Op.like]: `${prefix}-%` };
+        else if (req.user.department_id) teamWhere.department_id = req.user.department_id;
+        const team = await User.findAll({ where: teamWhere, attributes: ["id", "name", "staff_id"] });
+        return team
+          .map((u) => buildCreatedOrAssignedWhere(u, Op))
+          .filter(Boolean);
+      };
+
       let where;
-      if (isStateCoordinatorRole(role)) {
-        // State coordinators see every complaint in their state (ignore assigned_to_me).
-        const stateId = req.user?.state_id ?? geo.state_id ?? null;
-        where = {
-          ...shared,
-          state_id: stateId != null ? stateId : -1,
-        };
-        if (req.user?.zone_id) where.zone_id = req.user.zone_id;
-        else if (geo.zone_id) where.zone_id = geo.zone_id;
+      if (isZonalCoordinator && !nationalRole) {
+        // Zonal coordinators see every complaint in their zone (optionally narrowed to one state).
+        where = geo.state_id
+          ? { ...shared, zone_id: req.user.zone_id, state_id: geo.state_id }
+          : areaOrMine({ zone_id: req.user.zone_id }, await teamClauses("zone_id"));
+      } else if (isStateCoordinatorRole(role) && req.user?.state_id) {
+        // State coordinators: whole state + their team's complaints.
+        where = areaOrMine({ state_id: req.user.state_id }, await teamClauses("state_id"));
+      } else if (stateScope) {
+        // State-level register: the user's state + their own complaints.
+        where = areaOrMine({ state_id: req.user.state_id });
+      } else if (isStateCoordinatorRole(role)) {
+        where = { ...shared, id: -1 };
       } else if (isReportingOfficerRole(role) || mineOnly) {
         // Reporting officers: complaints they created OR that are assigned to them.
         if (!createdOrAssigned) {

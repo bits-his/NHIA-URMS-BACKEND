@@ -1,7 +1,7 @@
 const sequelize = require("../config/database");
 const { ZonalOffice, StateOffice, StateOfficeComplaint } = require("../models");
 const {
-  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+  buildStateOfficeListWhere, withCoordinatorTeam, assertRecordAccess, applyScopeToBody,
 } = require("../utils/stateOfficeScope");
 
 const genRefId = async (t) => {
@@ -17,7 +17,7 @@ const includeGeo = [
 
 const listComplaints = async (req, res, next) => {
   try {
-    const where = await buildStateOfficeListWhere(req.user, req.query);
+    const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), StateOfficeComplaint);
     const rows = await StateOfficeComplaint.findAll({
       where,
       include: includeGeo,
@@ -29,7 +29,7 @@ const listComplaints = async (req, res, next) => {
 
 const getSummary = async (req, res, next) => {
   try {
-    const where = await buildStateOfficeListWhere(req.user, req.query);
+    const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), StateOfficeComplaint);
     const rows = await StateOfficeComplaint.findAll({ where, attributes: ["against_type", "status"] });
 
     const summaryMap = { against_hmo: 0, against_hcp: 0 };

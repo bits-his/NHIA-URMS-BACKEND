@@ -1,7 +1,7 @@
 const sequelize = require("../config/database");
 const { ZonalOffice, StateOffice } = require("../models");
 const {
-  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+  buildStateOfficeListWhere, withCoordinatorTeam, assertRecordAccess, applyScopeToBody,
 } = require("../utils/stateOfficeScope");
 
 const quarterFromMonth = (month) => Math.ceil(Number(month) / 3);
@@ -56,7 +56,7 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
 
   const listReports = async (req, res, next) => {
     try {
-      const where = await buildStateOfficeListWhere(req.user, req.query);
+      const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), ReportModel);
 
       const list = await ReportModel.findAll({
         where,
@@ -382,7 +382,7 @@ const makeTextReportController = (ReportModel, refPrefix, textFields = []) => {
 
   const listReports = async (req, res, next) => {
     try {
-      const where = await buildStateOfficeListWhere(req.user, req.query);
+      const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), ReportModel);
 
       const list = await ReportModel.findAll({
         where,
@@ -578,7 +578,7 @@ const makeWeeklyActionableController = () => {
 
   const listReports = async (req, res, next) => {
     try {
-      const where = await buildStateOfficeListWhere(req.user, req.query);
+      const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), WeeklyActionableReport);
       const list = await WeeklyActionableReport.findAll({
         where,
         include: [
@@ -742,7 +742,7 @@ const makeMonthlyEnrolleeRegisterController = () => {
 
   const listReports = async (req, res, next) => {
     try {
-      const where = await buildStateOfficeListWhere(req.user, req.query);
+      const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), MonthlyEnrolleeRegister);
       const list = await MonthlyEnrolleeRegister.findAll({
         where,
         include: [
@@ -897,7 +897,7 @@ const makeEtmcTmcActionPointController = () => {
 
   const listReports = async (req, res, next) => {
     try {
-      const where = await buildStateOfficeListWhere(req.user, req.query);
+      const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), EtmcTmcActionPointRegister);
       const list = await EtmcTmcActionPointRegister.findAll({
         where,
         include: [

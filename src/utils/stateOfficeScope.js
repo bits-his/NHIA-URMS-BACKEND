@@ -2,8 +2,66 @@
  * Role-based geo filters for state office modules.
  * Uses roles.report_scope: state → one state, zonal → one zone, national/none → all.
  */
+const { Op } = require("sequelize");
 const { findActiveRole } = require("./roleService");
-const { StateOffice } = require("../models");
+const { StateOffice, User } = require("../models");
+
+function isStateCoordinatorRole(role) {
+  const r = String(role || "");
+  return r === "state-coordinator" || r.endsWith("-state-coordinator");
+}
+
+function isZonalCoordinatorRole(role) {
+  const r = String(role || "");
+  return r === "zonal-coordinator" || r.endsWith("-zonal-coordinator");
+}
+
+function isCoordinatorRole(role) {
+  return isStateCoordinatorRole(role) || isZonalCoordinatorRole(role);
+}
+
+/**
+ * Names of the coordinator + their team: users in the same state (state coordinator) or zone
+ * (zonal coordinator) sharing the role prefix (e.g. "enf-"), else the same department.
+ */
+async function coordinatorTeamNames(user) {
+  if (!user || !isCoordinatorRole(user.role)) return [];
+  const geoKey = isZonalCoordinatorRole(user.role) ? "zone_id" : "state_id";
+  const geoVal = userGeo(user)[geoKey];
+  const names = new Set([user.name].filter(Boolean));
+  if (!geoVal) return [...names];
+  const prefix = String(user.role).match(/^([a-z0-9]+)-(state|zonal)-coordinator$/)?.[1];
+  const where = { [geoKey]: geoVal, is_active: true };
+  if (prefix) where.role = { [Op.like]: `${prefix}-%` };
+  else if (user.department_id) where.department_id = user.department_id;
+  const team = await User.findAll({ where, attributes: ["name"] });
+  team.forEach((u) => u.name && names.add(u.name));
+  return [...names];
+}
+
+function creatorColumns(Model) {
+  const attrs = Model?.rawAttributes ?? {};
+  return ["submitted_by", "created_by"].filter((c) => attrs[c]);
+}
+
+/**
+ * For coordinators, widen a scoped list where to: (area filters) OR (created by their team).
+ * Non-geo filters (status, month, year…) still apply to both.
+ */
+async function withCoordinatorTeam(user, where, Model) {
+  if (!isCoordinatorRole(user?.role)) return where;
+  const cols = creatorColumns(Model);
+  if (!cols.length) return where;
+  const names = await coordinatorTeamNames(user);
+  if (!names.length) return where;
+  const { zone_id, state_id, ...rest } = where;
+  const area = {};
+  if (zone_id !== undefined) area.zone_id = zone_id;
+  if (state_id !== undefined) area.state_id = state_id;
+  if (!Object.keys(area).length) return where;
+  const teamClauses = cols.map((c) => ({ [c]: { [Op.in]: names } }));
+  return { ...rest, [Op.or]: [area, ...teamClauses] };
+}
 
 const NATIONAL_ROLES = new Set(["admin", "sdo", "hq-department", "dg-ceo"]);
 
@@ -79,7 +137,7 @@ async function buildStateOfficeListWhere(user, query = {}) {
     where.zone_id = zoneId;
     if (query.state_id) {
       const inZone = await StateOffice.findOne({
-        where: { id: query.state_id, zonal_id: userZoneId },
+        where: { id: query.state_id, zonal_id: zoneId },
         attributes: ["id"],
       });
       if (!inZone) where.state_id = -1;
@@ -92,7 +150,14 @@ async function buildStateOfficeListWhere(user, query = {}) {
 
 async function assertRecordAccess(user, record) {
   if (!record) return { ok: false, status: 404, message: "Not found" };
+  const result = await assertAreaAccess(user, record);
+  if (result.ok || !isCoordinatorRole(user?.role)) return result;
+  const names = await coordinatorTeamNames(user);
+  const creators = [record.submitted_by, record.created_by].filter(Boolean);
+  return creators.some((c) => names.includes(c)) ? { ok: true } : result;
+}
 
+async function assertAreaAccess(user, record) {
   const scope = await resolveScope(user);
   const { zone_id: userZoneId, state_id: userStateId } = userGeo(user);
 
@@ -120,6 +185,8 @@ async function applyScopeToBody(user, body = {}) {
   if (scope === "national" || scope === "none") return body;
 
   const out = { ...body };
+  // Record the real author (the UI sends a generic "State Office") so coordinators can see their team's work.
+  if (user?.name) out.submitted_by = user.name;
   const { zone_id: userZoneId, state_id: userStateId } = userGeo(user);
 
   if (scope === "state") {
@@ -205,5 +272,7 @@ module.exports = {
   buildStateLookupWhere,
   assertRecordAccess,
   applyScopeToBody,
+  withCoordinatorTeam,
+  isCoordinatorRole,
   ROLE_SCOPE_FALLBACK,
 };

@@ -1,7 +1,7 @@
 const { Router } = require("express");
 const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
-const { authenticate } = require("../middleware/auth");
+const { authenticate, blockCoordinatorWrites } = require("../middleware/auth");
 const { requireStateOfficeRoute } = require("../middleware/stateOfficeAccess");
 const {
   enrolment, migration, cemonc,
@@ -26,6 +26,7 @@ const router = Router();
 
 router.use(authenticate);
 router.use(requireStateOfficeRoute);
+router.use(blockCoordinatorWrites);
 
 router.get("/dashboard", stateOfficeDashboard.dashboard);
 router.get("/dashboard/drill", stateOfficeDashboard.dashboardDrill);

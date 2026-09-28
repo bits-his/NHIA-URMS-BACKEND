@@ -1,7 +1,7 @@
 const sequelize = require("../config/database");
 const { ZonalOffice, StateOffice, StateOfficeReconciliationMeeting } = require("../models");
 const {
-  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+  buildStateOfficeListWhere, withCoordinatorTeam, assertRecordAccess, applyScopeToBody,
 } = require("../utils/stateOfficeScope");
 
 const genRefId = async (t) => {
@@ -17,7 +17,7 @@ const includeGeo = [
 
 const listMeetings = async (req, res, next) => {
   try {
-    const where = await buildStateOfficeListWhere(req.user, req.query);
+    const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), StateOfficeReconciliationMeeting);
     const rows = await StateOfficeReconciliationMeeting.findAll({
       where,
       include: includeGeo,

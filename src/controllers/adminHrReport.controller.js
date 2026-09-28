@@ -1,6 +1,6 @@
 const { ZonalOffice, StateOffice, AdminHrReport } = require("../models");
 const {
-  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+  buildStateOfficeListWhere, withCoordinatorTeam, assertRecordAccess, applyScopeToBody,
 } = require("../utils/stateOfficeScope");
 
 const REF_PREFIX = {
@@ -63,7 +63,7 @@ const makeAdminHrController = (reportType) => {
 
   const listReports = async (req, res, next) => {
     try {
-      const where = await buildStateOfficeListWhere(req.user, req.query);
+      const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), AdminHrReport);
       where.report_type = reportType;
 
       const list = await AdminHrReport.findAll({
