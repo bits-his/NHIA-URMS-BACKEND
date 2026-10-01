@@ -1,3 +1,5 @@
+const { ENROLMENT_DRIVE_TYPES } = require("../utils/enrolmentDriveTypes");
+
 const SOC_ZONES_MODULE = "SOC/Zones";
 const ZONAL_MODULE = "Zonal";
 const SDO_MODULE = "SDO";
@@ -17,6 +19,7 @@ const ROUTE_FUNCTIONALITY = {
   "reconciliation-meetings": "Reconciliation Meetings",
   accreditation: "Accreditation / Reaccreditation",
   stakeholder: "Stakeholder Engagement",
+  ...Object.fromEntries(ENROLMENT_DRIVE_TYPES.map((t) => [t.segment, t.title])),
   "hmo-selection": "HMO Selection Process",
   "extra-dependant": "Additional / Extra Dependant",
   "hcf-change": "Change of HCF",

@@ -1,7 +1,7 @@
 const { Op } = require("sequelize");
 const {
   EnrolmentReport, MigrationReport, CemoncReport,
-  AccreditationReport, StakeholderReport, HmoSelectionReport, ChallengesReport,
+  AccreditationReport, StakeholderReport, EnrolmentDriveReport, HmoSelectionReport, ChallengesReport,
   ComplaintsComplianceReport, IgrReport, SshiaFinancialReport, ExpenditureProfileReport,
   WeeklyActionableReport, ContractedServicesReport, MonitoringVisit,
   WeeklyActionableReportLine, ContractedServicesReportLine,
@@ -23,6 +23,7 @@ const MONTHLY_REPORT_SOURCES = [
   { key: "cemonc", label: "CEmONC & FFP Beneficiaries", model: CemoncReport },
   { key: "accreditation", label: "Accreditation / Reaccreditation", model: AccreditationReport },
   { key: "stakeholder", label: "Stakeholder Engagement", model: StakeholderReport },
+  { key: "enrolment_drive", label: "Enrolment Drive", model: EnrolmentDriveReport },
   { key: "hmo_selection", label: "HMO Selection Process", model: HmoSelectionReport },
   { key: "extra_dependant", label: "Additional / Extra Dependant", model: ExtraDependantReport },
   { key: "hcf_change", label: "Change of HCF", model: HcpChangeReport },

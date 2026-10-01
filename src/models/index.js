@@ -38,6 +38,8 @@ const AccreditationReport         = require("./AccreditationReport");
 const AccreditationReportLine     = require("./AccreditationReportLine");
 const StakeholderReport           = require("./StakeholderReport");
 const StakeholderReportLine       = require("./StakeholderReportLine");
+const EnrolmentDriveReport        = require("./EnrolmentDriveReport");
+const EnrolmentDriveReportLine    = require("./EnrolmentDriveReportLine");
 const HmoSelectionReport          = require("./HmoSelectionReport");
 const HmoSelectionReportLine      = require("./HmoSelectionReportLine");
 const ChallengesReport            = require("./ChallengesReport");
@@ -159,6 +161,7 @@ CemoncReport.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
 bindStateOfficeReport(ComplaintsComplianceReport, "complaints");
 bindStateOfficeReport(AccreditationReport, "accreditation");
 bindStateOfficeReport(StakeholderReport, "stakeholder");
+bindStateOfficeReport(EnrolmentDriveReport, "enrolment_drive");
 bindStateOfficeReport(HmoSelectionReport, "hmo_selection");
 bindStateOfficeReport(ChallengesReport, "challenges");
 
@@ -334,7 +337,7 @@ module.exports = {
   EnrolmentReport, EnrolmentReportLine, MigrationReport, MigrationReportLine,
   CemoncReport, CemoncReportLine,
   ComplaintsComplianceReport, AccreditationReport, AccreditationReportLine,
-  StakeholderReport, StakeholderReportLine, HmoSelectionReport, HmoSelectionReportLine,
+  StakeholderReport, StakeholderReportLine, EnrolmentDriveReport, EnrolmentDriveReportLine, HmoSelectionReport, HmoSelectionReportLine,
   ChallengesReport,
   StateOfficeComplaint, StateOfficeComplianceVisit, StateOfficeMysteryShopping,
   StateOfficeHmoIndebtedness, StateOfficeHmoIndebtednessLine,

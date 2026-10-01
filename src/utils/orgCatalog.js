@@ -2,6 +2,7 @@
  * Org catalog: departments, units, and the URMS pages each unit owns.
  * Privilege titles must match MODULE_CONFIG leaf titles exactly.
  */
+const { ENROLMENT_DRIVE_TYPES } = require("./enrolmentDriveTypes");
 
 const CORE = [
   { access_to: "Dashboard", functionalities: ["Dashboard"] },
@@ -21,7 +22,7 @@ const DEPARTMENTS = [
       { unit_code: "FSD-ENR", name: "Enrolment & Registration", description: "Monthly enrolment activity reporting.", access: [pack("Zonal", "Enrolment"), pack("Programmes", "Programmes Report"), pack("SOC/Zones", "Monthly Enrollee Register")] },
       { unit_code: "FSD-DEP", name: "Extra / Additional Dependant", description: "Additional and extra dependant requests.", access: [pack("Zonal", "Additional / Extra Dependant")] },
       { unit_code: "FSD-HCF", name: "Change of HCF", description: "Healthcare facility change requests.", access: [pack("Zonal", "Change of HCF")] },
-      { unit_code: "FSD-OUT", name: "Enrolment Drives & Outreach", description: "Sensitization, campaigns and outreach.", access: [pack("Programmes", "Outreach Report")] },
+      { unit_code: "FSD-OUT", name: "Enrolment Drives & Outreach", description: "Sensitization, campaigns and outreach.", access: [pack("Programmes", "Outreach Report"), pack("Zonal", ...ENROLMENT_DRIVE_TYPES.map((t) => t.title))] },
     ],
   },
   {
@@ -126,7 +127,7 @@ const DEPARTMENTS = [
     name: "Communications & Public Affairs",
     description: "Outreach, media and stakeholder relations (diagram MEDIA).",
     units: [
-      { unit_code: "COM-MED", name: "Media & Press", description: "Media parley and campaigns (reported via outreach).", access: [pack("Programmes", "Outreach Report")] },
+      { unit_code: "COM-MED", name: "Media & Press", description: "Media parley and campaigns (reported via outreach).", access: [pack("Programmes", "Outreach Report"), pack("Zonal", "Media Parley / Campaigns")] },
       { unit_code: "COM-ADV", name: "Advocacy & Sensitization", description: "Community outreach and campaigns.", access: [pack("Programmes", "Outreach Report")] },
       { unit_code: "COM-STK", name: "Stakeholder Relations", description: "Stakeholder engagement.", access: [pack("Zonal", "Stakeholder Engagement")] },
     ],

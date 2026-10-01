@@ -21,6 +21,8 @@ const SYNC_ORDER = (models) => [
   models.AccreditationReportLine,
   models.StakeholderReport,
   models.StakeholderReportLine,
+  models.EnrolmentDriveReport,
+  models.EnrolmentDriveReportLine,
   models.HmoSelectionReport,
   models.HmoSelectionReportLine,
   models.ExtraDependantReport,

@@ -5,7 +5,7 @@ const { authenticate, blockCoordinatorWrites } = require("../middleware/auth");
 const { requireStateOfficeRoute } = require("../middleware/stateOfficeAccess");
 const {
   enrolment, migration, cemonc,
-  accreditation, stakeholder, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile,
+  accreditation, stakeholder, enrolmentDrives, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile,
   weeklyActionable, contractedServices, ictSupport, adhocAssignment,
   enrolleeRegister, etmcTmcActionPoint,
   extraDependant, hcpChange,
@@ -71,6 +71,7 @@ mount("cemonc", cemonc);
 mount("complaints", complaints);
 mount("accreditation", accreditation);
 mount("stakeholder", stakeholder);
+Object.entries(enrolmentDrives).forEach(([segment, ctrl]) => mount(segment, ctrl));
 mount("hmo-selection", hmoSelection);
 mount("challenges", challenges);
 mount("igr", igr);
@@ -92,6 +93,13 @@ router.post(
   beneficiaryUpload.single("file"),
   hmoSelection.uploadLineFile,
 );
+Object.entries(enrolmentDrives).forEach(([segment, ctrl]) => {
+  router.post(
+    `/${segment}/reports/:id/lines/:lineId/files`,
+    beneficiaryUpload.array("files", 10),
+    ctrl.uploadLineFiles,
+  );
+});
 router.post(
   "/extra-dependant/reports/:id/lines/:lineId/files",
   beneficiaryUpload.array("files", 10),

@@ -1,4 +1,5 @@
 const sequelize = require("../config/database");
+const { ENROLMENT_DRIVE_TYPES } = require("../utils/enrolmentDriveTypes");
 const { ZonalOffice, StateOffice } = require("../models");
 const {
   buildStateOfficeListWhere, withCoordinatorTeam, assertRecordAccess, applyScopeToBody,
@@ -6,7 +7,19 @@ const {
 
 const quarterFromMonth = (month) => Math.ceil(Number(month) / 3);
 
-const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
+const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, headerExtras = {}, fixed = {}) => {
+  /**
+   * headerExtras: { field: (rawValue) => storedValue } for report-specific header columns.
+   * fixed: column values stamped on create and required on every read/write (shared-table variants).
+   */
+  const matchesFixed = (report) =>
+    !!report && Object.entries(fixed).every(([k, v]) => report[k] === v);
+  const pickHeaderExtras = (body) => Object.fromEntries(
+    Object.entries(headerExtras)
+      .filter(([k]) => body[k] !== undefined)
+      .map(([k, fn]) => [k, fn(body[k])]),
+  );
+
   const generateRefId = async (t) => {
     const year = new Date().getFullYear();
     const count = await ReportModel.count({ transaction: t });
@@ -38,6 +51,8 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
         reference_id, zone_id, state_id,
         reporting_year, reporting_month,
         submission_date, submitted_by, status,
+        ...pickHeaderExtras(scoped),
+        ...fixed,
       }, { transaction: t });
 
       if (lines.length > 0) {
@@ -56,7 +71,10 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
 
   const listReports = async (req, res, next) => {
     try {
-      const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), ReportModel);
+      const where = {
+        ...(await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), ReportModel)),
+        ...fixed,
+      };
 
       const list = await ReportModel.findAll({
         where,
@@ -73,7 +91,8 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
 
   const getReport = async (req, res, next) => {
     try {
-      const report = await findReport(req.params.id);
+      const found = await findReport(req.params.id);
+      const report = matchesFixed(found) ? found : null;
       const access = await assertRecordAccess(req.user, report);
       if (!access.ok) {
         return res.status(access.status).json({ success: false, message: access.message });
@@ -86,7 +105,7 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
     const t = await sequelize.transaction();
     try {
       const report = await ReportModel.findByPk(req.params.id, { transaction: t });
-      if (!report) {
+      if (!matchesFixed(report)) {
         await t.rollback();
         return res.status(404).json({ success: false, message: "Not found" });
       }
@@ -108,6 +127,7 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
         zone_id, state_id, reporting_year, reporting_month,
         submission_date, submitted_by,
         ...(status && { status }),
+        ...pickHeaderExtras(scoped),
       }, { transaction: t });
 
       await LineModel.destroy({ where: { report_id: report.id }, transaction: t });
@@ -133,7 +153,8 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine) => {
       if (!allowed.includes(status)) {
         return res.status(422).json({ success: false, message: "Invalid status" });
       }
-      const report = await ReportModel.findByPk(req.params.id);
+      const found = await ReportModel.findByPk(req.params.id);
+      const report = matchesFixed(found) ? found : null;
       const access = await assertRecordAccess(req.user, report);
       if (!access.ok) {
         return res.status(access.status).json({ success: false, message: access.message });
@@ -194,6 +215,7 @@ const cemonc = makeReportController(
 const {
   AccreditationReport, AccreditationReportLine,
   StakeholderReport, StakeholderReportLine,
+  EnrolmentDriveReport, EnrolmentDriveReportLine,
   HmoSelectionReport, HmoSelectionReportLine,
   ChallengesReport,
   ExtraDependantReport, ExtraDependantReportLine,
@@ -221,6 +243,67 @@ const stakeholder = makeReportController(
     activity_date: line.activity_date || null,
     key_outcomes: line.key_outcomes || null,
   })
+);
+
+const optNum = (v) => (v != null && v !== "" && !Number.isNaN(Number(v)) ? Number(v) : null);
+const strArray = (v) => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
+
+const mapEnrolmentDriveLine = (line, reportId) => ({
+    report_id: reportId,
+    drive_code: line.drive_code || null,
+    activity_date: line.activity_date || null,
+    activity_category: line.activity_category,
+    specific_activity: line.specific_activity || null,
+    funding_option: line.funding_option || null,
+    activity_budget: optNum(line.activity_budget),
+    approved_amount: optNum(line.approved_amount),
+    target_audience: strArray(line.target_audience),
+    location_category: line.location_category || null,
+    location_name: line.location_name || null,
+    programs_supported: strArray(line.programs_supported),
+    activity_details: line.activity_details || null,
+    planned_target_audience: optNum(line.planned_target_audience),
+    target_audience_reached: optNum(line.target_audience_reached),
+    leads_generated: optNum(line.leads_generated),
+    new_enrolments: optNum(line.new_enrolments),
+    supporting_documents: Array.isArray(line.supporting_documents)
+      ? line.supporting_documents
+          .filter((d) => d && typeof d === "object" && d.path)
+          .map((d) => ({ name: d.name || "Document", path: d.path }))
+      : [],
+    activity_status: line.activity_status || null,
+    remarks: line.remarks || null,
+});
+
+const makeEnrolmentDriveLineUpload = (driveType) => async (req, res, next) => {
+  try {
+    const found = await EnrolmentDriveReport.findByPk(req.params.id);
+    const report = found && found.drive_type === driveType ? found : null;
+    const access = await assertRecordAccess(req.user, report);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
+    const line = await EnrolmentDriveReportLine.findOne({
+      where: { id: req.params.lineId, report_id: report.id },
+    });
+    if (!line) return res.status(404).json({ success: false, message: "Line not found" });
+    const files = req.files || [];
+    if (!files.length) return res.status(422).json({ success: false, message: "No file uploaded" });
+    const added = files.map((f) => ({ name: f.originalname, path: `/uploads/beneficiary/${f.filename}` }));
+    await line.update({ supporting_documents: [...line.supporting_documents, ...added] });
+    res.json({ success: true, data: line });
+  } catch (err) { next(err); }
+};
+
+/** segment (e.g. "enrolment-drive-advocacy") → controller */
+const enrolmentDrives = Object.fromEntries(
+  ENROLMENT_DRIVE_TYPES.map((t) => [t.segment, {
+    ...makeReportController(
+      EnrolmentDriveReport, EnrolmentDriveReportLine, t.prefix, mapEnrolmentDriveLine,
+      { planned_activities: optNum }, { drive_type: t.key },
+    ),
+    uploadLineFiles: makeEnrolmentDriveLineUpload(t.key),
+  }]),
 );
 
 const hmoSelection = makeReportController(
@@ -1065,7 +1148,7 @@ const complaints = require("./complaintsCompliance.controller");
 
 module.exports = {
   enrolment, migration, cemonc,
-  accreditation, stakeholder, hmoSelection, challenges,
+  accreditation, stakeholder, enrolmentDrives, hmoSelection, challenges,
   complaints, igr, sshiaFinancial, expenditureProfile,
   weeklyActionable, contractedServices, ictSupport, adhocAssignment,
   enrolleeRegister, etmcTmcActionPoint,
