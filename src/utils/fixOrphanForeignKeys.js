@@ -52,6 +52,25 @@ const FK_TYPE_ALIGN = [
 const REF_CLEANUP = [
   { table: "servicom_complaints", column: "facility_id", parent: "servicom_facilities" },
   { table: "servicom_complaints", column: "visit_id", parent: "monitoring_visits" },
+  { table: "users", column: "department_id", parent: "departments" },
+  { table: "users", column: "unit_id", parent: "units" },
+  { table: "supply_verifications", column: "department_id", parent: "departments" },
+  { table: "supply_verifications", column: "unit_id", parent: "units" },
+  { table: "stock_verifications", column: "department_id", parent: "departments" },
+  { table: "stock_verifications", column: "unit_id", parent: "units" },
+  { table: "stock_assets", column: "unit_id", parent: "units" },
+  { table: "store_assets", column: "department_id", parent: "departments" },
+  { table: "store_assets", column: "unit_id", parent: "units" },
+  { table: "physical_asset_verifications", column: "department_id", parent: "departments" },
+  { table: "physical_asset_verifications", column: "unit_id", parent: "units" },
+];
+
+/**
+ * Orphan child rows that cannot be nulled (NOT NULL FK) must be deleted
+ * before sequelize.sync({ alter: true }) can add the constraint.
+ */
+const ORPHAN_DELETE = [
+  { table: "units", column: "department_id", parent: "departments" },
 ];
 
 function parentTableForColumn(column) {
@@ -121,6 +140,40 @@ async function alignIntegerForeignKeys(sequelize, { log = false } = {}) {
   return changed;
 }
 
+async function deleteOrphanRows(sequelize, table, column, parentTable) {
+  const [meta] = await sequelize.query(
+    `SELECT COUNT(*) AS cnt FROM information_schema.tables
+     WHERE table_schema = DATABASE() AND table_name = ?`,
+    { replacements: [table] },
+  );
+  if (!Number(meta[0]?.cnt)) return 0;
+
+  const [cols] = await sequelize.query(
+    `SELECT COUNT(*) AS cnt FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+    { replacements: [table, column] },
+  );
+  if (!Number(cols[0]?.cnt)) return 0;
+
+  // Clear nullable FKs that point at rows we're about to delete (e.g. users.unit_id)
+  if (table === "units") {
+    await sequelize.query(
+      `UPDATE users u
+       INNER JOIN units un ON u.unit_id = un.id
+       LEFT JOIN departments d ON un.department_id = d.id
+       SET u.unit_id = NULL
+       WHERE un.department_id IS NOT NULL AND d.id IS NULL`,
+    );
+  }
+
+  const [, result] = await sequelize.query(
+    `DELETE t FROM \`${table}\` t
+     LEFT JOIN \`${parentTable}\` p ON t.\`${column}\` = p.id
+     WHERE t.\`${column}\` IS NOT NULL AND p.id IS NULL`,
+  );
+  return result?.affectedRows ?? 0;
+}
+
 async function fixOrphanForeignKeys(sequelize, { log = false } = {}) {
   let total = 0;
 
@@ -136,6 +189,12 @@ async function fixOrphanForeignKeys(sequelize, { log = false } = {}) {
   for (const { table, column, parent } of REF_CLEANUP) {
     const n = await nullOrphanColumn(sequelize, table, column, parent);
     if (n && log) console.log(`  ↳ ${table}.${column}: cleared ${n} orphan row(s)`);
+    total += n;
+  }
+
+  for (const { table, column, parent } of ORPHAN_DELETE) {
+    const n = await deleteOrphanRows(sequelize, table, column, parent);
+    if (n && log) console.log(`  ↳ ${table}.${column}: deleted ${n} orphan row(s)`);
     total += n;
   }
 

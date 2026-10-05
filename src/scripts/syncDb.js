@@ -15,6 +15,7 @@ require("../models/index");
 const { User } = require("../models/User");
 const { fixOrphanForeignKeys, alignIntegerForeignKeys } = require("../utils/fixOrphanForeignKeys");
 const { repairAnnualReportKeys } = require("../utils/repairAnnualReportKeys");
+const { dedupeDuplicateIndexes } = require("../utils/dedupeDuplicateIndexes");
 
 (async () => {
   try {
@@ -31,10 +32,21 @@ const { repairAnnualReportKeys } = require("../utils/repairAnnualReportKeys");
       console.log(`ℹ️   Aligned ${aligned} integer FK column type(s) before sync`);
     }
 
+    const deduped = await dedupeDuplicateIndexes(sequelize, { log: true });
+    if (deduped) {
+      console.log(`ℹ️   Dropped ${deduped} duplicate index(es) before sync`);
+    }
+
     await repairAnnualReportKeys(sequelize);
 
     await sequelize.sync({ alter: true });
     console.log("✅  Tables synced");
+
+    // alter:true often re-adds UNIQUE indexes; clean once more so the next sync stays under MySQL's 64-key limit
+    const dedupedAfter = await dedupeDuplicateIndexes(sequelize, { log: false });
+    if (dedupedAfter) {
+      console.log(`ℹ️   Dropped ${dedupedAfter} duplicate index(es) after sync`);
+    }
 
     // Seed default admin if none exists
     const existing = await User.findOne({ where: { role: "admin" } });
