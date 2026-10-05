@@ -101,6 +101,11 @@ Object.entries(enrolmentDrives).forEach(([segment, ctrl]) => {
   );
 });
 router.post(
+  "/stakeholder/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.array("files", 10),
+  stakeholder.uploadLineFiles,
+);
+router.post(
   "/extra-dependant/reports/:id/lines/:lineId/files",
   beneficiaryUpload.array("files", 10),
   extraDependant.uploadLineFiles,

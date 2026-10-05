@@ -128,6 +128,9 @@ const STATE_OFFICE_ACCESS_MODULES = new Set([
   ZONAL_LEGACY,
 ]);
 
+/** National roles may read the aggregated dashboard/drill without a SOC/Zones child privilege */
+const NATIONAL_DASHBOARD_ROLES = new Set(["admin", "sdo", "dg-ceo", "hq-department"]);
+
 function parseAccess(raw) {
   if (Array.isArray(raw)) return raw;
   if (typeof raw === "string") {
@@ -211,6 +214,11 @@ function requireStateOfficeSection(requiredFunctionality) {
 /** Derive required section from the first path segment (e.g. /enrolment/reports → Enrolment) */
 function requireStateOfficeRoute(req, res, next) {
   const segment = req.path.split("/").filter(Boolean)[0];
+
+  // Executive / national home dashboards call /dashboard(+ /drill)
+  if (segment === "dashboard" && NATIONAL_DASHBOARD_ROLES.has(req.user?.role)) {
+    return next();
+  }
 
   if (segment === "accredited-providers" && req.method === "GET") {
     if (req.user?.role === "admin") return next();

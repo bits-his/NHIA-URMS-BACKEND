@@ -6,6 +6,7 @@ const ChallengesReport = sequelize.define(
   "ChallengesReport",
   {
     ...stateOfficeHeaderFields(),
+    // legacy free-text fields retained for older reports
     challenges: { type: DataTypes.TEXT, allowNull: true },
     recommendations: { type: DataTypes.TEXT, allowNull: true },
   },

@@ -30,6 +30,7 @@ const SYNC_ORDER = (models) => [
   models.HcpChangeReport,
   models.HcpChangeReportLine,
   models.ChallengesReport,
+  models.ChallengesReportLine,
   models.WeeklyActionableReport,
   models.WeeklyActionableReportLine,
   models.ContractedServicesReport,

@@ -1,3 +1,4 @@
+const { Op } = require("sequelize");
 const sequelize = require("../config/database");
 const { ENROLMENT_DRIVE_TYPES } = require("../utils/enrolmentDriveTypes");
 const { ZonalOffice, StateOffice } = require("../models");
@@ -6,6 +7,46 @@ const {
 } = require("../utils/stateOfficeScope");
 
 const quarterFromMonth = (month) => Math.ceil(Number(month) / 3);
+
+const patchReportStatus = async (req, report) => {
+  const allowed = ["draft", "submitted", "approved"];
+  const { status, review_note: reviewNote } = req.body;
+  if (!allowed.includes(status)) {
+    const err = new Error("Invalid status");
+    err.status = 422;
+    throw err;
+  }
+  const role = String(req.user?.role || "");
+  const isCoordinator = /(^|-)(state|zonal)-coordinator$/.test(role);
+  if (isCoordinator) {
+    if (report.status !== "submitted") {
+      const err = new Error("Only submitted reports can be approved or returned from the review queue");
+      err.status = 422;
+      throw err;
+    }
+    if (status !== "approved" && status !== "draft") {
+      const err = new Error("Coordinators may approve or return reports to draft");
+      err.status = 422;
+      throw err;
+    }
+    if (status === "draft" && !(reviewNote && String(reviewNote).trim())) {
+      const err = new Error("A comment is required when returning a report");
+      err.status = 422;
+      throw err;
+    }
+  }
+  const reviewerName = req.user?.name || req.user?.staff_id || "Reviewer";
+  await report.update({
+    status,
+    ...(isCoordinator ? {
+      coordinator_reviewed_by: reviewerName,
+      coordinator_reviewed_at: new Date(),
+      coordinator_review_note: reviewNote && String(reviewNote).trim()
+        ? String(reviewNote).trim()
+        : (status === "approved" ? null : report.coordinator_review_note),
+    } : {}),
+  });
+};
 
 const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, headerExtras = {}, fixed = {}) => {
   /**
@@ -75,6 +116,12 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
         ...(await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), ReportModel)),
         ...fixed,
       };
+      if (req.query.activity_module) {
+        const mod = String(req.query.activity_module);
+        where.activity_module = mod === "engagement-coordination"
+          ? { [Op.or]: [mod, null] }
+          : mod;
+      }
 
       const list = await ReportModel.findAll({
         where,
@@ -148,20 +195,23 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
 
   const updateStatus = async (req, res, next) => {
     try {
-      const allowed = ["draft", "submitted", "approved"];
-      const { status } = req.body;
-      if (!allowed.includes(status)) {
-        return res.status(422).json({ success: false, message: "Invalid status" });
-      }
       const found = await ReportModel.findByPk(req.params.id);
       const report = matchesFixed(found) ? found : null;
+      if (!report) {
+        return res.status(404).json({ success: false, message: "Not found" });
+      }
       const access = await assertRecordAccess(req.user, report);
       if (!access.ok) {
         return res.status(access.status).json({ success: false, message: access.message });
       }
-      await report.update({ status });
+      await patchReportStatus(req, report);
       res.json({ success: true, data: report });
-    } catch (err) { next(err); }
+    } catch (err) {
+      if (err.status === 422) {
+        return res.status(422).json({ success: false, message: err.message });
+      }
+      next(err);
+    }
   };
 
   return { createReport, listReports, getReport, updateReport, updateStatus };
@@ -187,7 +237,20 @@ const enrolment = makeReportController(
   (line, reportId, quarter) => ({
     report_id: reportId,
     category: line.category,
+    activity_code: line.activity_code || null,
+    activity_date: line.activity_date || null,
+    enrolment_channel: line.enrolment_channel || null,
+    program_code: line.program_code || null,
+    program_name: line.program_name || null,
+    enrolment_category: line.enrolment_category || null,
+    beneficiary_category: line.beneficiary_category || null,
+    funding_option: line.funding_option || null,
+    activity_budget: line.activity_budget != null && line.activity_budget !== "" ? Number(line.activity_budget) : null,
+    approved_amount: line.approved_amount != null && line.approved_amount !== "" ? Number(line.approved_amount) : null,
     enrolment_count: Number(line.enrolment_count) || 0,
+    enrollees_validated: line.enrollees_validated != null && line.enrollees_validated !== "" ? Number(line.enrollees_validated) : null,
+    activity_status: line.activity_status || null,
+    remarks: line.remarks || null,
     quarter,
   })
 );
@@ -217,36 +280,114 @@ const {
   StakeholderReport, StakeholderReportLine,
   EnrolmentDriveReport, EnrolmentDriveReportLine,
   HmoSelectionReport, HmoSelectionReportLine,
-  ChallengesReport,
+  ChallengesReport, ChallengesReportLine,
   ExtraDependantReport, ExtraDependantReportLine,
   HcpChangeReport, HcpChangeReportLine,
 } = require("../models");
 
-const accreditation = makeReportController(
-  AccreditationReport, AccreditationReportLine, "ACC",
-  (line, reportId) => ({
+const optNum = (v) => (v != null && v !== "" && !Number.isNaN(Number(v)) ? Number(v) : null);
+const strArray = (v) => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
+
+const mapAccreditationLine = (line, reportId) => {
+  if (line.engagement_category || line.activity_date || line.activity_status) {
+    const payload = { ...line };
+    delete payload.indicator;
+    delete payload.primary_count;
+    delete payload.secondary_count;
+    return {
+      report_id: reportId,
+      indicator: "accreditation_applications",
+      primary_count: optNum(line.stakeholders_engaged) || 0,
+      secondary_count: optNum(line.planned_target_stakeholders) || 0,
+      activity_template: payload,
+    };
+  }
+  return {
     report_id: reportId,
     indicator: line.indicator,
     primary_count: Number(line.primary_count) || 0,
     secondary_count: Number(line.secondary_count) || 0,
-  })
+  };
+};
+
+const accreditation = makeReportController(
+  AccreditationReport, AccreditationReportLine, "ACC",
+  mapAccreditationLine,
+  {
+    planned_activities: optNum,
+    activity_module: (v) => (v != null && String(v).trim() ? String(v).trim() : null),
+  },
 );
 
 const stakeholder = makeReportController(
   StakeholderReport, StakeholderReportLine, "STK",
   (line, reportId) => ({
     report_id: reportId,
-    activity: line.activity,
-    audience_size: Number(line.audience_size) || 0,
-    organization: line.organization || null,
-    location: line.location || null,
+    engagement_code: line.engagement_code || null,
     activity_date: line.activity_date || null,
-    key_outcomes: line.key_outcomes || null,
-  })
+    engagement_category: line.engagement_category || line.activity || "Stakeholder Engagement",
+    stakeholder_categories: strArray(line.stakeholder_categories),
+    stakeholder_names: line.stakeholder_names || null,
+    specific_activity: line.specific_activity || null,
+    engagement_purpose: line.engagement_purpose || null,
+    funding_option: line.funding_option || null,
+    activity_budget: optNum(line.activity_budget),
+    approved_amount: optNum(line.approved_amount),
+    planned_target_audience: optNum(line.planned_target_audience),
+    target_audience_reached: strArray(line.target_audience_reached),
+    location_category: line.location_category || null,
+    location_name: line.location_name || line.location || null,
+    programs_supported: strArray(line.programs_supported),
+    activity_details: line.activity_details || null,
+    planned_target_stakeholders: optNum(line.planned_target_stakeholders),
+    stakeholders_engaged: optNum(line.stakeholders_engaged ?? line.audience_size),
+    follow_up_required: line.follow_up_required || null,
+    follow_up_date: line.follow_up_date || null,
+    follow_up_visits: optNum(line.follow_up_visits),
+    supporting_evidence_types: strArray(line.supporting_evidence_types),
+    supporting_documents: Array.isArray(line.supporting_documents)
+      ? line.supporting_documents
+          .filter((d) => d && typeof d === "object" && d.path)
+          .map((d) => ({ name: d.name || "Document", path: d.path }))
+      : [],
+    outcome_category: line.outcome_category || null,
+    specific_outcome: line.specific_outcome || line.key_outcomes || null,
+    expected_output: line.expected_output || null,
+    activity_status: line.activity_status || null,
+    remarks: line.remarks || null,
+    // legacy mirrors for older detail views
+    activity: line.engagement_category || line.activity || null,
+    audience_size: optNum(line.stakeholders_engaged ?? line.audience_size) || 0,
+    organization: line.stakeholder_names || line.organization || null,
+    location: line.location_name || line.location || null,
+    key_outcomes: line.specific_outcome || line.key_outcomes || null,
+  }),
+  {
+    planned_activities: optNum,
+    activity_module: (v) => (v != null && String(v).trim() ? String(v).trim() : null),
+  },
 );
 
-const optNum = (v) => (v != null && v !== "" && !Number.isNaN(Number(v)) ? Number(v) : null);
-const strArray = (v) => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
+const makeStakeholderLineUpload = async (req, res, next) => {
+  try {
+    const report = await StakeholderReport.findByPk(req.params.id);
+    const access = await assertRecordAccess(req.user, report);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
+    const line = await StakeholderReportLine.findOne({
+      where: { id: req.params.lineId, report_id: report.id },
+    });
+    if (!line) return res.status(404).json({ success: false, message: "Line not found" });
+    const files = req.files || [];
+    if (!files.length) return res.status(422).json({ success: false, message: "No file uploaded" });
+    const added = files.map((f) => ({ name: f.originalname, path: `/uploads/beneficiary/${f.filename}` }));
+    const existing = Array.isArray(line.supporting_documents) ? line.supporting_documents : [];
+    await line.update({ supporting_documents: [...existing, ...added] });
+    res.json({ success: true, data: line });
+  } catch (err) { next(err); }
+};
+stakeholder.uploadLineFiles = makeStakeholderLineUpload;
 
 const mapEnrolmentDriveLine = (line, reportId) => ({
     report_id: reportId,
@@ -528,26 +669,46 @@ const makeTextReportController = (ReportModel, refPrefix, textFields = []) => {
 
   const updateStatus = async (req, res, next) => {
     try {
-      const allowed = ["draft", "submitted", "approved"];
-      const { status } = req.body;
-      if (!allowed.includes(status)) {
-        return res.status(422).json({ success: false, message: "Invalid status" });
-      }
       const report = await ReportModel.findByPk(req.params.id);
+      if (!report) {
+        return res.status(404).json({ success: false, message: "Not found" });
+      }
       const access = await assertRecordAccess(req.user, report);
       if (!access.ok) {
         return res.status(access.status).json({ success: false, message: access.message });
       }
-      await report.update({ status });
+      await patchReportStatus(req, report);
       res.json({ success: true, data: report });
-    } catch (err) { next(err); }
+    } catch (err) {
+      if (err.status === 422) {
+        return res.status(422).json({ success: false, message: err.message });
+      }
+      next(err);
+    }
   };
 
   return { createReport, listReports, getReport, updateReport, updateStatus };
 };
 
-const challenges = makeTextReportController(
-  ChallengesReport, "CHL", ["challenges", "recommendations"]
+const challenges = makeReportController(
+  ChallengesReport, ChallengesReportLine, "CHL",
+  (line, reportId) => ({
+    report_id: reportId,
+    challenge_code: line.challenge_code || null,
+    challenge_category: line.challenge_category,
+    specific_challenge: line.specific_challenge || null,
+    challenge_details: line.challenge_details || null,
+    related_activity: line.related_activity || null,
+    related_program: line.related_program || null,
+    severity: line.severity || null,
+    impact: line.impact || null,
+    support_required: line.support_required || null,
+    support_context: line.support_context || null,
+    key_recommendation: line.key_recommendation || null,
+    responsible_department: line.responsible_department || null,
+    status: line.status || null,
+    remarks: line.remarks || null,
+  })
 );
 const igr = makeReportController(
   IgrReport, IgrReportLine, "IGR",
@@ -741,19 +902,22 @@ const makeWeeklyActionableController = () => {
 
   const updateStatus = async (req, res, next) => {
     try {
-      const allowed = ["draft", "submitted", "approved"];
-      const { status } = req.body;
-      if (!allowed.includes(status)) {
-        return res.status(422).json({ success: false, message: "Invalid status" });
-      }
       const report = await WeeklyActionableReport.findByPk(req.params.id);
+      if (!report) {
+        return res.status(404).json({ success: false, message: "Not found" });
+      }
       const access = await assertRecordAccess(req.user, report);
       if (!access.ok) {
         return res.status(access.status).json({ success: false, message: access.message });
       }
-      await report.update({ status });
+      await patchReportStatus(req, report);
       res.json({ success: true, data: report });
-    } catch (err) { next(err); }
+    } catch (err) {
+      if (err.status === 422) {
+        return res.status(422).json({ success: false, message: err.message });
+      }
+      next(err);
+    }
   };
 
   return { createReport, listReports, getReport, updateReport, updateStatus };
@@ -892,19 +1056,22 @@ const makeMonthlyEnrolleeRegisterController = () => {
 
   const updateStatus = async (req, res, next) => {
     try {
-      const allowed = ["draft", "submitted", "approved"];
-      const { status } = req.body;
-      if (!allowed.includes(status)) {
-        return res.status(422).json({ success: false, message: "Invalid status" });
-      }
       const report = await MonthlyEnrolleeRegister.findByPk(req.params.id);
+      if (!report) {
+        return res.status(404).json({ success: false, message: "Not found" });
+      }
       const access = await assertRecordAccess(req.user, report);
       if (!access.ok) {
         return res.status(access.status).json({ success: false, message: access.message });
       }
-      await report.update({ status });
+      await patchReportStatus(req, report);
       res.json({ success: true, data: report });
-    } catch (err) { next(err); }
+    } catch (err) {
+      if (err.status === 422) {
+        return res.status(422).json({ success: false, message: err.message });
+      }
+      next(err);
+    }
   };
 
   return { createReport, listReports, getReport, updateReport, updateStatus };
@@ -1051,19 +1218,22 @@ const makeEtmcTmcActionPointController = () => {
 
   const updateStatus = async (req, res, next) => {
     try {
-      const allowed = ["draft", "submitted", "approved"];
-      const { status } = req.body;
-      if (!allowed.includes(status)) {
-        return res.status(422).json({ success: false, message: "Invalid status" });
-      }
       const report = await EtmcTmcActionPointRegister.findByPk(req.params.id);
+      if (!report) {
+        return res.status(404).json({ success: false, message: "Not found" });
+      }
       const access = await assertRecordAccess(req.user, report);
       if (!access.ok) {
         return res.status(access.status).json({ success: false, message: access.message });
       }
-      await report.update({ status });
+      await patchReportStatus(req, report);
       res.json({ success: true, data: report });
-    } catch (err) { next(err); }
+    } catch (err) {
+      if (err.status === 422) {
+        return res.status(422).json({ success: false, message: err.message });
+      }
+      next(err);
+    }
   };
 
   const uploadDocument = async (req, res, next) => {

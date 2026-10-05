@@ -363,8 +363,30 @@ async function seedStakeholderMonth(geo, year, month) {
   if (created) {
     const d = String(month).padStart(2, "0");
     await StakeholderReportLine.bulkCreate([
-      { report_id: report.id, activity: "NHIA Sensitization Outreach", audience_size: 120 + month * 15, organization: `${geo.label} Ministry of Health`, location: "State Secretariat", activity_date: `${year}-${d}-08`, key_outcomes: "Increased enrollee awareness" },
-      { report_id: report.id, activity: "HMO–Provider Engagement", audience_size: 40 + month * 5, organization: "State HMO Forum", location: "NHIA State Office", activity_date: `${year}-${d}-22`, key_outcomes: "Claims timeline harmonized" },
+      {
+        report_id: report.id,
+        engagement_category: "Sensitization",
+        specific_activity: "NHIA Sensitization Outreach",
+        activity: "NHIA Sensitization Outreach",
+        audience_size: 120 + month * 15,
+        organization: `${geo.label} Ministry of Health`,
+        location: "State Secretariat",
+        activity_date: `${year}-${d}-08`,
+        key_outcomes: "Increased enrollee awareness",
+        activity_status: month <= 9 ? "completed" : "planned",
+      },
+      {
+        report_id: report.id,
+        engagement_category: "Stakeholder meeting",
+        specific_activity: "HMO–Provider Engagement",
+        activity: "HMO–Provider Engagement",
+        audience_size: 40 + month * 5,
+        organization: "State HMO Forum",
+        location: "NHIA State Office",
+        activity_date: `${year}-${d}-22`,
+        key_outcomes: "Claims timeline harmonized",
+        activity_status: month <= 9 ? "completed" : "planned",
+      },
     ]);
   }
   return created ? 1 : 0;
@@ -596,16 +618,16 @@ async function seedReconciliation(geo, year, month, seq, hmo, facility, amount, 
   return created ? 1 : 0;
 }
 
-const OYO_COMPLAINT_TEMPLATES = [
-  { against_type: "against_hmo", entity_name: "Hygeia HMO", entity_code: "HMO-HYG", description: "Capitation delay affecting drug availability at UCH Ibadan.", status: "escalated", officer: "Mrs. Folake Adeyemi" },
-  { against_type: "against_hcp", entity_name: "University College Hospital, Ibadan", entity_code: "OY/001/P", description: "NHIA desk closed during lunch hours; enrollees turned away.", status: "resolved", officer: "Mr. Tunde Oladipo", notes: "Desk hours extended.", resolved: "2026-02-10" },
-  { against_type: "against_hmo", entity_name: "Reliance HMO", entity_code: "HMO-REL", description: "Claim for surgical procedure pending beyond 14 days.", status: "pending", officer: "Mrs. Folake Adeyemi" },
-  { against_type: "against_hcp", entity_name: "Bowen Teaching Hospital", entity_code: "OY/002/P", description: "Laboratory tests billed to enrollee despite NHIA coverage.", status: "unresolved", officer: "Dr. Kunle Adesina" },
-  { against_type: "against_hmo", entity_name: "AIICO Multishield", entity_code: "HMO-AII", description: "Pre-authorization for antenatal care delayed.", status: "resolved", officer: "Mrs. Folake Adeyemi", notes: "Authorization issued.", resolved: "2026-04-15" },
-  { against_type: "against_hcp", entity_name: "State Hospital, Oyo", entity_code: "OY/003/P", description: "Long queue at NHIA verification desk.", status: "pending", officer: "Mr. Tunde Oladipo" },
+const KANO_COMPLAINT_TEMPLATES = [
+  { against_type: "against_hmo", entity_name: "Hygeia HMO", entity_code: "HMO-HYG", description: "Capitation delay affecting drug availability at AKTH Kano.", status: "escalated", officer: "Mrs. Aisha Ibrahim" },
+  { against_type: "against_hcp", entity_name: "Aminu Kano Teaching Hospital", entity_code: "KN/001/P", description: "NHIA desk closed during lunch hours; enrollees turned away.", status: "resolved", officer: "Mr. Musa Bello", notes: "Desk hours extended.", resolved: "2026-02-10" },
+  { against_type: "against_hmo", entity_name: "Reliance HMO", entity_code: "HMO-REL", description: "Claim for surgical procedure pending beyond 14 days.", status: "pending", officer: "Mrs. Aisha Ibrahim" },
+  { against_type: "against_hcp", entity_name: "Mohammed Abdullahi Wase Specialist Hospital", entity_code: "KN/002/P", description: "Laboratory tests billed to enrollee despite NHIA coverage.", status: "unresolved", officer: "Dr. Sani Yusuf" },
+  { against_type: "against_hmo", entity_name: "AIICO Multishield", entity_code: "HMO-AII", description: "Pre-authorization for antenatal care delayed.", status: "resolved", officer: "Mrs. Aisha Ibrahim", notes: "Authorization issued.", resolved: "2026-04-15" },
+  { against_type: "against_hcp", entity_name: "National Orthopaedic Hospital, Dala", entity_code: "KN/003/P", description: "Long queue at NHIA verification desk.", status: "pending", officer: "Mr. Musa Bello" },
 ];
 
-const OTHER_STATES = ["LAG", "KAN", "FCT", "RIV", "IMO", "KAD", "OND"];
+const OTHER_STATES = ["LAG", "OYO", "FCT", "RIV", "IMO", "KAD", "OND"];
 const YEAR = 2026;
 
 async function seedStateMonths(geo, months, counts) {
@@ -678,62 +700,62 @@ async function seedStateMonths(geo, months, counts) {
       extraDependant: 0, hcpChange: 0,
     };
 
-    // ── Oyo: full 12 months, rich transactional data ──
-    const oyo = await resolveGeo("OYO");
-    console.log(`\n📍 Oyo (state_id=${oyo.state_id}, zone_id=${oyo.zone_id})`);
-    await seedStateMonths(oyo, MONTHS, counts);
+    // ── Kano: full 12 months, rich transactional data (primary demo state) ──
+    const kano = await resolveGeo("KAN");
+    console.log(`\n📍 Kano (state_id=${kano.state_id}, zone_id=${kano.zone_id})`);
+    await seedStateMonths(kano, MONTHS, counts);
 
-    counts.extraDependant += await seedExtraDependantMonth(oyo, YEAR, 7, [
-      { enrollee_name: "Aisha Bello", principle_nhia_number: "NHIA-OY-10021", age: 7, relationship: "child", program: "Formal Sector", request_date: "2026-07-04", process_end_date: "2026-07-18", line_status: "approved", supporting_documents: [{ name: "birth_certificate.pdf", path: "/uploads/beneficiary/seed-birth-bello.pdf" }] },
-      { enrollee_name: "Musa Adeyemi", principle_nhia_number: "NHIA-OY-10021", age: 34, relationship: "spouse", program: "Formal Sector", request_date: "2026-07-04", process_end_date: "2026-07-21", line_status: "pending", supporting_documents: [{ name: "marriage_certificate.pdf", path: "/uploads/beneficiary/seed-marriage-adeyemi.pdf" }] },
+    counts.extraDependant += await seedExtraDependantMonth(kano, YEAR, 7, [
+      { enrollee_name: "Aisha Bello", principle_nhia_number: "NHIA-KN-10021", age: 7, relationship: "child", program: "Formal Sector", request_date: "2026-07-04", process_end_date: "2026-07-18", line_status: "approved", supporting_documents: [{ name: "birth_certificate.pdf", path: "/uploads/beneficiary/seed-birth-bello.pdf" }] },
+      { enrollee_name: "Musa Adeyemi", principle_nhia_number: "NHIA-KN-10021", age: 34, relationship: "spouse", program: "Formal Sector", request_date: "2026-07-04", process_end_date: "2026-07-21", line_status: "pending", supporting_documents: [{ name: "marriage_certificate.pdf", path: "/uploads/beneficiary/seed-marriage-adeyemi.pdf" }] },
     ]);
-    counts.extraDependant += await seedExtraDependantMonth(oyo, YEAR, 8, [
-      { enrollee_name: "Fatima Yusuf", principle_nhia_number: "NHIA-OY-11880", age: 62, relationship: "parent", program: "Retirees", request_date: "2026-08-11", process_end_date: null, line_status: "pending", supporting_documents: [{ name: "nin_slip.pdf", path: "/uploads/beneficiary/seed-nin-yusuf.pdf" }] },
-      { enrollee_name: "Chinedu Okafor", principle_nhia_number: "NHIA-OY-10904", age: 11, relationship: "child", program: "GIFSHIP", request_date: "2026-08-15", process_end_date: "2026-08-28", line_status: "approved", supporting_documents: [{ name: "birth_certificate.pdf", path: "/uploads/beneficiary/seed-birth-okafor.pdf" }] },
+    counts.extraDependant += await seedExtraDependantMonth(kano, YEAR, 8, [
+      { enrollee_name: "Fatima Yusuf", principle_nhia_number: "NHIA-KN-11880", age: 62, relationship: "parent", program: "Retirees", request_date: "2026-08-11", process_end_date: null, line_status: "pending", supporting_documents: [{ name: "nin_slip.pdf", path: "/uploads/beneficiary/seed-nin-yusuf.pdf" }] },
+      { enrollee_name: "Chinedu Okafor", principle_nhia_number: "NHIA-KN-10904", age: 11, relationship: "child", program: "GIFSHIP", request_date: "2026-08-15", process_end_date: "2026-08-28", line_status: "approved", supporting_documents: [{ name: "birth_certificate.pdf", path: "/uploads/beneficiary/seed-birth-okafor.pdf" }] },
     ]);
-    counts.extraDependant += await seedExtraDependantMonth(oyo, YEAR, 9, [
-      { enrollee_name: "Halima Sani", principle_nhia_number: "NHIA-OY-12210", age: 4, relationship: "child", program: "OPS", request_date: "2026-09-02", process_end_date: "2026-09-12", line_status: "approved", supporting_documents: [] },
-      { enrollee_name: "Ibrahim Sani", principle_nhia_number: "NHIA-OY-12210", age: 29, relationship: "spouse", program: "OPS", request_date: "2026-09-02", process_end_date: null, line_status: "pending", supporting_documents: [{ name: "marriage_certificate.pdf", path: "/uploads/beneficiary/seed-marriage-sani.pdf" }, { name: "nin.pdf", path: "/uploads/beneficiary/seed-nin-sani.pdf" }] },
-    ]);
-
-    counts.hcpChange += await seedHcpChangeMonth(oyo, YEAR, 7, [
-      { record_date: "2026-07-06", enrollee_name: "Tunde Adebayo", nhia_number: "NHIA-OY-20011", current_hcp_hmo: "University College Hospital, Ibadan", new_hcp_hmo: "Bowen Teaching Hospital, Ogbomoso", reason_for_transfer: "Relocated closer to new workplace", met_criteria: "yes", request_channel: "walk_in", request_date: "2026-07-03", process_end_date: "2026-07-20", line_status: "approved" },
-      { record_date: "2026-07-19", enrollee_name: "Kemi Alabi", nhia_number: "NHIA-OY-20044", current_hcp_hmo: "Hygeia HMO", new_hcp_hmo: "AIICO Multishield Ltd.", reason_for_transfer: "Preferred provider network", met_criteria: "yes", request_channel: "online", request_date: "2026-07-14", process_end_date: null, line_status: "pending" },
-    ]);
-    counts.hcpChange += await seedHcpChangeMonth(oyo, YEAR, 8, [
-      { record_date: "2026-08-08", enrollee_name: "Ngozi Eze", nhia_number: "NHIA-OY-21090", current_hcp_hmo: "Adeoyo Maternity Hospital", new_hcp_hmo: "University College Hospital, Ibadan", reason_for_transfer: "Specialist referral for chronic care", met_criteria: "yes", request_channel: "walk_in", request_date: "2026-08-05", process_end_date: "2026-08-22", line_status: "approved" },
-    ]);
-    counts.hcpChange += await seedHcpChangeMonth(oyo, YEAR, 9, [
-      { record_date: "2026-09-10", enrollee_name: "Sola Akanbi", nhia_number: "NHIA-OY-22103", current_hcp_hmo: "Reliance HMO", new_hcp_hmo: "Avon Healthcare", reason_for_transfer: "Incomplete documentation submitted", met_criteria: "no", request_channel: "online", request_date: "2026-09-07", process_end_date: "2026-09-15", line_status: "incomplete_documentation" },
-      { record_date: "2026-09-12", enrollee_name: "Blessing Okon", nhia_number: "NHIA-OY-22188", current_hcp_hmo: "Jericho Specialist Hospital", new_hcp_hmo: "Ring Road State Hospital", reason_for_transfer: "Did not meet NHIA proximity rule", met_criteria: "no", request_channel: "walk_in", request_date: "2026-09-09", process_end_date: "2026-09-16", line_status: "not_qualified" },
+    counts.extraDependant += await seedExtraDependantMonth(kano, YEAR, 9, [
+      { enrollee_name: "Halima Sani", principle_nhia_number: "NHIA-KN-12210", age: 4, relationship: "child", program: "OPS", request_date: "2026-09-02", process_end_date: "2026-09-12", line_status: "approved", supporting_documents: [] },
+      { enrollee_name: "Ibrahim Sani", principle_nhia_number: "NHIA-KN-12210", age: 29, relationship: "spouse", program: "OPS", request_date: "2026-09-02", process_end_date: null, line_status: "pending", supporting_documents: [{ name: "marriage_certificate.pdf", path: "/uploads/beneficiary/seed-marriage-sani.pdf" }, { name: "nin.pdf", path: "/uploads/beneficiary/seed-nin-sani.pdf" }] },
     ]);
 
-    counts.hmoSelection += await seedHmoSelectionSample(oyo, YEAR, 7, [
-      { mda: "Oyo State Internal Revenue Service", selection_date: "2026-07-09", former_hmo: "Hygeia HMO", reason_for_change: "Contract cycle ended", hmos_invited: 6, hmos_attended: 4, hmos_in_attendance: "4", compliance_guideline: "yes", transparent_process: "yes", selected_hmo: "Reliance HMO" },
+    counts.hcpChange += await seedHcpChangeMonth(kano, YEAR, 7, [
+      { record_date: "2026-07-06", enrollee_name: "Tunde Adebayo", nhia_number: "NHIA-KN-20011", current_hcp_hmo: "Aminu Kano Teaching Hospital", new_hcp_hmo: "Mohammed Abdullahi Wase Specialist Hospital", reason_for_transfer: "Relocated closer to new workplace", met_criteria: "yes", request_channel: "walk_in", request_date: "2026-07-03", process_end_date: "2026-07-20", line_status: "approved" },
+      { record_date: "2026-07-19", enrollee_name: "Kemi Alabi", nhia_number: "NHIA-KN-20044", current_hcp_hmo: "Hygeia HMO", new_hcp_hmo: "AIICO Multishield Ltd.", reason_for_transfer: "Preferred provider network", met_criteria: "yes", request_channel: "online", request_date: "2026-07-14", process_end_date: null, line_status: "pending" },
     ]);
-    counts.hmoSelection += await seedHmoSelectionSample(oyo, YEAR, 9, [
-      { mda: "Oyo State Teaching Service Commission", selection_date: "2026-09-04", former_hmo: "AIICO Multishield Ltd.", reason_for_change: "Need wider rural HCP coverage", hmos_invited: 5, hmos_attended: 5, hmos_in_attendance: "5", compliance_guideline: "yes", transparent_process: "yes", selected_hmo: "AXA Mansard Health" },
+    counts.hcpChange += await seedHcpChangeMonth(kano, YEAR, 8, [
+      { record_date: "2026-08-08", enrollee_name: "Ngozi Eze", nhia_number: "NHIA-KN-21090", current_hcp_hmo: "Murtala Muhammad Specialist Hospital", new_hcp_hmo: "Aminu Kano Teaching Hospital", reason_for_transfer: "Specialist referral for chronic care", met_criteria: "yes", request_channel: "walk_in", request_date: "2026-08-05", process_end_date: "2026-08-22", line_status: "approved" },
     ]);
-    counts.hmoSelection += await seedHmoSelectionSample(oyo, YEAR, 11, [
-      { mda: "Oyo State Water Corporation", selection_date: "2026-11-06", former_hmo: "Avon Healthcare", reason_for_change: "Staff dissatisfaction with claims TAT", hmos_invited: 4, hmos_attended: 2, hmos_in_attendance: "2", compliance_guideline: "no", transparent_process: "no", selected_hmo: "Hygeia HMO" },
+    counts.hcpChange += await seedHcpChangeMonth(kano, YEAR, 9, [
+      { record_date: "2026-09-10", enrollee_name: "Sola Akanbi", nhia_number: "NHIA-KN-22103", current_hcp_hmo: "Reliance HMO", new_hcp_hmo: "Avon Healthcare", reason_for_transfer: "Incomplete documentation submitted", met_criteria: "no", request_channel: "online", request_date: "2026-09-07", process_end_date: "2026-09-15", line_status: "incomplete_documentation" },
+      { record_date: "2026-09-12", enrollee_name: "Blessing Okon", nhia_number: "NHIA-KN-22188", current_hcp_hmo: "National Orthopaedic Hospital, Dala", new_hcp_hmo: "St. Louis Hospital, Kano", reason_for_transfer: "Did not meet NHIA proximity rule", met_criteria: "no", request_channel: "walk_in", request_date: "2026-09-09", process_end_date: "2026-09-16", line_status: "not_qualified" },
+    ]);
+
+    counts.hmoSelection += await seedHmoSelectionSample(kano, YEAR, 7, [
+      { mda: "Kano State Internal Revenue Service", selection_date: "2026-07-09", former_hmo: "Hygeia HMO", reason_for_change: "Contract cycle ended", hmos_invited: 6, hmos_attended: 4, hmos_in_attendance: "4", compliance_guideline: "yes", transparent_process: "yes", selected_hmo: "Reliance HMO" },
+    ]);
+    counts.hmoSelection += await seedHmoSelectionSample(kano, YEAR, 9, [
+      { mda: "Kano State Teaching Service Commission", selection_date: "2026-09-04", former_hmo: "AIICO Multishield Ltd.", reason_for_change: "Need wider rural HCP coverage", hmos_invited: 5, hmos_attended: 5, hmos_in_attendance: "5", compliance_guideline: "yes", transparent_process: "yes", selected_hmo: "AXA Mansard Health" },
+    ]);
+    counts.hmoSelection += await seedHmoSelectionSample(kano, YEAR, 11, [
+      { mda: "Kano State Water Board", selection_date: "2026-11-06", former_hmo: "Avon Healthcare", reason_for_change: "Staff dissatisfaction with claims TAT", hmos_invited: 4, hmos_attended: 2, hmos_in_attendance: "2", compliance_guideline: "no", transparent_process: "no", selected_hmo: "Hygeia HMO" },
     ]);
 
     for (let m = 1; m <= 12; m++) {
-      const tpl = OYO_COMPLAINT_TEMPLATES[(m - 1) % OYO_COMPLAINT_TEMPLATES.length];
-      counts.enrolleeComplaints += await seedEnrolleeComplaint(oyo, YEAR, m, m, tpl);
+      const tpl = KANO_COMPLAINT_TEMPLATES[(m - 1) % KANO_COMPLAINT_TEMPLATES.length];
+      counts.enrolleeComplaints += await seedEnrolleeComplaint(kano, YEAR, m, m, tpl);
       counts.complianceVisits += await seedComplianceVisit(
-        oyo, YEAR, m, 1, "University College Hospital, Ibadan",
+        kano, YEAR, m, 1, "Aminu Kano Teaching Hospital",
         "NHIA desk and claims verification audit", "Documentation reviewed",
       );
       if (m % 2 === 0) {
         counts.complianceVisits += await seedComplianceVisit(
-          oyo, YEAR, m, 2, "Bowen Teaching Hospital, Ogbomoso",
+          kano, YEAR, m, 2, "Mohammed Abdullahi Wase Specialist Hospital",
           "Routine provider compliance check", "Minor gaps; corrective plan issued",
         );
       }
       if (m % 3 === 0) {
         counts.reconciliation += await seedReconciliation(
-          oyo, YEAR, m, 1, "Hygeia HMO", "University College Hospital, Ibadan",
+          kano, YEAR, m, 1, "Hygeia HMO", "Aminu Kano Teaching Hospital",
           1200000 + m * 80000, "In progress",
         );
       }

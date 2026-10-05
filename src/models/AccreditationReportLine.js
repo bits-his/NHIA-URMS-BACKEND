@@ -18,6 +18,7 @@ const AccreditationReportLine = sequelize.define("AccreditationReportLine", {
   },
   primary_count: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 },
   secondary_count: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 },
+  activity_template: { type: DataTypes.JSON, allowNull: true },
 }, { tableName: "accreditation_report_lines", modelName: "AccreditationReportLine" });
 
 AccreditationReport.hasMany(AccreditationReportLine, { foreignKey: "report_id", as: "lines", onDelete: "CASCADE" });

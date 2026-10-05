@@ -43,6 +43,7 @@ const EnrolmentDriveReportLine    = require("./EnrolmentDriveReportLine");
 const HmoSelectionReport          = require("./HmoSelectionReport");
 const HmoSelectionReportLine      = require("./HmoSelectionReportLine");
 const ChallengesReport            = require("./ChallengesReport");
+const ChallengesReportLine        = require("./ChallengesReportLine");
 const StateOfficeComplaint        = require("./StateOfficeComplaint");
 const StateOfficeComplianceVisit  = require("./StateOfficeComplianceVisit");
 const StateOfficeMysteryShopping  = require("./StateOfficeMysteryShopping");
@@ -339,6 +340,7 @@ module.exports = {
   ComplaintsComplianceReport, AccreditationReport, AccreditationReportLine,
   StakeholderReport, StakeholderReportLine, EnrolmentDriveReport, EnrolmentDriveReportLine, HmoSelectionReport, HmoSelectionReportLine,
   ChallengesReport,
+  ChallengesReportLine,
   StateOfficeComplaint, StateOfficeComplianceVisit, StateOfficeMysteryShopping,
   StateOfficeHmoIndebtedness, StateOfficeHmoIndebtednessLine,
   StateOfficeReconciliationMeeting, NhiaAccreditedProvider, HcfFacility, HmoProvider,

@@ -21,6 +21,9 @@ function stateOfficeHeaderFields() {
       type: DataTypes.ENUM("draft", "submitted", "approved"),
       allowNull: false, defaultValue: "draft",
     },
+    coordinator_review_note: { type: DataTypes.TEXT, allowNull: true },
+    coordinator_reviewed_by: { type: DataTypes.STRING(100), allowNull: true },
+    coordinator_reviewed_at: { type: DataTypes.DATE, allowNull: true },
   };
 }
 

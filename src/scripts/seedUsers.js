@@ -120,6 +120,17 @@ const zonalCoordinatorAccess = [
   ...dashboard,
   ...annual,
   ...notifications,
+  ...stateOfficeAccess,
+  ...zonalAccess,
+];
+
+const dgAccess = [
+  ...dashboard,
+  ...notifications,
+  {
+    access_to: "SOC/Zones",
+    functionalities: ["SOC/Zones Dashboard"],
+  },
 ];
 
 const sdoAccess = [
@@ -214,6 +225,15 @@ async function buildUserSpecs(deptMap, unitMap) {
     email: staffEmail("SDO-0001"),
     role: "sdo",
     functionalities: sdoAccess,
+  });
+
+  // ── DG / CEO ──
+  specs.push({
+    staff_id: "DG-0001",
+    name: "Director-General / CEO",
+    email: staffEmail("DG-0001"),
+    role: "dg-ceo",
+    functionalities: dgAccess,
   });
 
   // ── Zonal coordinators (one per zone in DB) ──

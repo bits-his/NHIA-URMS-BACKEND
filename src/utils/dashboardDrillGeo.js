@@ -35,8 +35,11 @@ async function buildStateBreakdownInZone(zoneId, countForState) {
     attributes: ["id", "description"],
     order: [["description", "ASC"]],
   });
+  const seen = new Set();
   const rows = [];
   for (const st of states) {
+    if (seen.has(st.id)) continue;
+    seen.add(st.id);
     const count = await countForState(st.id);
     if (count > 0) {
       rows.push({

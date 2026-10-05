@@ -85,11 +85,14 @@ const requireReviewAccess = async (req, res, next) => {
   }
 };
 
-/** State & zonal coordinators are view-only on state-office records. */
-const blockCoordinatorWrites = (req, res, next) => {
+/** State & zonal coordinators are view-only except PATCH report status (review queue). */
+const blockCoordinatorWrites = async (req, res, next) => {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
   const role = String(req.user?.role || "");
   if (/(^|-)(state|zonal)-coordinator$/.test(role)) {
+    if (req.method === "PATCH" && /\/reports\/[^/]+\/status$/.test(req.path)) {
+      return requireReviewAccess(req, res, next);
+    }
     return res.status(403).json({ success: false, message: "Coordinators have view-only access" });
   }
   next();
