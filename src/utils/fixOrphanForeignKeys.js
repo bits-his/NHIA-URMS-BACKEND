@@ -1,7 +1,8 @@
 /**
- * Null out geo FK columns that reference missing parent rows.
+ * Clear geo FK columns that reference missing parent rows.
  * Required before sequelize.sync({ alter: true }) when legacy data used
  * state/zone IDs that no longer exist in state_offices / zonal_offices.
+ * Nullable columns are nulled; NOT NULL columns delete the orphan child rows.
  */
 async function nullOrphanColumn(sequelize, table, column, parentTable) {
   const [meta] = await sequelize.query(
@@ -9,14 +10,29 @@ async function nullOrphanColumn(sequelize, table, column, parentTable) {
      WHERE table_schema = DATABASE() AND table_name = ?`,
     { replacements: [table] },
   );
-  if (!Number(meta[0]?.cnt)) return 0;
+  if (!Number(meta[0]?.cnt)) return { cleared: 0, deleted: 0 };
 
-  const [cols] = await sequelize.query(
-    `SELECT COUNT(*) AS cnt FROM information_schema.columns
-     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
-    { replacements: [table, column] },
-  );
-  if (!Number(cols[0]?.cnt)) return 0;
+  const col = await columnMeta(sequelize, table, column);
+  if (!col) return { cleared: 0, deleted: 0 };
+
+  if (col.IS_NULLABLE !== "YES") {
+    // Drop nullable refs that would block deleting orphan parents (e.g. complaints → visits)
+    if (table === "monitoring_visits") {
+      await sequelize.query(
+        `UPDATE servicom_complaints c
+         INNER JOIN monitoring_visits v ON c.visit_id = v.id
+         LEFT JOIN \`${parentTable}\` p ON v.\`${column}\` = p.id
+         SET c.visit_id = NULL
+         WHERE v.\`${column}\` IS NOT NULL AND p.id IS NULL`,
+      );
+    }
+    const [, result] = await sequelize.query(
+      `DELETE t FROM \`${table}\` t
+       LEFT JOIN \`${parentTable}\` p ON t.\`${column}\` = p.id
+       WHERE t.\`${column}\` IS NOT NULL AND p.id IS NULL`,
+    );
+    return { cleared: 0, deleted: result?.affectedRows ?? 0 };
+  }
 
   const [, result] = await sequelize.query(
     `UPDATE \`${table}\` t
@@ -24,7 +40,7 @@ async function nullOrphanColumn(sequelize, table, column, parentTable) {
      SET t.\`${column}\` = NULL
      WHERE t.\`${column}\` IS NOT NULL AND p.id IS NULL`,
   );
-  return result?.affectedRows ?? 0;
+  return { cleared: result?.affectedRows ?? 0, deleted: 0 };
 }
 
 /** Tables/columns that get FK constraints via Sequelize associations. */
@@ -180,16 +196,18 @@ async function fixOrphanForeignKeys(sequelize, { log = false } = {}) {
   for (const { table, columns } of GEO_CLEANUP) {
     for (const column of columns) {
       const parent = parentTableForColumn(column);
-      const n = await nullOrphanColumn(sequelize, table, column, parent);
-      if (n && log) console.log(`  ↳ ${table}.${column}: cleared ${n} orphan row(s)`);
-      total += n;
+      const { cleared, deleted } = await nullOrphanColumn(sequelize, table, column, parent);
+      if (cleared && log) console.log(`  ↳ ${table}.${column}: cleared ${cleared} orphan row(s)`);
+      if (deleted && log) console.log(`  ↳ ${table}.${column}: deleted ${deleted} orphan row(s)`);
+      total += cleared + deleted;
     }
   }
 
   for (const { table, column, parent } of REF_CLEANUP) {
-    const n = await nullOrphanColumn(sequelize, table, column, parent);
-    if (n && log) console.log(`  ↳ ${table}.${column}: cleared ${n} orphan row(s)`);
-    total += n;
+    const { cleared, deleted } = await nullOrphanColumn(sequelize, table, column, parent);
+    if (cleared && log) console.log(`  ↳ ${table}.${column}: cleared ${cleared} orphan row(s)`);
+    if (deleted && log) console.log(`  ↳ ${table}.${column}: deleted ${deleted} orphan row(s)`);
+    total += cleared + deleted;
   }
 
   for (const { table, column, parent } of ORPHAN_DELETE) {
