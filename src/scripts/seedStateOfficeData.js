@@ -17,17 +17,26 @@ const {
   ComplaintsComplianceReport,
   AccreditationReport, AccreditationReportLine,
   StakeholderReport, StakeholderReportLine,
+  EnrolmentDriveReport, EnrolmentDriveReportLine,
   HmoSelectionReport, HmoSelectionReportLine,
   ChallengesReport,
   ExtraDependantReport, ExtraDependantReportLine,
   HcpChangeReport, HcpChangeReportLine,
   WeeklyActionableReport, WeeklyActionableReportLine,
   ContractedServicesReport, ContractedServicesReportLine,
+  IctSupportReport, IctSupportReportLine,
+  AdhocAssignmentReport, AdhocAssignmentReportLine,
+  MonthlyEnrolleeRegister,
+  EtmcTmcActionPointRegister, EtmcTmcActionPointLine,
   StateOfficeComplaint,
   StateOfficeComplianceVisit,
+  StateOfficeMysteryShopping,
+  StateOfficeHmoIndebtedness, StateOfficeHmoIndebtednessLine,
   StateOfficeReconciliationMeeting,
   NhiaAccreditedProvider,
+  StateZonalOfficeProfile, StateZonalFocalPerson,
 } = require("../models");
+const { DOMAINS: FOCAL_DOMAINS } = require("../models/StateZonalFocalPerson");
 const {
   ComplaintSummaryLine, ComplaintStatusLine,
   ComplianceVisitLine, ReconciliationLine,
@@ -336,60 +345,254 @@ async function seedComplaintsComplianceMonth(geo, year, month) {
 }
 
 async function seedAccreditationMonth(geo, year, month) {
-  const ref = refId("ACC", geo.code, year, month);
-  const [report, created] = await AccreditationReport.findOrCreate({
-    where: { reference_id: ref },
-    defaults: { ...reportHeader(geo, year, month), reference_id: ref },
-  });
-  if (created) {
-    const n = 2 + Math.floor(month / 3);
+  const d = String(month).padStart(2, "0");
+  const status = month <= 9 ? "Completed" : month === 10 ? "In Progress" : "Deferred";
+  const modules = [
+    {
+      key: "accreditation",
+      prefix: "ACCR",
+      category: "Accreditation",
+      code: "PM-0001",
+      metrics: {
+        FSSHIP: {
+          "Number of Applications Received": 4 + month,
+          "Number of Accreditation Forms Sent": 3 + month,
+          "Number of Completed Returned Forms": 2 + month,
+          "Number of Facilities Awaiting Accreditation": 1 + Math.floor(month / 4),
+          "Number of Facilities Accredited": 2 + Math.floor(month / 3),
+        },
+      },
+    },
+    {
+      key: "reaccreditation",
+      prefix: "REAC",
+      category: "Re-accreditation",
+      code: "PM-0002",
+      metrics: {
+        FSSHIP: {
+          "Number of Facilities Awaiting Re-accreditation": 2 + Math.floor(month / 5),
+          "Number of Facilities Re-accredited": 1 + Math.floor(month / 4),
+        },
+      },
+    },
+    {
+      key: "medical-audits",
+      prefix: "MEDA",
+      category: "Medical Audit",
+      code: "PM-0004",
+      metrics: {
+        FSSHIP: {
+          "Number of Audits Planned": 3,
+          "Number of Audits Conducted": month <= 9 ? 2 : 1,
+        },
+      },
+    },
+    {
+      key: "qa-inspections",
+      prefix: "QAINS",
+      category: "Quality Assurance",
+      code: "PM-0003",
+      metrics: {
+        FSSHIP: {
+          "Number of Facilities Inspected": 3 + Math.floor(month / 3),
+          "Number of QA Reports Completed": 2 + Math.floor(month / 4),
+        },
+      },
+    },
+  ];
+
+  let createdCount = 0;
+  for (const mod of modules) {
+    // Skip some months for variety on non-core modules so lists still look monthly but not identical
+    if (mod.key !== "accreditation" && month % 2 === 0 && geo.code !== "KAN") continue;
+
+    const ref = `${mod.prefix}-${year}-${geo.code}-${d}`;
+    const [report, created] = await AccreditationReport.findOrCreate({
+      where: { reference_id: ref },
+      defaults: {
+        ...reportHeader(geo, year, month),
+        reference_id: ref,
+        activity_module: mod.key,
+        planned_activities: 2,
+      },
+    });
+    if (!created) {
+      if (!report.activity_module) {
+        await report.update({ activity_module: mod.key, planned_activities: report.planned_activities ?? 2 });
+      }
+      continue;
+    }
+    createdCount += 1;
+    const program = "FSSHIP";
+    const metricMap = mod.metrics[program] || {};
     await AccreditationReportLine.bulkCreate([
-      { report_id: report.id, indicator: "accreditation_applications", primary_count: n, secondary_count: 1 },
-      { report_id: report.id, indicator: "reaccreditation_applications", primary_count: n - 1, secondary_count: 1 },
-      { report_id: report.id, indicator: "completed_forms_returned", primary_count: n + 1, secondary_count: 2 },
-      { report_id: report.id, indicator: "awaiting_accreditation", primary_count: n, secondary_count: 0 },
-      { report_id: report.id, indicator: "awaiting_reaccreditation", primary_count: 1, secondary_count: 1 },
+      {
+        report_id: report.id,
+        indicator: "accreditation_applications",
+        primary_count: 2 + Math.floor(month / 3),
+        secondary_count: 3,
+        activity_template: {
+          engagement_code: mod.code,
+          activity_date: `${year}-${d}-12`,
+          engagement_category: mod.category,
+          specific_activity: `${mod.category} visit — ${geo.label}`,
+          engagement_purpose: `Routine ${mod.category.toLowerCase()} for ${geo.label} facilities`,
+          funding_option: "Funded (Budgetary)",
+          activity_budget: 250000 + month * 10000,
+          approved_amount: 220000 + month * 8000,
+          location_category: "State Capital",
+          location_name: geo.label,
+          programs_supported: [program],
+          activity_details: JSON.stringify({ metrics: metricMap }),
+          planned_target_stakeholders: 3,
+          stakeholders_engaged: 2 + Math.floor(month / 4),
+          follow_up_required: "Yes",
+          follow_up_date: `${year}-${d}-28`,
+          follow_up_visits: 1,
+          supporting_evidence_types: ["Inspection Report", "Photographs"],
+          outcome_category: "Programme implementation strengthened",
+          specific_outcome: `${mod.category} completed for sample facilities`,
+          expected_output: "Signed checklist and facility report",
+          activity_status: status,
+          remarks: `${geo.label} ${mod.key} sample seed`,
+        },
+      },
+      {
+        report_id: report.id,
+        indicator: "accreditation_applications",
+        primary_count: 1,
+        secondary_count: 2,
+        activity_template: {
+          engagement_code: mod.code,
+          activity_date: `${year}-${d}-22`,
+          engagement_category: mod.category,
+          specific_activity: `Follow-up ${mod.category} — BHCPF PHCs`,
+          engagement_purpose: "PHC quality and readiness assessment",
+          funding_option: "Routine",
+          location_category: "LGA",
+          location_name: `${geo.label} Central LGA`,
+          programs_supported: ["BHCPF"],
+          activity_details: JSON.stringify({
+            metrics: Object.fromEntries(
+              Object.entries(metricMap).map(([k, v]) => [k, Math.max(1, Math.floor(Number(v) / 2))]),
+            ),
+          }),
+          planned_target_stakeholders: 2,
+          stakeholders_engaged: 1,
+          follow_up_required: "No",
+          supporting_evidence_types: ["Signed Checklist", "Audit Report"],
+          activity_status: status,
+          remarks: "Second activity line for list density",
+        },
+      },
     ]);
   }
-  return created ? 1 : 0;
+  return createdCount;
 }
 
 async function seedStakeholderMonth(geo, year, month) {
-  const ref = refId("STK", geo.code, year, month);
-  const [report, created] = await StakeholderReport.findOrCreate({
-    where: { reference_id: ref },
-    defaults: { ...reportHeader(geo, year, month), reference_id: ref },
-  });
-  if (created) {
-    const d = String(month).padStart(2, "0");
-    await StakeholderReportLine.bulkCreate([
-      {
-        report_id: report.id,
-        engagement_category: "Sensitization",
-        specific_activity: "NHIA Sensitization Outreach",
-        activity: "NHIA Sensitization Outreach",
-        audience_size: 120 + month * 15,
-        organization: `${geo.label} Ministry of Health`,
-        location: "State Secretariat",
-        activity_date: `${year}-${d}-08`,
-        key_outcomes: "Increased enrollee awareness",
-        activity_status: month <= 9 ? "completed" : "planned",
+  const d = String(month).padStart(2, "0");
+  const status = month <= 9 ? "Completed" : month === 10 ? "In Progress" : "Deferred";
+  const modules = [
+    {
+      key: "engagement-coordination",
+      prefix: "STKENG",
+      lines: [
+        { code: "ENG-003", category: "Post-enrolment Sensitization", activity: "Post-enrolment sensitisation with MDAs" },
+        { code: "ENG-004", category: "Capacity Building", activity: "Capacity building for desk officers" },
+        { code: "ENG-012", category: "Program Implementation/Monitoring", activity: "Programme implementation review" },
+      ],
+    },
+    {
+      key: "meetings-sshias",
+      prefix: "STKSSH",
+      lines: [
+        { code: "ENG-001", category: "SSHIA Technical Support", activity: "SSHIA technical support session" },
+        { code: "ENG-005", category: "BHCPF Gateway (SOC) Meeting", activity: "BHCPF gateway SOC meeting" },
+        { code: "ENG-006", category: "Mediation Meetings", activity: "Claims mediation with SSHIA / HMO" },
+      ],
+    },
+    {
+      key: "stakeholder-forum",
+      prefix: "STKFOR",
+      lines: [
+        { code: "ENG-002", category: "Stakeholder Forum/Meeting", activity: "State stakeholder forum" },
+        { code: "ENG-011", category: "Stakeholder Consultative Meeting", activity: "Consultative meeting with labour unions" },
+        { code: "ENG-010", category: "Workshops/Seminar/Summit", activity: "NHIA programme seminar" },
+      ],
+    },
+    {
+      key: "stakeholder-others",
+      prefix: "STKOTH",
+      lines: [
+        { code: "ENG-007", category: "Ad-Hoc Activity", activity: "Ad-hoc governor's office briefing" },
+        { code: "ENG-016", category: "Others (specify)", activity: "Other stakeholder outreach" },
+      ],
+    },
+  ];
+
+  let createdCount = 0;
+  for (const mod of modules) {
+    if (mod.key !== "engagement-coordination" && month % 2 === 0 && geo.code !== "KAN") continue;
+
+    const ref = `${mod.prefix}-${year}-${geo.code}-${d}`;
+    const [report, created] = await StakeholderReport.findOrCreate({
+      where: { reference_id: ref },
+      defaults: {
+        ...reportHeader(geo, year, month),
+        reference_id: ref,
+        activity_module: mod.key,
+        planned_activities: mod.lines.length,
       },
-      {
+    });
+    if (!created) {
+      if (!report.activity_module) {
+        await report.update({ activity_module: mod.key, planned_activities: report.planned_activities ?? mod.lines.length });
+      }
+      continue;
+    }
+    createdCount += 1;
+    await StakeholderReportLine.bulkCreate(
+      mod.lines.map((line, idx) => ({
         report_id: report.id,
-        engagement_category: "Stakeholder meeting",
-        specific_activity: "HMO–Provider Engagement",
-        activity: "HMO–Provider Engagement",
-        audience_size: 40 + month * 5,
-        organization: "State HMO Forum",
-        location: "NHIA State Office",
-        activity_date: `${year}-${d}-22`,
-        key_outcomes: "Claims timeline harmonized",
-        activity_status: month <= 9 ? "completed" : "planned",
-      },
-    ]);
+        engagement_code: line.code,
+        activity_date: `${year}-${d}-${String(8 + idx * 5).padStart(2, "0")}`,
+        engagement_category: line.category,
+        stakeholder_categories: idx % 2 === 0 ? ["MDAs", "SSHIA"] : ["HMOs", "HCFs"],
+        stakeholder_names: `${geo.label} ${idx % 2 === 0 ? "Ministry of Health" : "HMO Forum"}`,
+        specific_activity: line.activity,
+        engagement_purpose: `Strengthen coordination for ${geo.label} state office programmes`,
+        funding_option: "Budgeted (Approved Release)",
+        activity_budget: 180000 + month * 5000 + idx * 10000,
+        approved_amount: 160000 + month * 4000 + idx * 8000,
+        planned_target_audience: 80 + month * 5,
+        target_audience_reached: idx % 2 === 0
+          ? ["Healthcare Workers", "Desk Officers"]
+          : ["HMOs", "Healthcare Providers"],
+        location_category: "State Capital",
+        location_name: geo.label,
+        programs_supported: ["FSSHIP", "GIFSHIP-G", "OPS"].slice(0, 1 + (idx % 3)),
+        activity_details: `${line.activity} conducted in ${geo.label}`,
+        planned_target_stakeholders: 25 + month,
+        stakeholders_engaged: 20 + month - idx,
+        follow_up_required: idx === 0 ? "Yes" : "No",
+        follow_up_date: idx === 0 ? `${year}-${d}-28` : null,
+        follow_up_visits: idx === 0 ? 1 : null,
+        supporting_evidence_types: ["Attendance Register", "Photographs", "Minutes"],
+        outcome_category: "Increased stakeholder commitment",
+        specific_outcome: "No. of organisations requesting further engagement",
+        expected_output: "Signed attendance and action points",
+        activity_status: status,
+        remarks: `${geo.label} ${mod.key} seed`,
+        activity: line.category,
+        audience_size: 20 + month - idx,
+        organization: `${geo.label} ${idx % 2 === 0 ? "Ministry of Health" : "HMO Forum"}`,
+        location: geo.label,
+        key_outcomes: "Increased stakeholder commitment",
+      })),
+    );
   }
-  return created ? 1 : 0;
+  return createdCount;
 }
 
 async function seedHmoSelectionMonth(geo, year, month) {
@@ -618,6 +821,320 @@ async function seedReconciliation(geo, year, month, seq, hmo, facility, amount, 
   return created ? 1 : 0;
 }
 
+const DRIVE_TYPES = [
+  { key: "advocacy", cat: "Advocacy", activity: "Courtesy visit to State Ministry of Health" },
+  { key: "community-sensitization", cat: "Sensitization", activity: "Community sensitisation at LGA HQ" },
+  { key: "informal-sector", cat: "Informal Sector Mobilization", activity: "Artisan association mobilisation" },
+  { key: "enrolment-campaigns", cat: "Enrolment Campaigns", activity: "Weekend enrolment campaign" },
+  { key: "market-religious", cat: "Market Association Outreach", activity: "Central market association outreach" },
+  { key: "mda-engagement", cat: "MDA Engagement", activity: "MDA / OPS engagement meeting" },
+  { key: "capacity-building", cat: "Capacity Building", activity: "State office officer capacity session" },
+  { key: "media-parley", cat: "Media Parley/Campaign", activity: "Radio media parley on NHIA benefits" },
+];
+
+async function seedEnrolmentDriveMonth(geo, year, month) {
+  let createdCount = 0;
+  const d = String(month).padStart(2, "0");
+  for (const drive of DRIVE_TYPES) {
+    if (month % 2 === 0 && drive.key !== "advocacy" && drive.key !== "community-sensitization") continue;
+    const ref = `EDR-${drive.key.slice(0, 6).toUpperCase()}-${year}-${geo.code}-${d}`;
+    const [report, created] = await EnrolmentDriveReport.findOrCreate({
+      where: { reference_id: ref },
+      defaults: {
+        ...reportHeader(geo, year, month),
+        reference_id: ref,
+        drive_type: drive.key,
+        planned_activities: 2,
+      },
+    });
+    if (!created) continue;
+    createdCount += 1;
+    await EnrolmentDriveReportLine.bulkCreate([
+      {
+        report_id: report.id,
+        drive_code: "E-001",
+        activity_date: `${year}-${d}-10`,
+        activity_category: drive.cat,
+        specific_activity: drive.activity,
+        funding_option: "AOP",
+        activity_budget: 150000 + month * 5000,
+        approved_amount: 140000 + month * 4000,
+        target_audience: ["Community", "Enrollees"],
+        location_category: "State Capital",
+        location_name: geo.label,
+        programs_supported: ["GIFSHIP", "OPS"],
+        planned_target_audience: 200 + month * 10,
+        target_audience_reached: 180 + month * 8,
+        leads_generated: 40 + month,
+        new_enrolments: 25 + month,
+        activity_status: month <= 9 ? "completed" : "planned",
+        remarks: `${geo.label} ${drive.key} sample activity`,
+      },
+    ]);
+  }
+  return createdCount;
+}
+
+async function seedEnrolleeRegisterMonth(geo, year, month) {
+  const ref = refId("MER", geo.code, year, month);
+  const self_paying = 120 + month * 8;
+  const ops = 90 + month * 5;
+  const retirees = 40 + month * 2;
+  const constituency = 30 + month;
+  const gifship = 200 + month * 15;
+  const formal_sector = 350 + month * 20;
+  const total_lives = self_paying + ops + retirees + constituency + gifship + formal_sector;
+  const [, created] = await MonthlyEnrolleeRegister.findOrCreate({
+    where: { reference_id: ref },
+    defaults: {
+      ...reportHeader(geo, year, month),
+      reference_id: ref,
+      self_paying, ops, retirees, constituency, gifship, formal_sector, total_lives,
+    },
+  });
+  return created ? 1 : 0;
+}
+
+async function seedIctSupportMonth(geo, year, month) {
+  if (month % 2 !== 0) return 0;
+  const ref = refId("ICT", geo.code, year, month);
+  const [report, created] = await IctSupportReport.findOrCreate({
+    where: { reference_id: ref },
+    defaults: { ...reportHeader(geo, year, month), reference_id: ref },
+  });
+  if (created) {
+    const d = String(month).padStart(2, "0");
+    await IctSupportReportLine.bulkCreate([
+      {
+        report_id: report.id,
+        support_id: `ICT-${geo.code}-${d}-01`,
+        date_reported: `${year}-${d}-05`,
+        reported_by: SUBMITTED_BY,
+        support_category: "Network",
+        issue_type: "Connectivity outage",
+        description: `Intermittent internet at ${geo.label} state office`,
+        priority: "high",
+        date_resolved: month <= 9 ? `${year}-${d}-08` : null,
+        resolution_status: month <= 9 ? "resolved" : "open",
+        action_taken: month <= 9 ? "ISP line reset; router replaced" : null,
+        external_support_required: "no",
+      },
+      {
+        report_id: report.id,
+        support_id: `ICT-${geo.code}-${d}-02`,
+        date_reported: `${year}-${d}-14`,
+        reported_by: SUBMITTED_BY,
+        support_category: "Application",
+        issue_type: "URMS login",
+        description: "Staff account locked after password attempts",
+        priority: "medium",
+        resolution_status: "resolved",
+        date_resolved: `${year}-${d}-14`,
+        action_taken: "Account unlocked; password reset",
+        external_support_required: "no",
+      },
+    ]);
+  }
+  return created ? 1 : 0;
+}
+
+async function seedAdhocAssignmentMonth(geo, year, month) {
+  if (month % 3 !== 0) return 0;
+  const ref = refId("ADH", geo.code, year, month);
+  const [report, created] = await AdhocAssignmentReport.findOrCreate({
+    where: { reference_id: ref },
+    defaults: { ...reportHeader(geo, year, month), reference_id: ref },
+  });
+  if (created) {
+    const d = String(month).padStart(2, "0");
+    await AdhocAssignmentReportLine.bulkCreate([
+      {
+        report_id: report.id,
+        assignment_id: `ADH-${geo.code}-${d}-01`,
+        date_assigned: `${year}-${d}-03`,
+        assignment_title: `Special verification visit — ${geo.label}`,
+        assigned_by: "State Coordinator",
+        assignment_description: "Verify NHIA desk operations at teaching hospital",
+        expected_output: "Visit report with findings and photos",
+        responsible_unit: "Operations",
+        supporting_staff: "Compliance Officer",
+        due_date: `${year}-${d}-20`,
+        assignment_status: month <= 9 ? "completed" : "in_progress",
+        date_completed: month <= 9 ? `${year}-${d}-18` : null,
+        output_achieved: month <= 9 ? "Report submitted to zonal office" : null,
+        challenges: "Scheduling conflicts with facility management",
+        support_required: "Transport",
+      },
+    ]);
+  }
+  return created ? 1 : 0;
+}
+
+async function seedEtmcQuarter(geo, year, month) {
+  const q = quarterFromMonth(month);
+  const session = `Q${q}`;
+  const ref = refId("ETMC", geo.code, year, month);
+  const [report, created] = await EtmcTmcActionPointRegister.findOrCreate({
+    where: { reference_id: ref },
+    defaults: {
+      ...reportHeader(geo, year, month, "approved"),
+      reference_id: ref,
+      etmc_session: session,
+      meeting_date: `${year}-${String(month).padStart(2, "0")}-15`,
+    },
+  });
+  if (created) {
+    await EtmcTmcActionPointLine.bulkCreate([
+      {
+        report_id: report.id,
+        sn: 1,
+        agenda_item: "Enrolment performance",
+        resolution_id: `RES-${session}-01`,
+        resolutions: `Accelerate GIFSHIP enrolment in ${geo.label}`,
+        action_point_id: `AP-${session}-01`,
+        action_point: "Conduct two community drives before next ETMC",
+        timeline: `${year}-${String(Math.min(month + 1, 12)).padStart(2, "0")}-28`,
+        responsible_dept: "Operations",
+        supporting_dept: "SERVICOM",
+        status_update: month <= 9 ? "On track" : "Pending",
+      },
+      {
+        report_id: report.id,
+        sn: 2,
+        agenda_item: "Provider compliance",
+        resolution_id: `RES-${session}-02`,
+        resolutions: "Close open compliance findings within 30 days",
+        action_point_id: `AP-${session}-02`,
+        action_point: "Issue corrective action letters to non-compliant HCFs",
+        timeline: `${year}-${String(Math.min(month + 1, 12)).padStart(2, "0")}-20`,
+        responsible_dept: "Compliance",
+        supporting_dept: "State Coordinator",
+        status_update: "In progress",
+      },
+    ]);
+  }
+  return created ? 1 : 0;
+}
+
+async function seedMysteryShoppingMonth(geo, year, month) {
+  if (month % 2 !== 0) return 0;
+  const ref = refId("MYS", geo.code, year, month);
+  const d = String(month).padStart(2, "0");
+  const [, created] = await StateOfficeMysteryShopping.findOrCreate({
+    where: { reference_id: ref },
+    defaults: {
+      reference_id: ref,
+      zone_id: geo.zone_id,
+      state_id: geo.state_id,
+      reporting_year: year,
+      reporting_month: month,
+      email: `mystery.${geo.code.toLowerCase()}@nhia.gov.ng`,
+      mystery_shopper_name: "Demo Mystery Shopper",
+      facility_name: `${geo.label} Specialist Hospital`,
+      facility_nhia_code: `${geo.code}/001/P`,
+      facility_type: "primary_and_secondary",
+      facility_email: `hcf.${geo.code.toLowerCase()}@example.com`,
+      visit_date: `${year}-${d}-12`,
+      observations: {
+        reception: "Courteous",
+        waiting_time: "Moderate",
+        nhia_desk: "Visible and staffed",
+      },
+      standard_expectations_score: 70 + (month % 5) * 4,
+      enrollee_score_1: 75,
+      enrollee_score_2: 68,
+      enrollee_score_3: 80,
+      key_strengths: "Clear NHIA signage; staff able to explain benefits.",
+      gaps_identified: "Long queue at pharmacy during peak hours.",
+      recommendation: "Add second NHIA desk clerk on clinic days.",
+      follow_up_action_plan: "Revisit in 60 days to confirm staffing change.",
+      submitted_by: SUBMITTED_BY,
+      status: monthStatus(month),
+    },
+  });
+  return created ? 1 : 0;
+}
+
+async function seedHmoIndebtednessMonth(geo, year, month) {
+  // Seed every month for Kano; other states keep a lighter quarterly cadence
+  if (geo.code !== "KAN" && month % 3 !== 0) return 0;
+  const ref = refId("HDI", geo.code, year, month);
+  const [sheet, created] = await StateOfficeHmoIndebtedness.findOrCreate({
+    where: { reference_id: ref },
+    defaults: {
+      reference_id: ref,
+      zone_id: geo.zone_id,
+      state_id: geo.state_id,
+      reporting_year: year,
+      reporting_month: month,
+      submitted_by: SUBMITTED_BY,
+      status: monthStatus(month),
+    },
+  });
+  if (created) {
+    const rows = [
+      { hmo_name: "Hygeia HMO", facility_name: `${geo.label} Teaching Hospital`, hcf_code: `${geo.code}/001/P`, nhia_cap: 2500000, nhia_ffs: 800000, phi: 120000 },
+      { hmo_name: "Reliance HMO", facility_name: `${geo.label} General Hospital`, hcf_code: `${geo.code}/002/P`, nhia_cap: 1800000, nhia_ffs: 450000, phi: 90000 },
+      { hmo_name: "AIICO Multishield", facility_name: `${geo.label} Specialist Clinic`, hcf_code: `${geo.code}/003/P`, nhia_cap: 900000, nhia_ffs: 220000, phi: 40000 },
+    ].map((r, i) => ({
+      sheet_id: sheet.id,
+      ...r,
+      total: Number(r.nhia_cap) + Number(r.nhia_ffs) + Number(r.phi),
+      sort_order: i + 1,
+    }));
+    await StateOfficeHmoIndebtednessLine.bulkCreate(rows);
+  }
+  return created ? 1 : 0;
+}
+
+async function seedOfficeProfile(geo, year) {
+  const [, created] = await StateZonalOfficeProfile.findOrCreate({
+    where: { state_id: geo.state_id, reporting_year: year },
+    defaults: {
+      reporting_year: year,
+      zone_id: geo.zone_id,
+      state_id: geo.state_id,
+      staff_strength: geo.code === "KAN" ? 28 : 18,
+      coordinator_name: `${geo.label} State Coordinator`,
+      coordinator_phone: "08030000001",
+      coordinator_email: `sc.${geo.code.toLowerCase()}@nhia.gov.ng`,
+      office_address: `NHIA State Office, ${geo.label}`,
+      office_email: `state.${geo.code.toLowerCase()}@nhia.gov.ng`,
+      enrolment_target: geo.code === "KAN" ? 120000 : 80000,
+      annual_budget: geo.code === "KAN" ? 45000000 : 32000000,
+      created_by: SUBMITTED_BY,
+    },
+  });
+  return created ? 1 : 0;
+}
+
+async function seedFocalPersons(geo, year) {
+  let created = 0;
+  const designations = [
+    "deputy_director", "assistant_director", "chief_officer", "principal_officer",
+    "senior_officer", "officer_i", "officer_ii", "assistant_chief_officer",
+  ];
+  for (let i = 0; i < FOCAL_DOMAINS.length; i++) {
+    const domain = FOCAL_DOMAINS[i];
+    const [, wasCreated] = await StateZonalFocalPerson.findOrCreate({
+      where: { state_id: geo.state_id, reporting_year: year, domain },
+      defaults: {
+        reporting_year: year,
+        zone_id: geo.zone_id,
+        state_id: geo.state_id,
+        domain,
+        officer_name: `${geo.label} ${domain.replace(/_/g, " ")}`,
+        designation: designations[i % designations.length],
+        email: `${domain}.${geo.code.toLowerCase()}@nhia.gov.ng`,
+        phone: `0803${String(1000000 + i).slice(0, 7)}`,
+        created_by: SUBMITTED_BY,
+      },
+    });
+    if (wasCreated) created += 1;
+  }
+  return created;
+}
+
 const KANO_COMPLAINT_TEMPLATES = [
   { against_type: "against_hmo", entity_name: "Hygeia HMO", entity_code: "HMO-HYG", description: "Capitation delay affecting drug availability at AKTH Kano.", status: "escalated", officer: "Mrs. Aisha Ibrahim" },
   { against_type: "against_hcp", entity_name: "Aminu Kano Teaching Hospital", entity_code: "KN/001/P", description: "NHIA desk closed during lunch hours; enrollees turned away.", status: "resolved", officer: "Mr. Musa Bello", notes: "Desk hours extended.", resolved: "2026-02-10" },
@@ -644,9 +1161,16 @@ async function seedStateMonths(geo, months, counts) {
       counts.sshia += await seedSshiaQuarter(geo, YEAR, month);
       counts.expenditure += await seedExpenditureQuarter(geo, YEAR, month);
       counts.challenges += await seedChallengesQuarter(geo, YEAR, month);
+      counts.etmc += await seedEtmcQuarter(geo, YEAR, month);
     }
     counts.weeklyActionable += await seedWeeklyActionableMonth(geo, YEAR, month);
     counts.contractedServices += await seedContractedServicesMonth(geo, YEAR, month);
+    counts.enrolmentDrive += await seedEnrolmentDriveMonth(geo, YEAR, month);
+    counts.enrolleeRegister += await seedEnrolleeRegisterMonth(geo, YEAR, month);
+    counts.ictSupport += await seedIctSupportMonth(geo, YEAR, month);
+    counts.adhoc += await seedAdhocAssignmentMonth(geo, YEAR, month);
+    counts.mysteryShopping += await seedMysteryShoppingMonth(geo, YEAR, month);
+    counts.hmoIndebtedness += await seedHmoIndebtednessMonth(geo, YEAR, month);
   }
 }
 
@@ -672,22 +1196,48 @@ async function seedStateMonths(geo, months, counts) {
       ComplaintsComplianceReport,
       AccreditationReport, AccreditationReportLine,
       StakeholderReport, StakeholderReportLine,
+      EnrolmentDriveReport, EnrolmentDriveReportLine,
       HmoSelectionReport, HmoSelectionReportLine,
       ExtraDependantReport, ExtraDependantReportLine,
       HcpChangeReport, HcpChangeReportLine,
       ChallengesReport,
       StateOfficeComplaint,
       StateOfficeComplianceVisit,
+      StateOfficeMysteryShopping,
+      StateOfficeHmoIndebtedness, StateOfficeHmoIndebtednessLine,
       StateOfficeReconciliationMeeting,
       NhiaAccreditedProvider,
-      WeeklyActionableReport,
-      WeeklyActionableReportLine,
-      ContractedServicesReport,
-      ContractedServicesReportLine,
+      WeeklyActionableReport, WeeklyActionableReportLine,
+      ContractedServicesReport, ContractedServicesReportLine,
+      IctSupportReport, IctSupportReportLine,
+      AdhocAssignmentReport, AdhocAssignmentReportLine,
+      MonthlyEnrolleeRegister,
+      EtmcTmcActionPointRegister, EtmcTmcActionPointLine,
     });
+    await StateZonalOfficeProfile.sync();
+    await StateZonalFocalPerson.sync();
 
     const purged = await purgeLegacySeedRefs();
     if (purged) console.log(`🧹  Removed ${purged} old SEED-* records`);
+
+    // Point legacy null-module rows at the default sidebar menus so lists aren't empty
+    try {
+      const [, stkMeta] = await sequelize.query(
+        `UPDATE stakeholder_reports SET activity_module = 'engagement-coordination'
+         WHERE activity_module IS NULL OR activity_module = ''`,
+      );
+      const [, accMeta] = await sequelize.query(
+        `UPDATE accreditation_reports SET activity_module = 'accreditation'
+         WHERE activity_module IS NULL OR activity_module = ''`,
+      );
+      const stkN = stkMeta?.affectedRows ?? 0;
+      const accN = accMeta?.affectedRows ?? 0;
+      if (stkN || accN) {
+        console.log(`🔗  Tagged ${stkN} stakeholder + ${accN} accreditation report(s) with default activity_module`);
+      }
+    } catch (err) {
+      console.warn("⚠️  activity_module backfill skipped:", err.message);
+    }
 
     const usersFixed = await realignLegacyStateUsers();
     if (usersFixed) console.log(`🔗  Realigned ${usersFixed} user(s) to canonical state IDs`);
@@ -698,11 +1248,16 @@ async function seedStateMonths(geo, months, counts) {
       challenges: 0, enrolleeComplaints: 0, complianceVisits: 0, reconciliation: 0,
       weeklyActionable: 0, contractedServices: 0,
       extraDependant: 0, hcpChange: 0,
+      enrolmentDrive: 0, enrolleeRegister: 0, ictSupport: 0, adhoc: 0,
+      etmc: 0, mysteryShopping: 0, hmoIndebtedness: 0,
+      officeProfiles: 0, focalPersons: 0,
     };
 
     // ── Kano: full 12 months, rich transactional data (primary demo state) ──
     const kano = await resolveGeo("KAN");
     console.log(`\n📍 Kano (state_id=${kano.state_id}, zone_id=${kano.zone_id})`);
+    counts.officeProfiles += await seedOfficeProfile(kano, YEAR);
+    counts.focalPersons += await seedFocalPersons(kano, YEAR);
     await seedStateMonths(kano, MONTHS, counts);
 
     counts.extraDependant += await seedExtraDependantMonth(kano, YEAR, 7, [
@@ -765,6 +1320,8 @@ async function seedStateMonths(geo, months, counts) {
     for (const code of OTHER_STATES) {
       const geo = await resolveGeo(code);
       console.log(`  → ${geo.label} (${code})`);
+      counts.officeProfiles += await seedOfficeProfile(geo, YEAR);
+      counts.focalPersons += await seedFocalPersons(geo, YEAR);
       await seedStateMonths(geo, MONTHS.slice(0, 6), counts);
     }
 
@@ -778,6 +1335,7 @@ async function seedStateMonths(geo, months, counts) {
     console.log(`   Complaints/compliance:    ${counts.complaintsReport}`);
     console.log(`   Accreditation reports:    ${counts.accreditation}`);
     console.log(`   Stakeholder reports:      ${counts.stakeholder}`);
+    console.log(`   Enrolment drives:         ${counts.enrolmentDrive}`);
     console.log(`   HMO selection reports:    ${counts.hmoSelection}`);
     console.log(`   Extra dependant reports:  ${counts.extraDependant}`);
     console.log(`   Change of HCP reports:    ${counts.hcpChange}`);
@@ -786,7 +1344,16 @@ async function seedStateMonths(geo, months, counts) {
     console.log(`   Compliance visits:        ${counts.complianceVisits}`);
     console.log(`   Reconciliation meetings:  ${counts.reconciliation}`);
     console.log(`   Weekly actionable reports: ${counts.weeklyActionable}`);
-    console.log(`   Contracted services reports: ${counts.contractedServices}`);
+    console.log(`   Contracted services:      ${counts.contractedServices}`);
+    console.log(`   Enrollee registers:       ${counts.enrolleeRegister}`);
+    console.log(`   ICT support reports:      ${counts.ictSupport}`);
+    console.log(`   Adhoc assignments:        ${counts.adhoc}`);
+    console.log(`   ETMC/TMC action points:   ${counts.etmc}`);
+    console.log(`   Mystery shopping:         ${counts.mysteryShopping}`);
+    console.log(`   HMO indebtedness:         ${counts.hmoIndebtedness}`);
+    console.log(`   Office profiles:          ${counts.officeProfiles}`);
+    console.log(`   Focal persons:            ${counts.focalPersons}`);
+    console.log("   (Admin/HR — run: npm run db:seed-admin-hr)");
     console.log("   (HMO/HCF providers — see seedAccreditedProviders step in db:seed-all)");
     process.exit(0);
   } catch (err) {

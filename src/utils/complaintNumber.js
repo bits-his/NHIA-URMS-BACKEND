@@ -10,10 +10,14 @@ const MONTH_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP
 
 function partyCode(against) {
   const p = String(against || "").trim();
-  if (/^enrollee$/i.test(p)) return "ENR";
+  if (/^enrollee$/i.test(p) || /^enr$/i.test(p)) return "ENR";
   if (/^hmo$/i.test(p)) return "HMO";
   if (/^hcf$/i.test(p) || /^healthcare facility$/i.test(p)) return "HCF";
-  return (p.slice(0, 3).toUpperCase() || "HCF");
+  // Complainant category labels that are not HCF/HMO map to enrollee/other
+  if (/facility/i.test(p)) return "HCF";
+  if (/hmo/i.test(p)) return "HMO";
+  if (p) return "ENR";
+  return "HCF";
 }
 
 function stateCodeFromOffice(state) {

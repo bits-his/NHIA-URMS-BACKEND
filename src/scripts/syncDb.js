@@ -32,6 +32,12 @@ const { dedupeDuplicateIndexes } = require("../utils/dedupeDuplicateIndexes");
       console.log(`ℹ️   Aligned ${aligned} integer FK column type(s) before sync`);
     }
 
+    // Re-run after type alignment in case signed/unsigned remaps exposed more orphans
+    const clearedAgain = await fixOrphanForeignKeys(sequelize, { log: true });
+    if (clearedAgain) {
+      console.log(`ℹ️   Cleared ${clearedAgain} additional orphan FK reference(s) after type align`);
+    }
+
     const deduped = await dedupeDuplicateIndexes(sequelize, { log: true });
     if (deduped) {
       console.log(`ℹ️   Dropped ${deduped} duplicate index(es) before sync`);

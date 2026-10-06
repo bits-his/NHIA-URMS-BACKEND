@@ -607,7 +607,12 @@ module.exports = {
   previewComplaintNumber: async (req, res, next) => {
     try {
       const stateId = req.query.state_id || req.user?.state_id || null;
-      const against = req.query.against || req.query.complaint_against || "HCF";
+      // Prefer complainant party (complaint_type / complainant_category) over respondent
+      const against = req.query.against
+        || req.query.complaint_type
+        || req.query.complainant_category
+        || req.query.complaint_against
+        || "HCF";
       const dateReceived = req.query.date_received || null;
       if (!stateId) {
         return res.json({
@@ -749,7 +754,7 @@ module.exports = {
       const dateReceived = req.body.date_received || req.body.complaint_date || null;
       const { month, year } = monthYearParts(dateReceived);
       const complaint_number = await nextComplaintNumber({
-        against: req.body.complaint_against || req.body.complaint_type || "HCF",
+        against: req.body.complaint_type || req.body.complainant_category || req.body.complaint_against || "HCF",
         stateId: state_id,
         dateReceived,
         sequelizeModel: ServicomComplaint,
