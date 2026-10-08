@@ -43,7 +43,8 @@ const ServicomComplaint = sequelize.define("ServicomComplaint", {
     allowNull: false,
     defaultValue: "New/Acknowledged",
   },
-  actions_taken:    { type: DataTypes.STRING(150), allowNull: true },
+  /** JSON array of { action, other? } or legacy single string */
+  actions_taken:    { type: DataTypes.TEXT, allowNull: true },
   actions_details:  { type: DataTypes.TEXT, allowNull: true },
   escalated:        { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   escalation_level: { type: DataTypes.STRING(80), allowNull: true },
