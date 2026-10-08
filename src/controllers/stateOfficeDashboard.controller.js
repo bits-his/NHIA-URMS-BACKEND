@@ -946,18 +946,18 @@ const countSocDrillRecord = async (user, query, recordSegment) => {
 const mapMonthlyDrillRow = (r, src) => {
   const driveSuffix = src.key === "enrolment_drive" && r.drive_type ? `:${r.drive_type}` : "";
   return {
-    id: `${src.key}-${r.id}`,
-    reference: r.reference_id,
-    title: src.label,
-    subtitle: src.key === "weekly_actionable"
-      ? `${r.reporting_year}-W${r.reporting_week ?? 1} (${String(r.reporting_month).padStart(2, "0")})`
-      : `${r.reporting_year}-${String(r.reporting_month).padStart(2, "0")}`,
-    status: r.status,
-    date: r.submission_date,
-    state_name: r.state?.description ?? null,
-    zone_name: r.zone?.description ?? null,
-    state_id: r.state_id ?? r.state?.id ?? null,
-    zone_id: r.zone_id ?? r.zone?.id ?? null,
+  id: `${src.key}-${r.id}`,
+  reference: r.reference_id,
+  title: src.label,
+  subtitle: src.key === "weekly_actionable"
+    ? `${r.reporting_year}-W${r.reporting_week ?? 1} (${String(r.reporting_month).padStart(2, "0")})`
+    : `${r.reporting_year}-${String(r.reporting_month).padStart(2, "0")}`,
+  status: r.status,
+  date: r.submission_date,
+  state_name: r.state?.description ?? null,
+  zone_name: r.zone?.description ?? null,
+  state_id: r.state_id ?? r.state?.id ?? null,
+  zone_id: r.zone_id ?? r.zone?.id ?? null,
     meta: `record:${src.key}:${r.id}${driveSuffix}`,
   };
 };
@@ -1069,17 +1069,17 @@ const dashboardDrill = async (req, res, next) => {
         const visitWhere = typeFilter?.whereExtra
           ? applyVisitFilters(where, req.query, typeFilter.whereExtra)
           : applyVisitFilters(where, req.query);
-        const visits = await MonitoringVisit.findAll({
+      const visits = await MonitoringVisit.findAll({
           where: visitWhere,
-          include: geoInclude,
-          order: [["visit_date", "DESC"]],
+        include: geoInclude,
+        order: [["visit_date", "DESC"]],
           limit: typeFilter ? 200 : 40,
-        });
+      });
         const visitLabel = typeFilter?.label ?? "Monitoring Visits";
         const visitKey = typeFilter?.key ?? "monitoring_visits";
-        visits.forEach((r) => {
+      visits.forEach((r) => {
           combined.push(mapVisitDrillRow(r, { key: visitKey, label: visitLabel }));
-        });
+      });
       }
 
       combined.sort((a, b) => String(b.date || b.subtitle).localeCompare(String(a.date || a.subtitle)));
