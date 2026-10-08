@@ -1,42 +1,85 @@
 /**
  * Enrich SERVICOM complaints for Director Enforcement dashboard demos:
- * facility names, complaint_against, and coverage across all 6 zones.
+ * facility names, complaint_against, correct state/zone, and coverage across zones.
+ *
+ * Resolves geo by state code (never hardcodes numeric IDs).
  *
  *   node src/scripts/seedEnforcementComplaintsDemo.js
  */
 require("dotenv").config();
+const { Op } = require("sequelize");
 const sequelize = require("../config/database");
 const ServicomComplaint = require("../models/ServicomComplaint");
+const StateOffice = require("../models/StateOffice");
 
-/** Existing SLA demo rows — fill facility + against party where missing. */
-const FACILITY_PATCHES = {
-  "CMP-2026-00009": { facility_name: "Benue State University Teaching Hospital", complaint_against: "HCF", complainant_name: "Aisha Bello", respondent_name: "BSUTH Makurdi" },
-  "CMP-2026-00010": { facility_name: "Federal Medical Centre Makurdi", complaint_against: "HCF", complainant_name: "Chinedu Okafor", respondent_name: "FMC Makurdi" },
-  "CMP-2026-00011": { facility_name: "Lagos University Teaching Hospital", complaint_against: "HMO", complainant_name: "Funke Adeyemi", respondent_name: "HealthCare HMO Ltd" },
-  "CMP-2026-00012": { facility_name: "Aminu Kano Teaching Hospital", complaint_against: "HCF", complainant_name: "Musa Ibrahim", respondent_name: "AKTH" },
-  "CMP-2026-00013": { facility_name: "National Hospital Abuja", complaint_against: "HCF", complainant_name: "NHIA Audit Desk", respondent_name: "National Hospital" },
-  "CMP-2026-00014": { facility_name: "Federal Medical Centre Azare", complaint_against: "HCF", complainant_name: "Hauwa Yusuf", respondent_name: "FMC Azare" },
-  "CMP-2026-00015": { facility_name: "Federal Medical Centre Owerri", complaint_against: "HCF", complainant_name: "Ngozi Eze", respondent_name: "FMC Owerri" },
-  "CMP-2026-00016": { facility_name: "University of Abuja Teaching Hospital", complaint_against: "HCF", complainant_name: "Tunde Bakare", respondent_name: "UATH" },
-  "CMP-2026-00017": { facility_name: "Lagos Island General Hospital", complaint_against: "HCF", complainant_name: "Bola Johnson", respondent_name: "LIGH" },
-  "CMP-2026-00018": { facility_name: "Ahmadu Bello University Teaching Hospital", complaint_against: "HMO", complainant_name: "Total Health Trust", respondent_name: "NHIA Portal Desk" },
-  "CMP-2026-00019": { facility_name: "University of Ilorin Teaching Hospital", complaint_against: "HCF", complainant_name: "Kemi Lawal", respondent_name: "UITH" },
-  "CMP-2026-00020": { facility_name: "Abubakar Tafawa Balewa University Teaching Hospital", complaint_against: "HCF", complainant_name: "Sani Garba", respondent_name: "ATBUTH" },
-  "CMP-2026-00021": { facility_name: "Federal Teaching Hospital Abakaliki", complaint_against: "HCF", complainant_name: "NHIA SE Desk", respondent_name: "FETHA" },
-  "CMP-2026-00022": { facility_name: "Lagos State University Teaching Hospital", complaint_against: "HMO", complainant_name: "LASUTH Claims Unit", respondent_name: "Hygeia HMO" },
-  "CMP-2026-00023": { facility_name: "Federal Medical Centre Makurdi", complaint_against: "HCF", complainant_name: "Grace Ameh", respondent_name: "FMC Makurdi" },
-  "CMP-2026-00024": { facility_name: "Murtala Muhammed Specialist Hospital", complaint_against: "HCF", complainant_name: "Fatima Sule", respondent_name: "MMSH Kano" },
-  "CMP-2026-00025": { facility_name: "Specialist Hospital Bauchi", complaint_against: "HCF", complainant_name: "Ibrahim Danladi", respondent_name: "SH Bauchi" },
-  "CMP-2026-00026": { facility_name: "Lagos University Teaching Hospital", complaint_against: "HMO", complainant_name: "Reliance HMO", respondent_name: "NHIA SW Desk" },
-  "CMP-2026-00027": { facility_name: "Gwagwalada Specialist Hospital", complaint_against: "HCF", complainant_name: "Mary Okon", respondent_name: "Gwagwalada Specialist" },
-  "CMP-2026-00028": { facility_name: "Imo State University Teaching Hospital", complaint_against: "HCF", complainant_name: "Chika Nwosu", respondent_name: "IMSUTH" },
+const STATE_LABELS = {
+  KAN: "Kano",
+  KAD: "Kaduna",
+  BAU: "Bauchi",
+  ADA: "Adamawa",
+  FCT: "FCT (Abuja)",
+  BEN: "Benue",
+  LAG: "Lagos",
+  OYO: "Oyo",
+  IMO: "Imo",
+  ENU: "Enugu",
+  EBO: "Ebonyi",
+  RIV: "Rivers",
+  AKW: "Akwa Ibom",
+  EDO: "Edo",
+  KWA: "Kwara",
 };
 
-/** Extra rows so South South (zone 6) and facility filters have data. */
+async function resolveGeo(stateCode) {
+  const byCode = await StateOffice.findOne({ where: { code: stateCode } });
+  if (byCode) return { state_id: byCode.id, zone_id: byCode.zonal_id, label: byCode.description };
+
+  const label = STATE_LABELS[stateCode];
+  if (!label) throw new Error(`Unknown state code: ${stateCode}`);
+
+  let byDesc = await StateOffice.findOne({ where: { description: label } });
+  if (!byDesc) {
+    const token = label.replace(/\s*\([^)]*\)\s*/g, "").trim();
+    byDesc = await StateOffice.findOne({
+      where: { description: { [Op.like]: `%${token}%` } },
+      order: [["id", "DESC"]],
+    });
+  }
+  if (!byDesc) {
+    throw new Error(`State not found for ${stateCode} (${label}). Run: npm run db:seed-zones-states`);
+  }
+  return { state_id: byDesc.id, zone_id: byDesc.zonal_id, label: byDesc.description };
+}
+
+/** Existing SLA demo rows — fill facility + against party + correct geo. */
+const FACILITY_PATCHES = {
+  "CMP-2026-00009": { state_code: "BEN", facility_name: "Benue State University Teaching Hospital", complaint_against: "HCF", complainant_name: "Aisha Bello", respondent_name: "BSUTH Makurdi" },
+  "CMP-2026-00010": { state_code: "BEN", facility_name: "Federal Medical Centre Makurdi", complaint_against: "HCF", complainant_name: "Chinedu Okafor", respondent_name: "FMC Makurdi" },
+  "CMP-2026-00011": { state_code: "LAG", facility_name: "Lagos University Teaching Hospital", complaint_against: "HMO", complainant_name: "Funke Adeyemi", respondent_name: "HealthCare HMO Ltd" },
+  "CMP-2026-00012": { state_code: "KAN", facility_name: "Aminu Kano Teaching Hospital", complaint_against: "HCF", complainant_name: "Musa Ibrahim", respondent_name: "AKTH" },
+  "CMP-2026-00013": { state_code: "FCT", facility_name: "National Hospital Abuja", complaint_against: "HCF", complainant_name: "NHIA Audit Desk", respondent_name: "National Hospital" },
+  "CMP-2026-00014": { state_code: "BAU", facility_name: "Federal Medical Centre Azare", complaint_against: "HCF", complainant_name: "Hauwa Yusuf", respondent_name: "FMC Azare" },
+  "CMP-2026-00015": { state_code: "IMO", facility_name: "Federal Medical Centre Owerri", complaint_against: "HCF", complainant_name: "Ngozi Eze", respondent_name: "FMC Owerri" },
+  "CMP-2026-00016": { state_code: "FCT", facility_name: "University of Abuja Teaching Hospital", complaint_against: "HCF", complainant_name: "Tunde Bakare", respondent_name: "UATH" },
+  "CMP-2026-00017": { state_code: "LAG", facility_name: "Lagos Island General Hospital", complaint_against: "HCF", complainant_name: "Bola Johnson", respondent_name: "LIGH" },
+  "CMP-2026-00018": { state_code: "KAD", facility_name: "Ahmadu Bello University Teaching Hospital", complaint_against: "HMO", complainant_name: "Total Health Trust", respondent_name: "NHIA Portal Desk" },
+  "CMP-2026-00019": { state_code: "KWA", facility_name: "University of Ilorin Teaching Hospital", complaint_against: "HCF", complainant_name: "Kemi Lawal", respondent_name: "UITH" },
+  "CMP-2026-00020": { state_code: "BAU", facility_name: "Abubakar Tafawa Balewa University Teaching Hospital", complaint_against: "HCF", complainant_name: "Sani Garba", respondent_name: "ATBUTH" },
+  "CMP-2026-00021": { state_code: "EBO", facility_name: "Federal Teaching Hospital Abakaliki", complaint_against: "HCF", complainant_name: "NHIA SE Desk", respondent_name: "FETHA" },
+  "CMP-2026-00022": { state_code: "LAG", facility_name: "Lagos State University Teaching Hospital", complaint_against: "HMO", complainant_name: "LASUTH Claims Unit", respondent_name: "Hygeia HMO" },
+  "CMP-2026-00023": { state_code: "BEN", facility_name: "Federal Medical Centre Makurdi", complaint_against: "HCF", complainant_name: "Grace Ameh", respondent_name: "FMC Makurdi" },
+  "CMP-2026-00024": { state_code: "KAN", facility_name: "Murtala Muhammed Specialist Hospital", complaint_against: "HCF", complainant_name: "Fatima Sule", respondent_name: "MMSH Kano" },
+  "CMP-2026-00025": { state_code: "BAU", facility_name: "Specialist Hospital Bauchi", complaint_against: "HCF", complainant_name: "Ibrahim Danladi", respondent_name: "SH Bauchi" },
+  "CMP-2026-00026": { state_code: "LAG", facility_name: "Lagos University Teaching Hospital", complaint_against: "HMO", complainant_name: "Reliance HMO", respondent_name: "NHIA SW Desk" },
+  "CMP-2026-00027": { state_code: "FCT", facility_name: "Gwagwalada Specialist Hospital", complaint_against: "HCF", complainant_name: "Mary Okon", respondent_name: "Gwagwalada Specialist" },
+  "CMP-2026-00028": { state_code: "IMO", facility_name: "Imo State University Teaching Hospital", complaint_against: "HCF", complainant_name: "Chika Nwosu", respondent_name: "IMSUTH" },
+};
+
+/** Extra rows so South South and facility filters have data. */
 const EXTRA = [
   {
     complaint_number: "CMP-2026-00030",
-    zone_id: 6, state_id: 37, reporting_year: 2026, reporting_month: 8,
+    state_code: "RIV", reporting_year: 2026, reporting_month: 8,
     entry_date: "2026-08-10", complaint_date: "2026-08-09",
     complaint_type: "HCF", complaint_against: "HCF", complaint_category: "Billing",
     category_code: "HCF-BILL-001", complaint_domain: "Financial", domain_code: "FIN",
@@ -53,7 +96,7 @@ const EXTRA = [
   },
   {
     complaint_number: "CMP-2026-00031",
-    zone_id: 6, state_id: 32, reporting_year: 2026, reporting_month: 8,
+    state_code: "AKW", reporting_year: 2026, reporting_month: 8,
     entry_date: "2026-08-08", complaint_date: "2026-08-07",
     complaint_type: "HMO", complaint_against: "HMO", complaint_category: "Access",
     complaint_domain: "Access", domain_code: "ACC", priority_rating: "High",
@@ -70,7 +113,7 @@ const EXTRA = [
   },
   {
     complaint_number: "CMP-2026-00032",
-    zone_id: 6, state_id: 36, reporting_year: 2026, reporting_month: 7,
+    state_code: "EDO", reporting_year: 2026, reporting_month: 7,
     entry_date: "2026-07-28", complaint_date: "2026-07-25",
     complaint_type: "HCF", complaint_against: "HCF", complaint_category: "Quality of Care",
     category_code: "HCF-QOC-001", complaint_domain: "Service Delivery", domain_code: "SVC",
@@ -87,7 +130,7 @@ const EXTRA = [
   },
   {
     complaint_number: "CMP-2026-00033",
-    zone_id: 1, state_id: 2, reporting_year: 2026, reporting_month: 8,
+    state_code: "KAD", reporting_year: 2026, reporting_month: 8,
     entry_date: "2026-08-12", complaint_date: "2026-08-11",
     complaint_type: "HCF", complaint_against: "HCF", complaint_category: "Service Delivery",
     category_code: "HCF-SVC-001", complaint_domain: "Service Delivery", domain_code: "SVC",
@@ -100,7 +143,7 @@ const EXTRA = [
   },
   {
     complaint_number: "CMP-2026-00034",
-    zone_id: 4, state_id: 26, reporting_year: 2026, reporting_month: 8,
+    state_code: "OYO", reporting_year: 2026, reporting_month: 8,
     entry_date: "2026-08-05", complaint_date: "2026-08-04",
     complaint_type: "Enrollee", complaint_against: "HCF", complaint_category: "Communication",
     complaint_domain: "Relationship", domain_code: "REL", priority_rating: "Medium",
@@ -115,12 +158,19 @@ const EXTRA = [
   },
 ];
 
+async function withGeo(row) {
+  const { state_code, ...rest } = row;
+  const geo = await resolveGeo(state_code);
+  return { ...rest, state_id: geo.state_id, zone_id: geo.zone_id };
+}
+
 async function upsert(row) {
+  const payload = await withGeo(row);
   const [record, isNew] = await ServicomComplaint.findOrCreate({
-    where: { complaint_number: row.complaint_number },
-    defaults: { ...row, created_by: "Enforcement Demo Seed" },
+    where: { complaint_number: payload.complaint_number },
+    defaults: { ...payload, created_by: "Enforcement Demo Seed" },
   });
-  if (!isNew) await record.update({ ...row, created_by: "Enforcement Demo Seed" });
+  if (!isNew) await record.update({ ...payload, created_by: "Enforcement Demo Seed" });
   return isNew;
 }
 
@@ -133,9 +183,11 @@ async function upsert(row) {
     for (const [num, patch] of Object.entries(FACILITY_PATCHES)) {
       const row = await ServicomComplaint.findOne({ where: { complaint_number: num } });
       if (!row) continue;
-      await row.update(patch);
+      const { state_code, ...fields } = patch;
+      const geo = await resolveGeo(state_code);
+      await row.update({ ...fields, state_id: geo.state_id, zone_id: geo.zone_id });
       patched += 1;
-      console.log(`  ↻  ${num} — facility/against updated`);
+      console.log(`  ↻  ${num} — ${fields.facility_name} / ${geo.label}`);
     }
 
     let created = 0;

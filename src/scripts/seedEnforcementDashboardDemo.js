@@ -2,12 +2,16 @@
  * Seed Compliance + Complaints demo data so the Director Enforcement
  * Dashboard KPIs, drills, and zone/state/facility views are fully populated.
  *
+ * Resolves zone/state by code/name (never hardcodes numeric IDs) so local and
+ * production databases stay aligned.
+ *
  * Idempotent — upserts by reference_id / complaint_number.
  *
  *   node src/scripts/seedEnforcementDashboardDemo.js
  *   npm run db:seed-enforcement-dashboard
  */
 require("dotenv").config();
+const { Op } = require("sequelize");
 const sequelize = require("../config/database");
 require("../models/index");
 const {
@@ -15,31 +19,48 @@ const {
   ComplianceFinding,
   ComplianceViolation,
   ComplianceEnforcementAction,
+  StateOffice,
 } = require("../models");
 
 const YEAR = new Date().getFullYear();
 
+const STATE_LABELS = {
+  KAN: "Kano",
+  KAD: "Kaduna",
+  BAU: "Bauchi",
+  ADA: "Adamawa",
+  FCT: "FCT (Abuja)",
+  BEN: "Benue",
+  LAG: "Lagos",
+  OYO: "Oyo",
+  IMO: "Imo",
+  ENU: "Enugu",
+  RIV: "Rivers",
+  AKW: "Akwa Ibom",
+  EDO: "Edo",
+};
+
 /** Align with complaint demo facilities so typeahead + by-facility charts line up. */
 const SITES = [
-  { zone_id: 1, state_id: 3, facility_name: "Aminu Kano Teaching Hospital", facility_code: "KN/AKTH", facility_type: "Tertiary", ownership: "Public", code: "NW-KAN" },
-  { zone_id: 1, state_id: 2, facility_name: "Barau Dikko Teaching Hospital", facility_code: "KD/BDTH", facility_type: "Tertiary", ownership: "Public", code: "NW-KAD" },
-  { zone_id: 1, state_id: 3, facility_name: "Murtala Muhammed Specialist Hospital", facility_code: "KN/MMSH", facility_type: "Secondary", ownership: "Public", code: "NW-MMS" },
-  { zone_id: 2, state_id: 9, facility_name: "Abubakar Tafawa Balewa University Teaching Hospital", facility_code: "BA/ATBU", facility_type: "Tertiary", ownership: "Public", code: "NE-BAU" },
-  { zone_id: 2, state_id: 9, facility_name: "Specialist Hospital Bauchi", facility_code: "BA/SHB", facility_type: "Secondary", ownership: "Public", code: "NE-SHB" },
-  { zone_id: 2, state_id: 8, facility_name: "Federal Medical Centre Yola", facility_code: "AD/FMC", facility_type: "Tertiary", ownership: "Public", code: "NE-YOL" },
-  { zone_id: 3, state_id: 20, facility_name: "National Hospital Abuja", facility_code: "FC/NHA", facility_type: "Tertiary", ownership: "Public", code: "NC-NHA" },
-  { zone_id: 3, state_id: 20, facility_name: "Gwagwalada Specialist Hospital", facility_code: "FC/GSH", facility_type: "Secondary", ownership: "Public", code: "NC-GSH" },
-  { zone_id: 3, state_id: 14, facility_name: "Benue State University Teaching Hospital", facility_code: "BN/BSU", facility_type: "Tertiary", ownership: "Public", code: "NC-BSU" },
-  { zone_id: 3, state_id: 14, facility_name: "Federal Medical Centre Makurdi", facility_code: "BN/FMC", facility_type: "Tertiary", ownership: "Public", code: "NC-FMC" },
-  { zone_id: 4, state_id: 22, facility_name: "Lagos University Teaching Hospital", facility_code: "LA/LUTH", facility_type: "Tertiary", ownership: "Public", code: "SW-LUT" },
-  { zone_id: 4, state_id: 22, facility_name: "Lagos State University Teaching Hospital", facility_code: "LA/LASU", facility_type: "Tertiary", ownership: "Public", code: "SW-LAS" },
-  { zone_id: 4, state_id: 26, facility_name: "University College Hospital Ibadan", facility_code: "OY/UCH", facility_type: "Tertiary", ownership: "Public", code: "SW-UCH" },
-  { zone_id: 5, state_id: 31, facility_name: "Federal Medical Centre Owerri", facility_code: "IM/FMC", facility_type: "Tertiary", ownership: "Public", code: "SE-FMC" },
-  { zone_id: 5, state_id: 31, facility_name: "Imo State University Teaching Hospital", facility_code: "IM/IMS", facility_type: "Tertiary", ownership: "Public", code: "SE-IMS" },
-  { zone_id: 5, state_id: 30, facility_name: "University of Nigeria Teaching Hospital", facility_code: "EN/UNTH", facility_type: "Tertiary", ownership: "Public", code: "SE-UNT" },
-  { zone_id: 6, state_id: 37, facility_name: "University of Port Harcourt Teaching Hospital", facility_code: "RI/UPTH", facility_type: "Tertiary", ownership: "Public", code: "SS-UPT" },
-  { zone_id: 6, state_id: 32, facility_name: "University of Uyo Teaching Hospital", facility_code: "AK/UUTH", facility_type: "Tertiary", ownership: "Public", code: "SS-UYO" },
-  { zone_id: 6, state_id: 36, facility_name: "University of Benin Teaching Hospital", facility_code: "ED/UBTH", facility_type: "Tertiary", ownership: "Public", code: "SS-UBT" },
+  { state_code: "KAN", facility_name: "Aminu Kano Teaching Hospital", facility_code: "KN/AKTH", facility_type: "Tertiary", ownership: "Public", code: "NW-KAN" },
+  { state_code: "KAD", facility_name: "Barau Dikko Teaching Hospital", facility_code: "KD/BDTH", facility_type: "Tertiary", ownership: "Public", code: "NW-KAD" },
+  { state_code: "KAN", facility_name: "Murtala Muhammed Specialist Hospital", facility_code: "KN/MMSH", facility_type: "Secondary", ownership: "Public", code: "NW-MMS" },
+  { state_code: "BAU", facility_name: "Abubakar Tafawa Balewa University Teaching Hospital", facility_code: "BA/ATBU", facility_type: "Tertiary", ownership: "Public", code: "NE-BAU" },
+  { state_code: "BAU", facility_name: "Specialist Hospital Bauchi", facility_code: "BA/SHB", facility_type: "Secondary", ownership: "Public", code: "NE-SHB" },
+  { state_code: "ADA", facility_name: "Federal Medical Centre Yola", facility_code: "AD/FMC", facility_type: "Tertiary", ownership: "Public", code: "NE-YOL" },
+  { state_code: "FCT", facility_name: "National Hospital Abuja", facility_code: "FC/NHA", facility_type: "Tertiary", ownership: "Public", code: "NC-NHA" },
+  { state_code: "FCT", facility_name: "Gwagwalada Specialist Hospital", facility_code: "FC/GSH", facility_type: "Secondary", ownership: "Public", code: "NC-GSH" },
+  { state_code: "BEN", facility_name: "Benue State University Teaching Hospital", facility_code: "BN/BSU", facility_type: "Tertiary", ownership: "Public", code: "NC-BSU" },
+  { state_code: "BEN", facility_name: "Federal Medical Centre Makurdi", facility_code: "BN/FMC", facility_type: "Tertiary", ownership: "Public", code: "NC-FMC" },
+  { state_code: "LAG", facility_name: "Lagos University Teaching Hospital", facility_code: "LA/LUTH", facility_type: "Tertiary", ownership: "Public", code: "SW-LUT" },
+  { state_code: "LAG", facility_name: "Lagos State University Teaching Hospital", facility_code: "LA/LASU", facility_type: "Tertiary", ownership: "Public", code: "SW-LAS" },
+  { state_code: "OYO", facility_name: "University College Hospital Ibadan", facility_code: "OY/UCH", facility_type: "Tertiary", ownership: "Public", code: "SW-UCH" },
+  { state_code: "IMO", facility_name: "Federal Medical Centre Owerri", facility_code: "IM/FMC", facility_type: "Tertiary", ownership: "Public", code: "SE-FMC" },
+  { state_code: "IMO", facility_name: "Imo State University Teaching Hospital", facility_code: "IM/IMS", facility_type: "Tertiary", ownership: "Public", code: "SE-IMS" },
+  { state_code: "ENU", facility_name: "University of Nigeria Teaching Hospital", facility_code: "EN/UNTH", facility_type: "Tertiary", ownership: "Public", code: "SE-UNT" },
+  { state_code: "RIV", facility_name: "University of Port Harcourt Teaching Hospital", facility_code: "RI/UPTH", facility_type: "Tertiary", ownership: "Public", code: "SS-UPT" },
+  { state_code: "AKW", facility_name: "University of Uyo Teaching Hospital", facility_code: "AK/UUTH", facility_type: "Tertiary", ownership: "Public", code: "SS-UYO" },
+  { state_code: "EDO", facility_name: "University of Benin Teaching Hospital", facility_code: "ED/UBTH", facility_type: "Tertiary", ownership: "Public", code: "SS-UBT" },
 ];
 
 const FINDING_POOL = [
@@ -65,6 +86,27 @@ const ENFORCEMENT_POOL = [
   { enforcement_action: "On-site Monitoring Intensified", details: "Weekly follow-up visits scheduled" },
 ];
 
+async function resolveGeo(stateCode) {
+  const byCode = await StateOffice.findOne({ where: { code: stateCode } });
+  if (byCode) return { state_id: byCode.id, zone_id: byCode.zonal_id, label: byCode.description };
+
+  const label = STATE_LABELS[stateCode];
+  if (!label) throw new Error(`Unknown state code: ${stateCode}`);
+
+  let byDesc = await StateOffice.findOne({ where: { description: label } });
+  if (!byDesc) {
+    const token = label.replace(/\s*\([^)]*\)\s*/g, "").trim();
+    byDesc = await StateOffice.findOne({
+      where: { description: { [Op.like]: `%${token}%` } },
+      order: [["id", "DESC"]],
+    });
+  }
+  if (!byDesc) {
+    throw new Error(`State not found for ${stateCode} (${label}). Run: npm run db:seed-zones-states`);
+  }
+  return { state_id: byDesc.id, zone_id: byDesc.zonal_id, label: byDesc.description };
+}
+
 function weekForIndex(i) {
   return 20 + (i % 20);
 }
@@ -74,14 +116,12 @@ function quarterFromWeek(week) {
 }
 
 function pickFindings(i) {
-  // Rotate so every site has a mix of fully / partially / non
   const base = i % FINDING_POOL.length;
   const selected = [
     FINDING_POOL[base],
     FINDING_POOL[(base + 2) % FINDING_POOL.length],
     FINDING_POOL[(base + 4) % FINDING_POOL.length],
   ];
-  // Ensure all three statuses appear across the set; force one of each on every 3rd site
   if (i % 3 === 0) {
     return [
       { ...FINDING_POOL[0] },
@@ -92,7 +132,7 @@ function pickFindings(i) {
   return selected.map((f) => ({ ...f }));
 }
 
-async function upsertComplianceReport(site, index) {
+async function upsertComplianceReport(site, geo, index) {
   const week = weekForIndex(index);
   const reference_id = `ENF-${site.code}-${YEAR}-W${String(week).padStart(2, "0")}`;
   const withViolations = index % 2 === 0;
@@ -100,8 +140,8 @@ async function upsertComplianceReport(site, index) {
   const status = index % 5 === 4 ? "approved" : "submitted";
 
   const header = {
-    zone_id: site.zone_id,
-    state_id: site.state_id,
+    zone_id: geo.zone_id,
+    state_id: geo.state_id,
     reporting_year: YEAR,
     reporting_week: week,
     reporting_quarter: quarterFromWeek(week),
@@ -116,7 +156,7 @@ async function upsertComplianceReport(site, index) {
     facility_code: site.facility_code,
     facility_type: site.facility_type,
     ownership: site.ownership,
-    facility_address: `${site.facility_name}, Nigeria`,
+    facility_address: `${site.facility_name}, ${geo.label}, Nigeria`,
     complaints_received: 1 + (index % 4),
     complaint_categories: ["Delay/Denial of Service", "Illegal Charges"].slice(0, 1 + (index % 2)),
     resolved_at_facility: index % 2,
@@ -165,7 +205,7 @@ async function upsertComplianceReport(site, index) {
     );
 
     await t.commit();
-    console.log(`  ${created ? "✅" : "↻"}  ${reference_id} — ${site.facility_name} (${status})`);
+    console.log(`  ${created ? "✅" : "↻"}  ${reference_id} — ${site.facility_name} / ${geo.label} (${status})`);
     return created ? "created" : "updated";
   } catch (err) {
     await t.rollback();
@@ -184,7 +224,16 @@ async function seedCompliance() {
   let updated = 0;
   let skipped = 0;
   for (let i = 0; i < SITES.length; i += 1) {
-    const result = await upsertComplianceReport(SITES[i], i);
+    const site = SITES[i];
+    let geo;
+    try {
+      geo = await resolveGeo(site.state_code);
+    } catch (err) {
+      console.warn(`  ⚠  ${site.facility_name}: ${err.message}`);
+      skipped += 1;
+      continue;
+    }
+    const result = await upsertComplianceReport(site, geo, i);
     if (result === "created") created += 1;
     else if (result === "updated") updated += 1;
     else skipped += 1;
@@ -194,12 +243,9 @@ async function seedCompliance() {
 }
 
 async function seedComplaints() {
-  // Reuse existing complaint demos (SLA + facility enrichment / South South).
   const { seedServicomComplaintsSlaDemo } = require("./seedServicomComplaintsSlaDemo");
   await seedServicomComplaintsSlaDemo();
 
-  // Run facility enrichment + extra rows by spawning the standalone script body.
-  // Inline require of the IIFE file is awkward — execute key patches via child.
   const { spawnSync } = require("child_process");
   const path = require("path");
   const result = spawnSync(process.execPath, [path.join(__dirname, "seedEnforcementComplaintsDemo.js")], {
