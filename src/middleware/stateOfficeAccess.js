@@ -14,6 +14,7 @@ const ROUTE_FUNCTIONALITY = {
   complaints: "Complaints & Compliance Monitoring",
   "enrollee-complaints": "Enrollee Complaints",
   "compliance-visits": "Monitoring Visits",
+  "weekly-compliance": "Weekly Compliance Report",
   "mystery-shopping": "Mystery Shopping",
   "hmo-indebtedness": "HMO Indebtedness Collation",
   "reconciliation-meetings": "Reconciliation Meetings",
@@ -112,6 +113,7 @@ const FUNCTIONALITY_ALIASES = {
 
 /** Legacy path — also allow these sections to search NHIA lists */
 const ACCREDITED_PROVIDER_SECTIONS = [
+  "Weekly Compliance Report",
   "Enrollee Complaints",
   "Accreditation / Reaccreditation",
   "Reconciliation Meetings",

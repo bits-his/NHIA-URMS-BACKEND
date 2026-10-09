@@ -44,6 +44,7 @@ const SYNC_ORDER = (models) => [
   models.EtmcTmcActionPointLine,
   models.StateOfficeComplaint,
   models.StateOfficeComplianceVisit,
+  models.StateOfficeWeeklyCompliance,
   models.StateOfficeMysteryShopping,
   models.StateOfficeHmoIndebtedness,
   models.StateOfficeHmoIndebtednessLine,

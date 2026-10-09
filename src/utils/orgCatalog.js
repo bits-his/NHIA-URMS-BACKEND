@@ -64,7 +64,7 @@ const DEPARTMENTS = [
     units: [
       { unit_code: "ENF-CMP", name: "Complaints & Compliance", description: "Complaints resolution and register.", access: [pack("Standards & Quality Assurance", "Complaints Report"), pack("SDO", "Complaints Management")] },
       { unit_code: "ENF-HMO", name: "HMO Indebtedness", description: "Reconciliation and HMO indebtedness collation.", access: [pack("Zonal", "HMO Indebtedness Collation")] },
-      { unit_code: "ENF-ACT", name: "Enforcement Actions", description: "Compliance and enforcement actions.", access: [pack("Standards & Quality Assurance", "Compliance Management")] },
+      { unit_code: "ENF-ACT", name: "Enforcement Actions", description: "Compliance and enforcement actions.", access: [pack("Standards & Quality Assurance", "Compliance Management"), pack("Zonal", "Weekly Compliance Report")] },
     ],
   },
   {

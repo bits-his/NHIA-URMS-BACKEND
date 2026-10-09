@@ -29,7 +29,8 @@
     "db:sync-etmc-action-point": "node src/scripts/legacy/addEtmcTmcActionPoint.js",
     "db:sync-beneficiary-management": "node src/scripts/legacy/addBeneficiaryManagement.js",
     "db:migrate-soc-zones-privileges": "node src/scripts/legacy/migrateSocZonesPrivileges.js",
-    "db:migrate-access": "node src/scripts/legacy/migrateProductionAccess.js"
+    "db:migrate-access": "node src/scripts/legacy/migrateProductionAccess.js",
+    "db:seed-weekly-compliance": "node src/scripts/seedWeeklyCompliance.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
