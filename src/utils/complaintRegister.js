@@ -116,6 +116,41 @@ function buildAssigneeWhere(user, Op) {
   return clauses.length ? { [Op.or]: clauses } : null;
 }
 
+/**
+ * Match complaints escalated to the user's department (or Enforcement for ENF staff).
+ * @param {object} user
+ * @param {object} Op
+ * @param {{ code?: string|null, name?: string|null }|null} dept
+ */
+function buildDepartmentEscalationWhere(user, Op, dept = null) {
+  const clauses = [];
+  const code = String(dept?.department_code || dept?.code || "").trim();
+  const name = String(dept?.name || "").trim();
+  const codeUpper = code.toUpperCase();
+  const nameLower = name.toLowerCase();
+  const isEnforcement =
+    codeUpper === "ENF"
+    || codeUpper === "AUD"
+    || nameLower.includes("enforcement");
+
+  if (code) {
+    clauses.push({ escalated_to: code });
+    clauses.push({ escalated_to: { [Op.like]: `%(${code})%` } });
+    clauses.push({ escalated_to: { [Op.like]: `${code}%` } });
+  }
+  if (name) {
+    clauses.push({ escalated_to: name });
+    clauses.push({ escalated_to: { [Op.like]: `%${name}%` } });
+  }
+  if (isEnforcement) {
+    clauses.push({ escalated_to: "Enforcement Department" });
+    clauses.push({ escalated_to: "ENF" });
+    clauses.push({ escalation_level: "Enforcement Department" });
+  }
+  if (!clauses.length) return null;
+  return { escalated: true, [Op.or]: clauses };
+}
+
 /** Match complaints created by the logged-in user. */
 function buildCreatorWhere(user, Op) {
   if (!user?.name && !user?.staff_id) return null;
@@ -197,6 +232,7 @@ module.exports = {
   buildAssigneeWhere,
   buildCreatorWhere,
   buildCreatedOrAssignedWhere,
+  buildDepartmentEscalationWhere,
   isStateCoordinatorRole,
   isZonalCoordinatorRole,
   isReportingOfficerRole,

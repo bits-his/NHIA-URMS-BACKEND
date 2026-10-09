@@ -11,9 +11,19 @@ const {
 } = require("../models");
 const { buildServicomListWhere, applyComplaintExtraFilters } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
-const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere, buildCreatedOrAssignedWhere, isStateCoordinatorRole, isZonalCoordinatorRole, isReportingOfficerRole } = require("../utils/complaintRegister");
+const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere, buildCreatedOrAssignedWhere, buildDepartmentEscalationWhere, isStateCoordinatorRole, isZonalCoordinatorRole, isReportingOfficerRole } = require("../utils/complaintRegister");
 const { nextComplaintNumber, previewComplaintNumber, monthYearParts } = require("../utils/complaintNumber");
-const { notifyOfficerLabel } = require("../utils/notify");
+const {
+  notifyOfficerLabel,
+  notifyEscalationTarget,
+  isEnforcementEscalationTarget,
+  isStateCoordinatorEscalationTarget,
+  isZonalCoordinatorEscalationTarget,
+  isRoleEscalationInbox,
+  ENFORCEMENT_TARGET,
+  STATE_COORDINATOR_TARGET,
+  ZONAL_COORDINATOR_TARGET,
+} = require("../utils/notify");
 const {
   loadComplaintSlaRules,
   enrichComplaintWithSla,
@@ -647,6 +657,14 @@ module.exports = {
       const assigneeWhere = buildAssigneeWhere(req.user, Op);
       const createdOrAssigned = buildCreatedOrAssignedWhere(req.user, Op);
 
+      let userDept = null;
+      if (req.user?.department_id) {
+        userDept = await Department.findByPk(req.user.department_id, {
+          attributes: ["id", "name", "department_code"],
+        });
+      }
+      const deptEscalationWhere = buildDepartmentEscalationWhere(req.user, Op, userDept);
+
       const isZonalCoordinator = isZonalCoordinatorRole(role) && !!req.user?.zone_id;
       const nationalRole = ["admin", "sdo", "hq-department"].includes(role)
         || /director/i.test(String(role || ""))
@@ -655,7 +673,12 @@ module.exports = {
       const stateScope = req.query.scope === "state" && !nationalRole && !isZonalCoordinator;
       /** Own area, plus anything the user created or is assigned to (even outside that area). */
       const areaOrMine = (area, extra = []) => {
-        const parts = [area, ...(createdOrAssigned ? [createdOrAssigned] : []), ...extra];
+        const parts = [
+          area,
+          ...(createdOrAssigned ? [createdOrAssigned] : []),
+          ...(deptEscalationWhere ? [deptEscalationWhere] : []),
+          ...extra,
+        ];
         return parts.length > 1 ? { ...shared, [Op.or]: parts } : { ...shared, ...area };
       };
       /**
@@ -697,9 +720,19 @@ module.exports = {
           where = { ...shared, ...createdOrAssigned };
         }
       } else if (assignedOnly && assigneeWhere) {
-        where = { ...shared, ...assigneeWhere };
-      } else if (assigneeWhere && Object.keys(geo).length) {
-        where = { ...shared, [Op.or]: [geo, assigneeWhere] };
+        const parts = [assigneeWhere, ...(deptEscalationWhere ? [deptEscalationWhere] : [])];
+        where = parts.length > 1 ? { ...shared, [Op.or]: parts } : { ...shared, ...assigneeWhere };
+      } else if ((assigneeWhere || deptEscalationWhere) && Object.keys(geo).length) {
+        const parts = [geo];
+        if (assigneeWhere) parts.push(assigneeWhere);
+        if (deptEscalationWhere) parts.push(deptEscalationWhere);
+        where = { ...shared, [Op.or]: parts };
+      } else if (deptEscalationWhere && !Object.keys(geo).length && !nationalRole) {
+        // Department staff see complaints escalated to their department
+        const parts = [deptEscalationWhere];
+        if (assigneeWhere) parts.push(assigneeWhere);
+        if (createdOrAssigned) parts.push(createdOrAssigned);
+        where = { ...shared, [Op.or]: parts };
       } else {
         where = { ...shared, ...geo };
       }
@@ -799,33 +832,91 @@ module.exports = {
       const merged = { ...row.toJSON(), ...req.body };
       const metrics = await computeComplaintMetrics(merged);
 
-      // Escalation hands the complaint to the escalation officer
+      // Escalation hands the complaint to an officer or department
       const becomingEscalated = req.body.escalated === true || req.body.escalated === "true" || req.body.escalated === 1;
-      if (becomingEscalated && req.body.escalated_to) {
-        metrics.officer_assigned = req.body.escalated_to;
-        metrics.assigned_officer = req.body.escalated_to;
+      const escalationLevel = String(req.body.escalation_level || merged.escalation_level || "").trim();
+      let escalatedTo = req.body.escalated_to !== undefined
+        ? req.body.escalated_to
+        : row.escalated_to;
+
+      // Route role-level escalations to the appropriate inbox (not a single person yet)
+      if (becomingEscalated && escalationLevel === "Enforcement Department") {
+        escalatedTo = ENFORCEMENT_TARGET;
+        req.body.escalated_to = ENFORCEMENT_TARGET;
+      } else if (becomingEscalated && escalationLevel === "State Coordinator") {
+        escalatedTo = STATE_COORDINATOR_TARGET;
+        req.body.escalated_to = STATE_COORDINATOR_TARGET;
+      } else if (becomingEscalated && escalationLevel === "Zonal Office") {
+        escalatedTo = ZONAL_COORDINATOR_TARGET;
+        req.body.escalated_to = ZONAL_COORDINATOR_TARGET;
       }
 
+      const isInboxTarget = isRoleEscalationInbox(escalatedTo)
+        || ["Enforcement Department", "State Coordinator", "Zonal Office"].includes(escalationLevel)
+        || req.body.escalate_to_department === true
+        || req.body.escalate_to_department === "true"
+        || req.body.escalate_to_department === 1;
+
+      // Only reassign the investigating officer when escalating to a specific person
+      if (becomingEscalated && escalatedTo && !isInboxTarget) {
+        metrics.officer_assigned = escalatedTo;
+        metrics.assigned_officer = escalatedTo;
+      }
+
+      const prevEscalatedTo = row.escalated_to;
       await row.update({
         ...pickComplaintFields(req.body),
         ...enrichComplaintCodes(merged),
         ...metrics,
         escalated: req.body.escalated !== undefined ? !!req.body.escalated : row.escalated,
+        ...(escalatedTo !== undefined ? { escalated_to: escalatedTo } : {}),
       });
       await logAudit("servicom_complaint", row.id, "updated", req.user?.name, req.body);
 
-      const nextOfficer = row.officer_assigned || row.assigned_officer;
-      if (nextOfficer && nextOfficer !== prevOfficer) {
-        await notifyOfficerLabel(nextOfficer, {
-          title: becomingEscalated ? "Complaint escalated to you" : "Complaint assigned to you",
-          body: becomingEscalated
-            ? `${row.complaint_number || "A complaint"} was escalated to you (${req.body.escalation_level || "escalation"}). Immediate attention required.`
-            : `${row.complaint_number || "A complaint"} has been assigned to you.`,
-          type: becomingEscalated ? "directive" : "alert",
-          link: "/sdo/servicom/complaints",
-          entity_type: "servicom_complaint",
-          entity_id: row.id,
-        }).catch(() => {});
+      const nextEscalatedTo = row.escalated_to;
+      const escalationTargetChanged = nextEscalatedTo && nextEscalatedTo !== prevEscalatedTo;
+      if (becomingEscalated || escalationTargetChanged) {
+        const target = nextEscalatedTo || escalatedTo;
+        if (target) {
+          const isInbox = isRoleEscalationInbox(target) || isInboxTarget;
+          const title = isStateCoordinatorEscalationTarget(target) || isZonalCoordinatorEscalationTarget(target)
+            ? "Complaint escalated to you"
+            : isEnforcementEscalationTarget(target)
+              ? "Complaint escalated to your department"
+              : isInbox
+                ? "Complaint escalated to your department"
+                : "Complaint escalated to you";
+          await (isInbox
+            ? notifyEscalationTarget(target, {
+                title,
+                body: `${row.complaint_number || "A complaint"} was escalated to ${target}${escalationLevel ? ` (${escalationLevel})` : ""}. Immediate attention required.`,
+                type: "directive",
+                link: "/sdo/servicom/complaints",
+                entity_type: "servicom_complaint",
+                entity_id: row.id,
+              }, { stateId: row.state_id, zoneId: row.zone_id })
+            : notifyOfficerLabel(target, {
+                title: "Complaint escalated to you",
+                body: `${row.complaint_number || "A complaint"} was escalated to you (${escalationLevel || "escalation"}). Immediate attention required.`,
+                type: "directive",
+                link: "/sdo/servicom/complaints",
+                entity_type: "servicom_complaint",
+                entity_id: row.id,
+              })
+          ).catch(() => {});
+        }
+      } else {
+        const nextOfficer = row.officer_assigned || row.assigned_officer;
+        if (nextOfficer && nextOfficer !== prevOfficer) {
+          await notifyOfficerLabel(nextOfficer, {
+            title: "Complaint assigned to you",
+            body: `${row.complaint_number || "A complaint"} has been assigned to you.`,
+            type: "alert",
+            link: "/sdo/servicom/complaints",
+            entity_type: "servicom_complaint",
+            entity_id: row.id,
+          }).catch(() => {});
+        }
       }
 
       const rulesMap = await loadComplaintSlaRules(true);
