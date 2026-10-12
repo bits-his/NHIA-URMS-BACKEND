@@ -12,6 +12,7 @@ const {
 } = require("../controllers/stateOfficeReport.controller");
 const enrolleeComplaints = require("../controllers/stateOfficeComplaint.controller");
 const complianceVisits = require("../controllers/stateOfficeComplianceVisit.controller");
+const weeklyCompliance = require("../controllers/stateOfficeWeeklyCompliance.controller");
 const mysteryShopping = require("../controllers/stateOfficeMysteryShopping.controller");
 const hmoIndebtedness = require("../controllers/stateOfficeHmoIndebtedness.controller");
 const reconciliation = require("../controllers/stateOfficeReconciliation.controller");
@@ -145,6 +146,17 @@ router.post("/compliance-visits", [
   body("facility_visited").notEmpty(),
 ], validate, complianceVisits.createVisit);
 router.put("/compliance-visits/:id", complianceVisits.updateVisit);
+
+const weeklyComplianceRules = [
+  body("zone_id").notEmpty().withMessage("Zone is required"),
+  body("state_id").notEmpty().withMessage("State is required"),
+  body("reporting_week").matches(/^\d{4}-W\d{1,2}$/).withMessage("Valid reporting week is required"),
+  body("facility_name").trim().notEmpty().withMessage("Healthcare facility is required"),
+];
+router.get("/weekly-compliance", weeklyCompliance.listRecords);
+router.get("/weekly-compliance/:id", weeklyCompliance.getRecord);
+router.post("/weekly-compliance", weeklyComplianceRules, validate, weeklyCompliance.createRecord);
+router.put("/weekly-compliance/:id", weeklyComplianceRules, validate, weeklyCompliance.updateRecord);
 
 router.get("/mystery-shopping", mysteryShopping.listVisits);
 router.get("/mystery-shopping/:id", mysteryShopping.getVisit);

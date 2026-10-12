@@ -46,6 +46,7 @@ const ChallengesReport            = require("./ChallengesReport");
 const ChallengesReportLine        = require("./ChallengesReportLine");
 const StateOfficeComplaint        = require("./StateOfficeComplaint");
 const StateOfficeComplianceVisit  = require("./StateOfficeComplianceVisit");
+const StateOfficeWeeklyCompliance = require("./StateOfficeWeeklyCompliance");
 const StateOfficeMysteryShopping  = require("./StateOfficeMysteryShopping");
 const StateOfficeHmoIndebtedness  = require("./StateOfficeHmoIndebtedness");
 const StateOfficeHmoIndebtednessLine = require("./StateOfficeHmoIndebtednessLine");
@@ -175,6 +176,7 @@ ZonalOffice.hasMany(StateOfficeComplianceVisit, { foreignKey: "zone_id", as: "st
 StateOfficeComplianceVisit.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
 StateOffice.hasMany(StateOfficeComplianceVisit, { foreignKey: "state_id", as: "state_compliance_visits" });
 StateOfficeComplianceVisit.belongsTo(StateOffice, { foreignKey: "state_id", as: "state" });
+bindStateOfficeReport(StateOfficeWeeklyCompliance, "weekly_compliance");
 
 ZonalOffice.hasMany(StateOfficeMysteryShopping, { foreignKey: "zone_id", as: "state_mystery_shopping" });
 StateOfficeMysteryShopping.belongsTo(ZonalOffice, { foreignKey: "zone_id", as: "zone" });
@@ -341,7 +343,7 @@ module.exports = {
   StakeholderReport, StakeholderReportLine, EnrolmentDriveReport, EnrolmentDriveReportLine, HmoSelectionReport, HmoSelectionReportLine,
   ChallengesReport,
   ChallengesReportLine,
-  StateOfficeComplaint, StateOfficeComplianceVisit, StateOfficeMysteryShopping,
+  StateOfficeComplaint, StateOfficeComplianceVisit, StateOfficeWeeklyCompliance, StateOfficeMysteryShopping,
   StateOfficeHmoIndebtedness, StateOfficeHmoIndebtednessLine,
   StateOfficeReconciliationMeeting, NhiaAccreditedProvider, HcfFacility, HmoProvider,
   IgrReport, IgrReportLine,
