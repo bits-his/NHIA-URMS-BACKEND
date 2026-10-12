@@ -11,7 +11,7 @@ const {
 } = require("../models");
 const { buildServicomListWhere, applyComplaintExtraFilters } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
-const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere, buildCreatedOrAssignedWhere, buildDepartmentEscalationWhere, isStateCoordinatorRole, isZonalCoordinatorRole, isReportingOfficerRole } = require("../utils/complaintRegister");
+const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere, buildCreatedOrAssignedWhere, buildDepartmentEscalationWhere, buildZonalEscalationWhere, isStateCoordinatorRole, isZonalCoordinatorRole, isReportingOfficerRole, isComplaintOfficerRole, canAccessZonalOfficeInbox, isZonalOfficeEscalation, isNationalComplaintAdmin, userIsAssignedInvestigator } = require("../utils/complaintRegister");
 const { nextComplaintNumber, previewComplaintNumber, monthYearParts } = require("../utils/complaintNumber");
 const {
   notifyOfficerLabel,
@@ -29,6 +29,7 @@ const {
   enrichComplaintWithSla,
   listComplaintSlaRulesFormatted,
 } = require("../utils/complaintSla");
+const { canSubmitForms } = require("../utils/monthlyReportScope");
 
 const VISIT_INCLUDES = [
   { model: ZonalOffice, as: "zone", attributes: ["id", "description", "zonal_code"] },
@@ -64,6 +65,31 @@ async function genRefId(Model, prefix, t, field) {
     if (match) maxSeq = Math.max(maxSeq, parseInt(match[1], 10));
   }
   return `${prefix}-${year}-${String(maxSeq + 1).padStart(5, "0")}`;
+}
+
+/**
+ * Zonal Office inbox access.
+ * - write: zonal coordinator / complaint officer (same zone) / national admin
+ * - view: those actors, plus the previously assigned investigator (view-only)
+ */
+function assertZonalOfficeAccess(req, row, { write = false } = {}) {
+  if (!isZonalOfficeEscalation(row)) return null;
+  if (isNationalComplaintAdmin(req.user)) return null;
+  if (canAccessZonalOfficeInbox(req.user)) {
+    const userZone = req.user?.zone_id ?? null;
+    if (!userZone || Number(userZone) !== Number(row.zone_id)) {
+      return { status: 403, message: "This complaint is outside your zone." };
+    }
+    return null;
+  }
+  // Former investigator may still open the record after escalation (view only)
+  if (!write && userIsAssignedInvestigator(req.user, row)) return null;
+  return {
+    status: 403,
+    message: write
+      ? "This complaint has been escalated. Only the zonal coordinator and complaint officer can act on it."
+      : "Only the zonal coordinator, complaint officer, or the assigned investigator can view this complaint.",
+  };
 }
 
 async function logAudit(entity_type, entity_id, action, actor, details, t) {
@@ -664,6 +690,7 @@ module.exports = {
         });
       }
       const deptEscalationWhere = buildDepartmentEscalationWhere(req.user, Op, userDept);
+      const zonalEscalationWhere = buildZonalEscalationWhere(req.user, Op);
 
       const isZonalCoordinator = isZonalCoordinatorRole(role) && !!req.user?.zone_id;
       const nationalRole = ["admin", "sdo", "hq-department"].includes(role)
@@ -677,6 +704,7 @@ module.exports = {
           area,
           ...(createdOrAssigned ? [createdOrAssigned] : []),
           ...(deptEscalationWhere ? [deptEscalationWhere] : []),
+          ...(zonalEscalationWhere ? [zonalEscalationWhere] : []),
           ...extra,
         ];
         return parts.length > 1 ? { ...shared, [Op.or]: parts } : { ...shared, ...area };
@@ -712,30 +740,81 @@ module.exports = {
         where = areaOrMine({ state_id: req.user.state_id });
       } else if (isStateCoordinatorRole(role)) {
         where = { ...shared, id: -1 };
+      } else if (isComplaintOfficerRole(role) && req.user?.zone_id) {
+        // Complaint officers: own work + Zonal Office escalations in their zone only.
+        const parts = [
+          ...(createdOrAssigned ? [createdOrAssigned] : []),
+          ...(zonalEscalationWhere ? [zonalEscalationWhere] : []),
+        ];
+        where = parts.length
+          ? (parts.length > 1 ? { ...shared, [Op.or]: parts } : { ...shared, ...parts[0] })
+          : { ...shared, id: -1 };
       } else if (isReportingOfficerRole(role) || mineOnly) {
-        // Reporting officers: complaints they created OR that are assigned to them.
-        if (!createdOrAssigned) {
-          where = { ...shared, id: -1 };
-        } else {
-          where = { ...shared, ...createdOrAssigned };
-        }
+        // Reporting officers: only complaints they created or are assigned to (no zonal inbox).
+        where = createdOrAssigned
+          ? { ...shared, ...createdOrAssigned }
+          : { ...shared, id: -1 };
       } else if (assignedOnly && assigneeWhere) {
-        const parts = [assigneeWhere, ...(deptEscalationWhere ? [deptEscalationWhere] : [])];
+        const parts = [
+          assigneeWhere,
+          ...(deptEscalationWhere ? [deptEscalationWhere] : []),
+          ...(zonalEscalationWhere ? [zonalEscalationWhere] : []),
+        ];
         where = parts.length > 1 ? { ...shared, [Op.or]: parts } : { ...shared, ...assigneeWhere };
-      } else if ((assigneeWhere || deptEscalationWhere) && Object.keys(geo).length) {
+      } else if ((assigneeWhere || deptEscalationWhere || zonalEscalationWhere) && Object.keys(geo).length) {
         const parts = [geo];
         if (assigneeWhere) parts.push(assigneeWhere);
         if (deptEscalationWhere) parts.push(deptEscalationWhere);
+        if (zonalEscalationWhere) parts.push(zonalEscalationWhere);
         where = { ...shared, [Op.or]: parts };
-      } else if (deptEscalationWhere && !Object.keys(geo).length && !nationalRole) {
-        // Department staff see complaints escalated to their department
-        const parts = [deptEscalationWhere];
+      } else if ((deptEscalationWhere || zonalEscalationWhere) && !Object.keys(geo).length && !nationalRole) {
+        // Department / zonal inbox staff see complaints escalated to their inbox
+        const parts = [];
+        if (deptEscalationWhere) parts.push(deptEscalationWhere);
+        if (zonalEscalationWhere) parts.push(zonalEscalationWhere);
         if (assigneeWhere) parts.push(assigneeWhere);
         if (createdOrAssigned) parts.push(createdOrAssigned);
         where = { ...shared, [Op.or]: parts };
       } else {
         where = { ...shared, ...geo };
       }
+
+      // Hide Zonal Office inbox from others — assigned investigators may still see (view-only)
+      if (
+        !isNationalComplaintAdmin(req.user)
+        && !canAccessZonalOfficeInbox(req.user)
+      ) {
+        const zonalInboxClause = {
+          escalated: true,
+          [Op.or]: [
+            { escalated_to: "Zonal Office" },
+            { escalated_to: "Zonal Coordinator" },
+            {
+              [Op.and]: [
+                { escalation_level: "Zonal Office" },
+                {
+                  [Op.or]: [
+                    { escalated_to: null },
+                    { escalated_to: "" },
+                    { escalated_to: "Zonal Office" },
+                    { escalated_to: "Zonal Coordinator" },
+                  ],
+                },
+              ],
+            },
+          ],
+        };
+        const visibility = {
+          [Op.or]: [
+            { [Op.not]: zonalInboxClause },
+            ...(assigneeWhere ? [assigneeWhere] : []),
+          ],
+        };
+        const and = Array.isArray(where[Op.and]) ? [...where[Op.and]] : [];
+        and.push(visibility);
+        where = { ...where, [Op.and]: and };
+      }
+
       applyComplaintExtraFilters(where, req.query);
       const [rows, rulesMap] = await Promise.all([
         ServicomComplaint.findAll({
@@ -765,6 +844,8 @@ module.exports = {
         loadComplaintSlaRules(),
       ]);
       if (!row) return res.status(404).json({ success: false, message: "Complaint not found" });
+      const denied = assertZonalOfficeAccess(req, row, { write: false });
+      if (denied) return res.status(denied.status).json({ success: false, message: denied.message });
       res.json({ success: true, data: await enrichComplaintWithSla(row, rulesMap) });
     } catch (err) { next(err); }
   },
@@ -828,13 +909,72 @@ module.exports = {
     try {
       const row = await ServicomComplaint.findByPk(req.params.id);
       if (!row) return res.status(404).json({ success: false, message: "Complaint not found" });
+      const denied = assertZonalOfficeAccess(req, row, { write: true });
+      if (denied) return res.status(denied.status).json({ success: false, message: denied.message });
+
+      // Review-only zonal coordinator: may only investigate Zonal Office inbox items
+      // (they see all zone complaints; complaint officers are already inbox-scoped)
+      const role = req.user?.role;
+      if (
+        isZonalCoordinatorRole(role)
+        && !(await canSubmitForms(role))
+        && !isZonalOfficeEscalation(row)
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Zonal coordinator may only investigate complaints escalated to the Zonal Office.",
+        });
+      }
+
+      // Assigned investigator loses write access once escalated — unless they are the zonal inbox actor
+      if (
+        userIsAssignedInvestigator(req.user, row)
+        && !canAccessZonalOfficeInbox(req.user)
+        && !isNationalComplaintAdmin(req.user)
+        && (isZonalOfficeEscalation(row) || isEnforcementEscalationTarget(row.escalated_to))
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "This complaint has been escalated. You can view it but can no longer update it.",
+        });
+      }
+
       const prevOfficer = row.officer_assigned || row.assigned_officer;
       const merged = { ...row.toJSON(), ...req.body };
       const metrics = await computeComplaintMetrics(merged);
 
       // Escalation hands the complaint to an officer or department
-      const becomingEscalated = req.body.escalated === true || req.body.escalated === "true" || req.body.escalated === 1;
-      const escalationLevel = String(req.body.escalation_level || merged.escalation_level || "").trim();
+      // Chain: state → Zonal Office → Enforcement Department (terminal)
+      const becomingEscalated = req.body.escalated === true || req.body.escalated === "true" || req.body.escalated === 1
+        || String(req.body.status || "").trim() === "Escalated";
+      let escalationLevel = String(req.body.escalation_level || merged.escalation_level || "").trim();
+      const alreadyAtEnforcement = isEnforcementEscalationTarget(row.escalated_to)
+        || String(row.escalation_level || "").trim() === "Enforcement Department";
+      const alreadyAtZonal = isZonalCoordinatorEscalationTarget(row.escalated_to)
+        || String(row.escalation_level || "").trim() === "Zonal Office";
+
+      if (becomingEscalated && alreadyAtEnforcement) {
+        return res.status(422).json({
+          success: false,
+          message: "Enforcement Department cannot escalate further. Resolve or close the complaint.",
+        });
+      }
+
+      // Force the correct next hop in the chain
+      if (becomingEscalated) {
+        if (alreadyAtZonal) {
+          escalationLevel = "Enforcement Department";
+          req.body.escalation_level = "Enforcement Department";
+        } else if (!escalationLevel || escalationLevel === "State Coordinator" || escalationLevel.startsWith("Others")) {
+          escalationLevel = "Zonal Office";
+          req.body.escalation_level = "Zonal Office";
+        } else if (escalationLevel === "Enforcement Department" && !alreadyAtZonal) {
+          // Must pass through Zonal Office first
+          escalationLevel = "Zonal Office";
+          req.body.escalation_level = "Zonal Office";
+        }
+      }
+
       let escalatedTo = req.body.escalated_to !== undefined
         ? req.body.escalated_to
         : row.escalated_to;
@@ -843,16 +983,13 @@ module.exports = {
       if (becomingEscalated && escalationLevel === "Enforcement Department") {
         escalatedTo = ENFORCEMENT_TARGET;
         req.body.escalated_to = ENFORCEMENT_TARGET;
-      } else if (becomingEscalated && escalationLevel === "State Coordinator") {
-        escalatedTo = STATE_COORDINATOR_TARGET;
-        req.body.escalated_to = STATE_COORDINATOR_TARGET;
       } else if (becomingEscalated && escalationLevel === "Zonal Office") {
         escalatedTo = ZONAL_COORDINATOR_TARGET;
         req.body.escalated_to = ZONAL_COORDINATOR_TARGET;
       }
 
       const isInboxTarget = isRoleEscalationInbox(escalatedTo)
-        || ["Enforcement Department", "State Coordinator", "Zonal Office"].includes(escalationLevel)
+        || ["Enforcement Department", "Zonal Office"].includes(escalationLevel)
         || req.body.escalate_to_department === true
         || req.body.escalate_to_department === "true"
         || req.body.escalate_to_department === 1;
@@ -868,7 +1005,11 @@ module.exports = {
         ...pickComplaintFields(req.body),
         ...enrichComplaintCodes(merged),
         ...metrics,
-        escalated: req.body.escalated !== undefined ? !!req.body.escalated : row.escalated,
+        escalated: becomingEscalated || (req.body.escalated !== undefined ? !!req.body.escalated : row.escalated),
+        ...(becomingEscalated && escalationLevel ? { escalation_level: escalationLevel } : {}),
+        ...(becomingEscalated && !row.escalation_date && !req.body.escalation_date
+          ? { escalation_date: new Date().toISOString().slice(0, 10) }
+          : {}),
         ...(escalatedTo !== undefined ? { escalated_to: escalatedTo } : {}),
       });
       await logAudit("servicom_complaint", row.id, "updated", req.user?.name, req.body);
@@ -878,23 +1019,37 @@ module.exports = {
       if (becomingEscalated || escalationTargetChanged) {
         const target = nextEscalatedTo || escalatedTo;
         if (target) {
+          let notifyZoneId = row.zone_id;
+          // Prefer reporting officer's zone when escalating to Zonal Office
+          if (isZonalCoordinatorEscalationTarget(target) && row.created_by_staff_id) {
+            const reporter = await User.findOne({
+              where: { staff_id: row.created_by_staff_id, is_active: true },
+              attributes: ["zone_id"],
+            }).catch(() => null);
+            if (reporter?.zone_id) notifyZoneId = reporter.zone_id;
+          }
           const isInbox = isRoleEscalationInbox(target) || isInboxTarget;
-          const title = isStateCoordinatorEscalationTarget(target) || isZonalCoordinatorEscalationTarget(target)
-            ? "Complaint escalated to you"
-            : isEnforcementEscalationTarget(target)
-              ? "Complaint escalated to your department"
-              : isInbox
+          const title = isZonalCoordinatorEscalationTarget(target)
+            ? "Complaint escalated to your zone"
+            : isStateCoordinatorEscalationTarget(target)
+              ? "Complaint escalated to you"
+              : isEnforcementEscalationTarget(target)
                 ? "Complaint escalated to your department"
-                : "Complaint escalated to you";
+                : isInbox
+                  ? "Complaint escalated to your department"
+                  : "Complaint escalated to you";
+          const body = isZonalCoordinatorEscalationTarget(target)
+            ? `${row.complaint_number || "A complaint"} was escalated to the Zonal Office. Zonal coordinator and complaint officers — immediate attention required.`
+            : `${row.complaint_number || "A complaint"} was escalated to ${target}${escalationLevel ? ` (${escalationLevel})` : ""}. Immediate attention required.`;
           await (isInbox
             ? notifyEscalationTarget(target, {
                 title,
-                body: `${row.complaint_number || "A complaint"} was escalated to ${target}${escalationLevel ? ` (${escalationLevel})` : ""}. Immediate attention required.`,
+                body,
                 type: "directive",
                 link: "/sdo/servicom/complaints",
                 entity_type: "servicom_complaint",
                 entity_id: row.id,
-              }, { stateId: row.state_id, zoneId: row.zone_id })
+              }, { stateId: row.state_id, zoneId: notifyZoneId })
             : notifyOfficerLabel(target, {
                 title: "Complaint escalated to you",
                 body: `${row.complaint_number || "A complaint"} was escalated to you (${escalationLevel || "escalation"}). Immediate attention required.`,
@@ -926,8 +1081,15 @@ module.exports = {
 
   listComplaintComments: async (req, res, next) => {
     try {
-      const complaint = await ServicomComplaint.findByPk(req.params.id, { attributes: ["id"] });
+      const complaint = await ServicomComplaint.findByPk(req.params.id, {
+        attributes: [
+          "id", "zone_id", "escalated", "escalated_to", "escalation_level",
+          "officer_assigned", "assigned_officer",
+        ],
+      });
       if (!complaint) return res.status(404).json({ success: false, message: "Complaint not found" });
+      const denied = assertZonalOfficeAccess(req, complaint, { write: false });
+      if (denied) return res.status(denied.status).json({ success: false, message: denied.message });
       const data = await ServicomComplaintComment.findAll({
         where: { complaint_id: req.params.id },
         order: [["created_at", "ASC"]],
@@ -942,8 +1104,26 @@ module.exports = {
       if (!body) {
         return res.status(400).json({ success: false, message: "Comment is required" });
       }
-      const complaint = await ServicomComplaint.findByPk(req.params.id, { attributes: ["id"] });
+      const complaint = await ServicomComplaint.findByPk(req.params.id, {
+        attributes: [
+          "id", "zone_id", "escalated", "escalated_to", "escalation_level",
+          "officer_assigned", "assigned_officer",
+        ],
+      });
       if (!complaint) return res.status(404).json({ success: false, message: "Complaint not found" });
+      const denied = assertZonalOfficeAccess(req, complaint, { write: true });
+      if (denied) return res.status(denied.status).json({ success: false, message: denied.message });
+      if (
+        userIsAssignedInvestigator(req.user, complaint)
+        && !canAccessZonalOfficeInbox(req.user)
+        && !isNationalComplaintAdmin(req.user)
+        && (isZonalOfficeEscalation(complaint) || isEnforcementEscalationTarget(complaint.escalated_to))
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "This complaint has been escalated. You can view it but can no longer comment.",
+        });
+      }
       const row = await ServicomComplaintComment.create({
         complaint_id: complaint.id,
         body,

@@ -12,6 +12,10 @@ const ServicomComplaintComment = require("../models/ServicomComplaintComment");
 (async () => {
   try {
     await sequelize.authenticate();
+    console.log("Widening actions_taken for multi-level investigation JSON…");
+    await sequelize.query(
+      "ALTER TABLE servicom_complaints MODIFY COLUMN actions_taken MEDIUMTEXT NULL",
+    );
     console.log("Syncing servicom_complaints schema (alter)…");
     await ServicomComplaint.sync({ alter: true });
     console.log("Syncing servicom_complaint_comments…");

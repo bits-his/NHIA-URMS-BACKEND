@@ -151,6 +151,56 @@ function buildDepartmentEscalationWhere(user, Op, dept = null) {
   return { escalated: true, [Op.or]: clauses };
 }
 
+function isComplaintOfficerRole(role) {
+  const r = String(role || "").toLowerCase().replace(/_/g, "-");
+  return r === "complaint-officer"
+    || r.endsWith("-complaint-officer")
+    || r.includes("complaint-officer");
+}
+
+/** Zonal Office inbox: zonal coordinator or complaint officer only. */
+function canAccessZonalOfficeInbox(user) {
+  const role = user?.role ?? user?.get?.("role");
+  return isZonalCoordinatorRole(role) || isComplaintOfficerRole(role);
+}
+
+function isZonalOfficeEscalation(row) {
+  if (!row) return false;
+  const target = String(row.escalated_to || "").trim().toLowerCase();
+  const level = String(row.escalation_level || "").trim().toLowerCase();
+  // Already moved on to Enforcement
+  if (level.includes("enforcement") || target.includes("enforcement")) return false;
+  if (level === "zonal office" || level.includes("zonal")) return true;
+  if (
+    target === "zonal office"
+    || target === "zonal coordinator"
+    || target === "zonal-coordinator"
+    || target.includes("zonal office")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Match complaints escalated to the Zonal Office inbox for the user's zone
+ * (zonal coordinator / complaint officer roles only).
+ */
+function buildZonalEscalationWhere(user, Op) {
+  if (!canAccessZonalOfficeInbox(user)) return null;
+  const zoneId = user?.zone_id ?? user?.get?.("zone_id") ?? null;
+  if (!zoneId) return null;
+  return {
+    escalated: true,
+    zone_id: zoneId,
+    [Op.or]: [
+      { escalated_to: "Zonal Office" },
+      { escalated_to: "Zonal Coordinator" },
+      { escalation_level: "Zonal Office" },
+    ],
+  };
+}
+
 /** Match complaints created by the logged-in user. */
 function buildCreatorWhere(user, Op) {
   if (!user?.name && !user?.staff_id) return null;
@@ -189,6 +239,23 @@ function isZonalCoordinatorRole(role) {
 function isReportingOfficerRole(role) {
   const r = String(role || "");
   return r === "reporting-officer" || r.endsWith("-reporting-officer");
+}
+
+function isNationalComplaintAdmin(user) {
+  const role = String(user?.role || "");
+  return ["admin", "sdo", "hq-department"].includes(role);
+}
+
+/** True when user matches the complaint's assigned investigating officer. */
+function userIsAssignedInvestigator(user, row) {
+  if (!user || !row) return false;
+  const officer = String(row.officer_assigned || row.assigned_officer || "").trim().toLowerCase();
+  if (!officer) return false;
+  const name = String(user.name || "").trim().toLowerCase();
+  if (name && (officer === name || officer.startsWith(name))) return true;
+  const staffId = String(user.staff_id || "").trim().toLowerCase();
+  if (staffId && officer.includes(staffId)) return true;
+  return false;
 }
 
 /** Combine assignee + creator OR clauses for inbox/mine scope. */
@@ -233,9 +300,15 @@ module.exports = {
   buildCreatorWhere,
   buildCreatedOrAssignedWhere,
   buildDepartmentEscalationWhere,
+  buildZonalEscalationWhere,
   isStateCoordinatorRole,
   isZonalCoordinatorRole,
   isReportingOfficerRole,
+  isComplaintOfficerRole,
+  canAccessZonalOfficeInbox,
+  isZonalOfficeEscalation,
+  isNationalComplaintAdmin,
+  userIsAssignedInvestigator,
   pickComplaintFields,
   enrichComplaintCodes,
   daysBetween,

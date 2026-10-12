@@ -203,6 +203,43 @@ async function findZonalCoordinatorUserIds(zoneId) {
   return users.map((u) => u.id);
 }
 
+function isComplaintOfficerRole(role) {
+  const r = String(role || "").toLowerCase().replace(/_/g, "-");
+  return r === "complaint-officer"
+    || r.endsWith("-complaint-officer")
+    || r.includes("complaint-officer");
+}
+
+/**
+ * Complaint officers in a zone: users with the complaint-officer role only.
+ */
+async function findZoneComplaintOfficerUserIds(zoneId) {
+  if (!zoneId) return [];
+  const users = await User.findAll({
+    where: {
+      is_active: true,
+      zone_id: zoneId,
+      [Op.or]: [
+        { role: "complaint-officer" },
+        { role: { [Op.like]: "%complaint-officer%" } },
+        { role: { [Op.like]: "%complaint_officer%" } },
+      ],
+    },
+    attributes: ["id", "role"],
+    limit: 200,
+  });
+  return users.filter((u) => isComplaintOfficerRole(u.role)).map((u) => u.id);
+}
+
+/** Zonal coordinator + complaint officers for a zone. */
+async function findZonalEscalationUserIds(zoneId) {
+  const [coordinators, officers] = await Promise.all([
+    findZonalCoordinatorUserIds(zoneId),
+    findZoneComplaintOfficerUserIds(zoneId),
+  ]);
+  return [...new Set([...coordinators, ...officers])];
+}
+
 /**
  * Notify a role inbox / department / person when a complaint is escalated.
  * @param {string} label
@@ -215,7 +252,7 @@ async function notifyEscalationTarget(label, payload, geo = {}) {
     if (ids.length) return notifyUsers(ids, payload);
   }
   if (isZonalCoordinatorEscalationTarget(label)) {
-    const ids = await findZonalCoordinatorUserIds(geo.zoneId);
+    const ids = await findZonalEscalationUserIds(geo.zoneId);
     if (ids.length) return notifyUsers(ids, payload);
   }
   const users = await findUsersByDepartmentLabel(label);
@@ -224,7 +261,6 @@ async function notifyEscalationTarget(label, payload, geo = {}) {
   }
   return notifyUsers(users.map((u) => u.id), payload);
 }
-
 module.exports = {
   ensureNotificationTable,
   findUsersForOfficerLabel,
@@ -232,6 +268,8 @@ module.exports = {
   findEnforcementUserIds,
   findStateCoordinatorUserIds,
   findZonalCoordinatorUserIds,
+  findZoneComplaintOfficerUserIds,
+  findZonalEscalationUserIds,
   notifyUsers,
   notifyOfficerLabel,
   notifyEscalationTarget,

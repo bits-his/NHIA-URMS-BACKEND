@@ -4,6 +4,11 @@ const {
   canReviewMonthlyReport,
   canSubmitForms,
 } = require("../utils/monthlyReportScope");
+const {
+  isStateCoordinatorRole,
+  isZonalCoordinatorRole,
+  isComplaintOfficerRole,
+} = require("../utils/complaintRegister");
 
 const JWT_SECRET = process.env.JWT_SECRET || "nhia_secret_change_in_prod";
 
@@ -70,6 +75,31 @@ const requireCreateAccess = async (req, res, next) => {
 };
 
 /**
+ * Complaint updates (investigate / escalate / resolve) for review-only coordinators
+ * and complaint officers — without granting general create rights.
+ * Creating new complaints still uses requireCreateAccess + blockCoordinatorWrites.
+ */
+const requireComplaintUpdateAccess = async (req, res, next) => {
+  try {
+    const role = req.user?.role;
+    if (await canSubmitForms(role)) return next();
+    if (
+      isZonalCoordinatorRole(role)
+      || isComplaintOfficerRole(role)
+      || isStateCoordinatorRole(role)
+    ) {
+      return next();
+    }
+    return res.status(403).json({
+      success: false,
+      message: "Your role is review-only and cannot create or edit reports",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * Allow any role with can_review_monthly (Admin → Roles).
  */
 const requireReviewAccess = async (req, res, next) => {
@@ -104,6 +134,7 @@ module.exports = {
   authorize,
   authorizeRoleFlag,
   requireCreateAccess,
+  requireComplaintUpdateAccess,
   requireReviewAccess,
   JWT_SECRET,
 };

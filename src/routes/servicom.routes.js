@@ -1,7 +1,7 @@
 const { Router } = require("express");
 const { body } = require("express-validator");
 const { validate } = require("../middleware/validate");
-const { authenticate, requireCreateAccess, requireReviewAccess, blockCoordinatorWrites } = require("../middleware/auth");
+const { authenticate, requireCreateAccess, requireComplaintUpdateAccess, requireReviewAccess, blockCoordinatorWrites } = require("../middleware/auth");
 const { upload } = require("../middleware/servicomUpload");
 const ctrl = require("../controllers/servicom.controller");
 
@@ -43,9 +43,9 @@ router.post("/complaints", requireCreateAccess, blockCoordinatorWrites, [
   body("date_received").optional(),
   body("complaint_date").optional(),
 ], validate, ctrl.createComplaint);
-router.put("/complaints/:id", requireCreateAccess, ctrl.updateComplaint);
+router.put("/complaints/:id", requireComplaintUpdateAccess, ctrl.updateComplaint);
 router.get("/complaints/:id/comments", ctrl.listComplaintComments);
-router.post("/complaints/:id/comments", [
+router.post("/complaints/:id/comments", requireComplaintUpdateAccess, [
   body("body").notEmpty().withMessage("Comment is required"),
 ], validate, ctrl.addComplaintComment);
 
