@@ -15,6 +15,8 @@ const complianceVisits = require("../controllers/stateOfficeComplianceVisit.cont
 const weeklyCompliance = require("../controllers/stateOfficeWeeklyCompliance.controller");
 const mysteryShopping = require("../controllers/stateOfficeMysteryShopping.controller");
 const hmoIndebtedness = require("../controllers/stateOfficeHmoIndebtedness.controller");
+const hmoRecon = require("../controllers/stateOfficeHmoRecon.controller");
+const hmoMaster = require("../controllers/stateOfficeHmoMaster.controller");
 const reconciliation = require("../controllers/stateOfficeReconciliation.controller");
 const nhiaAccreditation = require("../controllers/nhiaAccreditation.controller");
 const stateOfficeDashboard = require("../controllers/stateOfficeDashboard.controller");
@@ -177,6 +179,29 @@ router.post("/hmo-indebtedness", [
   body("reporting_month").isInt({ min: 1, max: 12 }),
 ], validate, hmoIndebtedness.createSheet);
 router.put("/hmo-indebtedness/:id", hmoIndebtedness.updateSheet);
+
+router.get("/hmo-reconciliation", hmoRecon.listSheets);
+router.get("/hmo-reconciliation/:id", hmoRecon.getSheet);
+router.post("/hmo-reconciliation", [
+  body("zone_id").notEmpty(),
+  body("state_id").notEmpty(),
+  body("reporting_year").isInt({ min: 2000 }),
+  body("reporting_month").isInt({ min: 1, max: 12 }),
+  body("hmo_name").notEmpty(),
+  body("stream_type").isIn(["phi", "ffs", "cap"]),
+], validate, hmoRecon.createSheet);
+router.put("/hmo-reconciliation/:id", hmoRecon.updateSheet);
+
+router.get("/hmo-master/compiled", hmoMaster.compileMaster);
+router.get("/hmo-master", hmoMaster.listSheets);
+router.get("/hmo-master/:id", hmoMaster.getSheet);
+router.post("/hmo-master", [
+  body("zone_id").notEmpty(),
+  body("state_id").notEmpty(),
+  body("reporting_year").isInt({ min: 2000 }),
+  body("reporting_month").isInt({ min: 1, max: 12 }),
+], validate, hmoMaster.createSheet);
+router.put("/hmo-master/:id", hmoMaster.updateSheet);
 
 router.get("/accredited-providers", nhiaAccreditation.listProviders);
 router.post("/accredited-providers/sync", nhiaAccreditation.syncProviders);

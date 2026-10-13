@@ -17,6 +17,8 @@ const ROUTE_FUNCTIONALITY = {
   "weekly-compliance": "Weekly Compliance Report",
   "mystery-shopping": "Mystery Shopping",
   "hmo-indebtedness": "HMO Indebtedness Collation",
+  "hmo-reconciliation": "HMO Indebtedness Collation",
+  "hmo-master": "HMO Indebtedness Collation",
   "reconciliation-meetings": "Reconciliation Meetings",
   accreditation: "Accreditation / Reaccreditation",
   stakeholder: "Stakeholder Engagement",

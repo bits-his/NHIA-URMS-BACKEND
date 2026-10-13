@@ -291,6 +291,46 @@ function buildStatePerformanceRankings(satisfactionSurveys, commentCards, compla
     .sort((a, b) => b.avg_score - a.avg_score);
 }
 
+function normalizeTeamNames(raw) {
+  let names = [];
+  if (Array.isArray(raw)) names = raw;
+  else if (raw != null && raw !== "") {
+    const text = String(raw).trim();
+    if (text.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(text);
+        names = Array.isArray(parsed) ? parsed : [text];
+      } catch {
+        names = text.split(/[,;\n]/);
+      }
+    } else {
+      names = text.split(/[,;\n]/);
+    }
+  }
+  const cleaned = names.map((name) => String(name ?? "").trim()).filter(Boolean);
+  return cleaned.length ? JSON.stringify(cleaned) : null;
+}
+
+function formatTeamNames(raw) {
+  if (raw == null || raw === "") return null;
+  if (Array.isArray(raw)) {
+    const names = raw.map((name) => String(name ?? "").trim()).filter(Boolean);
+    return names.length ? names.join(", ") : null;
+  }
+  const text = String(raw).trim();
+  if (!text) return null;
+  if (text.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        const names = parsed.map((name) => String(name ?? "").trim()).filter(Boolean);
+        return names.length ? names.join(", ") : null;
+      }
+    } catch { /* legacy plain text */ }
+  }
+  return text;
+}
+
 function normalizeSurveyResponses(raw, questions) {
   const map = new Map((Array.isArray(raw) ? raw : []).map((r) => [r.question_id, r]));
   return questions.map((q) => {
@@ -312,6 +352,10 @@ function normalizeCommentResponses(raw, questions) {
     const score = response != null && response !== "" ? Number(response) : null;
     return { question_id: q.id, section: existing.section || q.section, question: existing.question || q.question || null, response, score };
   });
+}
+
+function missingCommentResponses(responses) {
+  return responses.filter((r) => r.response == null || r.response === "" || r.score == null || Number.isNaN(Number(r.score)));
 }
 
 const SATISFACTION_QUESTIONS = [
@@ -1341,8 +1385,8 @@ module.exports = {
         state_id: req.body.state_id ?? req.user?.state_id ?? null,
         provider_name: req.body.provider_name,
         survey_date: req.body.survey_date,
-        survey_officers: req.body.survey_officers ?? null,
-        team: req.body.team ?? null,
+        survey_officers: null,
+        team: normalizeTeamNames(req.body.team),
         responses,
         ...metrics,
         created_by: req.user?.name || null,
@@ -1364,8 +1408,8 @@ module.exports = {
         state_id: req.body.state_id ?? row.state_id,
         provider_name: req.body.provider_name ?? row.provider_name,
         survey_date: req.body.survey_date ?? row.survey_date,
-        survey_officers: req.body.survey_officers ?? row.survey_officers,
-        team: req.body.team ?? row.team,
+        survey_officers: row.survey_officers,
+        team: req.body.team !== undefined ? normalizeTeamNames(req.body.team) : row.team,
         responses,
         ...metrics,
       });
@@ -1409,6 +1453,10 @@ module.exports = {
     const t = await sequelize.transaction();
     try {
       const responses = normalizeCommentResponses(req.body.responses, COMMENT_CARD_QUESTIONS);
+      if (missingCommentResponses(responses).length) {
+        await t.rollback();
+        return res.status(400).json({ success: false, message: "All questions are required" });
+      }
       const metrics = computeCommentCardMetrics(responses);
       let reference_id = String(req.body.reference_id || "").trim();
       if (reference_id) {
@@ -1448,6 +1496,9 @@ module.exports = {
       const row = await ServicomCommentCard.findByPk(req.params.id);
       if (!row) return res.status(404).json({ success: false, message: "Comment card not found" });
       const responses = normalizeCommentResponses(req.body.responses ?? row.responses, COMMENT_CARD_QUESTIONS);
+      if (missingCommentResponses(responses).length) {
+        return res.status(400).json({ success: false, message: "All questions are required" });
+      }
       const metrics = computeCommentCardMetrics(responses);
       const state_id = req.body.state_id ?? row.state_id;
       let zone_id = req.body.zone_id ?? row.zone_id;
@@ -1549,10 +1600,10 @@ module.exports = {
           data: rows.map((r) => mapRow(r, {
             reference: (x) => x.reference_id,
             title: (x) => x.provider_name || "Satisfaction Survey",
-            subtitle: (x) => x.team || x.survey_officers,
+            subtitle: (x) => formatTeamNames(x.team),
             status: (x) => (x.percentage_score != null ? `${x.percentage_score}% score` : null),
             date: (x) => x.survey_date,
-            meta: (x) => x.survey_officers,
+            meta: (x) => formatTeamNames(x.team),
           })),
         });
       }
@@ -1569,7 +1620,7 @@ module.exports = {
           success: true,
           data: rows.map((r) => mapRow(r, {
             reference: (x) => x.reference_id,
-            title: (x) => x.respondent_name || x.organisation || "Charter Comment Card",
+            title: (x) => x.respondent_name || x.organisation || "Citizens' Comment Card",
             subtitle: (x) => x.organisation,
             status: (x) => (x.average_score != null ? `Score ${x.average_score}` : null),
             date: (x) => x.card_date,
@@ -1614,7 +1665,7 @@ module.exports = {
           success: true,
           data: [
             { id: "surveys", reference: null, title: "Satisfaction Surveys", subtitle: state?.description, status: String(surveys), date: null, state_name: state?.description, zone_name: state?.zone?.description ?? null, meta: "segment:surveys" },
-            { id: "cards", reference: null, title: "Charter Comment Cards", subtitle: state?.description, status: String(cards), date: null, state_name: state?.description, zone_name: state?.zone?.description ?? null, meta: "segment:comment_cards" },
+            { id: "cards", reference: null, title: "Citizens' Comment Cards", subtitle: state?.description, status: String(cards), date: null, state_name: state?.description, zone_name: state?.zone?.description ?? null, meta: "segment:comment_cards" },
             { id: "complaints", reference: null, title: "Complaints", subtitle: state?.description, status: String(complaints), date: null, state_name: state?.description, zone_name: state?.zone?.description ?? null, meta: "segment:complaints" },
           ],
         });

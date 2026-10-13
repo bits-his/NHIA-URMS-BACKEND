@@ -9,7 +9,7 @@ const ServicomSatisfactionSurvey = sequelize.define("ServicomSatisfactionSurvey"
   provider_name:    { type: DataTypes.STRING(200), allowNull: false },
   survey_date:      { type: DataTypes.DATEONLY, allowNull: false },
   survey_officers:  { type: DataTypes.STRING(250), allowNull: true },
-  team:             { type: DataTypes.STRING(150), allowNull: true },
+  team:             { type: DataTypes.TEXT, allowNull: true },
   responses:        { type: DataTypes.JSON, allowNull: false, defaultValue: [] },
   total_score:      { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 },
   max_score:        { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 0 },

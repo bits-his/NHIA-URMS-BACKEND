@@ -48,6 +48,10 @@ const SYNC_ORDER = (models) => [
   models.StateOfficeMysteryShopping,
   models.StateOfficeHmoIndebtedness,
   models.StateOfficeHmoIndebtednessLine,
+  models.StateOfficeHmoReconSheet,
+  models.StateOfficeHmoReconLine,
+  models.StateOfficeHmoMasterSheet,
+  models.StateOfficeHmoMasterLine,
   models.StateOfficeReconciliationMeeting,
   models.NhiaAccreditedProvider,
 ];
