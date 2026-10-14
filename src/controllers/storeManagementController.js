@@ -902,7 +902,7 @@ exports.updatePhysicalVerification = async (req, res) => {
   }
 };
 
-// ─── Prepayment Analysis Register ─────────────────────────────────────────────
+// ─── Stock Prepayment Register ────────────────────────────────────────────────
 async function nextPrepaymentControl() {
   const year = new Date().getFullYear();
   const count = await PrepaymentAnalysis.count();

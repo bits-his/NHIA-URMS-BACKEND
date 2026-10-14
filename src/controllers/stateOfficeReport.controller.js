@@ -240,6 +240,7 @@ const enrolment = makeReportController(
     activity_code: line.activity_code || null,
     activity_date: line.activity_date || null,
     enrolment_channel: line.enrolment_channel || null,
+    enrolment_type: line.enrolment_type || null,
     program_code: line.program_code || null,
     program_name: line.program_name || null,
     enrolment_category: line.enrolment_category || null,

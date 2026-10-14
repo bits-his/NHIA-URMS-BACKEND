@@ -118,7 +118,7 @@ const DEPARTMENTS = [
     description: "Asset and supply verification and store inventory.",
     units: [
       { unit_code: "STK-VER", name: "Stock Verification", description: "Physical asset and supply verification.", access: [pack("SDO", "Physical Asset Verification", "Verification of Supply")] },
-      { unit_code: "STK-AST", name: "Asset Management", description: "Stock dashboard and prepayment analysis.", access: [pack("SDO", "Stock Verification Dashboard", "Prepayment Analysis Register")] },
+      { unit_code: "STK-AST", name: "Asset Management", description: "Stock dashboard and stock prepayment register.", access: [pack("SDO", "Stock Verification Dashboard", "Stock Prepayment Register")] },
       { unit_code: "STK-INV", name: "Inventory / Stores", description: "Inventory register and issuance.", access: [pack("SDO", "Inventory Register", "Capitalisation & Issuance")] },
     ],
   },

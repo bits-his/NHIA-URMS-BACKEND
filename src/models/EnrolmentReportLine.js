@@ -16,6 +16,7 @@ const EnrolmentReportLine = sequelize.define("EnrolmentReportLine", {
   activity_code: { type: DataTypes.STRING(20), allowNull: true },
   activity_date: { type: DataTypes.DATEONLY, allowNull: true },
   enrolment_channel: { type: DataTypes.STRING(50), allowNull: true },
+  enrolment_type: { type: DataTypes.STRING(40), allowNull: true },
   program_code: { type: DataTypes.STRING(20), allowNull: true },
   program_name: { type: DataTypes.STRING(100), allowNull: true },
   enrolment_category: { type: DataTypes.STRING(100), allowNull: true },

@@ -55,7 +55,7 @@ router.get("/verification/physical/:id", storeCtrl.getPhysicalVerificationById);
 router.post("/verification/physical", storeCtrl.createPhysicalVerification);
 router.put("/verification/physical/:id", storeCtrl.updatePhysicalVerification);
 
-// Prepayment Analysis Register
+// Stock Prepayment Register
 router.get("/prepayment-analysis", storeCtrl.getPrepaymentAnalyses);
 router.get("/prepayment-analysis/:id", storeCtrl.getPrepaymentAnalysisById);
 router.post("/prepayment-analysis", optionalAwardUpload, storeCtrl.createPrepaymentAnalysis);
