@@ -42,6 +42,13 @@ const PORT = process.env.PORT || 3001;
 // Enable Cross-Origin Resource Sharing (CORS) based on environment configuration
 app.use(cors(corsOptions()));
 
+// Avoid stale GET responses for dynamic API data (browsers were 304-caching empty profiles)
+app.set("etag", false);
+app.use("/api", (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 // Security Headers Middleware: Set defensive HTTP response headers
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -114,7 +121,32 @@ app.use(errorHandler);
     // Authenticate database connection via Sequelize ORM
     await sequelize.authenticate();
     console.log("✅  MySQL connected");
-    
+
+    const qi = sequelize.getQueryInterface();
+    const stateCols = await qi.describeTable("state_offices");
+    const flagCol = { type: "TINYINT(1)", allowNull: false, defaultValue: 0 };
+    if (!stateCols.is_hq) await qi.addColumn("state_offices", "is_hq", flagCol);
+    if (!stateCols.is_zonal_office) await qi.addColumn("state_offices", "is_zonal_office", flagCol);
+    const deptCols = await qi.describeTable("departments");
+    if (!deptCols.location_scope) {
+      await qi.addColumn("departments", "location_scope", { type: "VARCHAR(10)", allowNull: true });
+    }
+    const unitCols = await qi.describeTable("units");
+    if (!unitCols.location_role) {
+      await qi.addColumn("units", "location_role", { type: "VARCHAR(12)", allowNull: true });
+    }
+    try {
+      const profileCols = await qi.describeTable("state_zonal_office_profiles");
+      if (!profileCols.staff_members) {
+        await qi.addColumn("state_zonal_office_profiles", "staff_members", { type: "JSON", allowNull: true });
+      }
+      if (!profileCols.accommodation_entries) {
+        await qi.addColumn("state_zonal_office_profiles", "accommodation_entries", { type: "JSON", allowNull: true });
+      }
+    } catch (_) {
+      // Table may not exist yet on fresh installs before sync scripts run.
+    }
+
     // Start listening for HTTP connections
     app.listen(PORT, () => console.log(`🚀  Server running on http://localhost:${PORT}`));
   } catch (err) {

@@ -14,10 +14,26 @@ function padId(n, width) {
   return String(n).padStart(width, "0");
 }
 
+function asJsonArray(v) {
+  if (v == null || v === "") return null;
+  if (Array.isArray(v)) return v;
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function serialize(row) {
   const j = row.toJSON ? row.toJSON() : row;
   return {
     ...j,
+    staff_members: asJsonArray(j.staff_members),
+    accommodation_entries: asJsonArray(j.accommodation_entries),
     state_display_id: `ST-${padId(j.state_id, 3)}`,
     zone_display_id: `ZN-${padId(j.zone_id, 2)}`,
     annual_budget: j.annual_budget == null ? null : Number(j.annual_budget),
@@ -62,6 +78,72 @@ function strOrNull(v, max) {
   const s = String(v).trim();
   if (!s) return null;
   return max ? s.slice(0, max) : s;
+}
+
+function parseJsonField(v, label) {
+  if (v === undefined || v === null || v === "") return null;
+  if (Array.isArray(v)) return v;
+  if (typeof v === "object") return v;
+  try {
+    const parsed = JSON.parse(String(v));
+    return parsed;
+  } catch {
+    const err = new Error(`${label} must be valid JSON`);
+    err.status = 400;
+    throw err;
+  }
+}
+
+function normalizeStaffMembers(v) {
+  const raw = parseJsonField(v, "Staff members");
+  if (!raw) return null;
+  if (!Array.isArray(raw)) {
+    const err = new Error("Staff members must be a list");
+    err.status = 400;
+    throw err;
+  }
+  const rows = raw
+    .map((row) => ({
+      name: strOrNull(row?.name, 150),
+      email: row?.email ? emailOrNull(row.email) : null,
+      file_number: strOrNull(row?.file_number ?? row?.fileNumber, 80),
+      unit: strOrNull(row?.unit, 150),
+    }))
+    .filter((row) => row.name || row.email || row.file_number || row.unit);
+  return rows.length ? rows : null;
+}
+
+function isOwnedStatus(status) {
+  const s = String(status || "").toLowerCase();
+  return s.includes("owned") || s === "nhia-owned";
+}
+
+function normalizeAccommodation(v) {
+  const raw = parseJsonField(v, "Office accommodation");
+  if (!raw) return null;
+  if (!Array.isArray(raw)) {
+    const err = new Error("Office accommodation must be a list");
+    err.status = 400;
+    throw err;
+  }
+  const rows = raw
+    .map((row) => {
+      const ownershipStatus = strOrNull(row?.ownershipStatus, 80);
+      const owned = isOwnedStatus(ownershipStatus);
+      return {
+        ownershipStatus,
+        rentAmount: owned || row?.rentAmount === "" || row?.rentAmount == null
+          ? null
+          : toMoney(row.rentAmount),
+        rentExpiryDate: owned ? null : strOrNull(row?.rentExpiryDate, 20),
+        currentCondition: strOrNull(row?.currentCondition, 80),
+        remarks: strOrNull(row?.remarks, 2000),
+      };
+    })
+    .filter((row) =>
+      row.ownershipStatus || row.rentAmount != null || row.rentExpiryDate || row.currentCondition || row.remarks
+    );
+  return rows.length ? rows : null;
 }
 
 async function resolveOfficeCodes(zone_id, state_id) {
@@ -150,18 +232,22 @@ const createProfile = async (req, res, next) => {
     }
     await resolveOfficeCodes(zone_id, state_id);
 
+    const staff_members = normalizeStaffMembers(scoped.staff_members);
+    const accommodation_entries = normalizeAccommodation(scoped.accommodation_entries);
     const payload = {
       reporting_year,
       zone_id,
       state_id,
-      staff_strength: toInt(scoped.staff_strength),
+      staff_strength: staff_members?.length ?? toInt(scoped.staff_strength),
       coordinator_name: strOrNull(scoped.coordinator_name, 150),
       coordinator_phone: strOrNull(scoped.coordinator_phone, 40),
       coordinator_email: emailOrNull(scoped.coordinator_email),
+      staff_members,
       office_address: strOrNull(scoped.office_address, 500),
       office_email: emailOrNull(scoped.office_email),
       enrolment_target: toInt(scoped.enrolment_target),
       annual_budget: toMoney(scoped.annual_budget),
+      accommodation_entries,
       created_by: req.user?.name || req.user?.staff_id || null,
       ...aopFields(req.file),
     };
@@ -194,18 +280,26 @@ const updateProfile = async (req, res, next) => {
     const state_id = toInt(scoped.state_id ?? row.state_id, { allowNull: false });
     await resolveOfficeCodes(zone_id, state_id);
 
+    const staff_members = scoped.staff_members !== undefined
+      ? normalizeStaffMembers(scoped.staff_members)
+      : row.staff_members;
+    const accommodation_entries = scoped.accommodation_entries !== undefined
+      ? normalizeAccommodation(scoped.accommodation_entries)
+      : row.accommodation_entries;
     const next = {
       reporting_year,
       zone_id,
       state_id,
-      staff_strength: toInt(scoped.staff_strength),
+      staff_strength: Array.isArray(staff_members) ? staff_members.length : toInt(scoped.staff_strength),
       coordinator_name: strOrNull(scoped.coordinator_name, 150),
       coordinator_phone: strOrNull(scoped.coordinator_phone, 40),
       coordinator_email: emailOrNull(scoped.coordinator_email),
+      staff_members,
       office_address: strOrNull(scoped.office_address, 500),
       office_email: emailOrNull(scoped.office_email),
       enrolment_target: toInt(scoped.enrolment_target),
       annual_budget: toMoney(scoped.annual_budget),
+      accommodation_entries,
     };
 
     if (req.file) {

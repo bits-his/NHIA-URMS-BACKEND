@@ -50,8 +50,9 @@ const getStates = async (req, res, next) => {
 
 const getDepartments = async (req, res, next) => {
   try {
-    // Departments are global — not scoped to a state. Ignore state_id filter.
-    const where = req.query.department_id ? { id: req.query.department_id } : {};
+    const where = {};
+    if (req.query.department_id) where.id = req.query.department_id;
+    if (req.query.scope === "hq" || req.query.scope === "state") where.location_scope = req.query.scope;
     const depts = await Department.findAll({ where, order: [["name", "ASC"]] });
     res.json({ success: true, data: depts });
   } catch (err) { next(err); }
@@ -59,7 +60,10 @@ const getDepartments = async (req, res, next) => {
 
 const getUnits = async (req, res, next) => {
   try {
-    const where = req.query.department_id ? { department_id: req.query.department_id } : {};
+    const where = {};
+    if (req.query.department_id) where.department_id = req.query.department_id;
+    if (req.query.scope === "state") where.location_role = "state_unit";
+    if (req.query.scope === "division") where.location_role = "division";
     const units = await Unit.findAll({ where, order: [["name", "ASC"]] });
     res.json({ success: true, data: units });
   } catch (err) { next(err); }

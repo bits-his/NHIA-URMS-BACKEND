@@ -273,11 +273,17 @@ const listStates = async (req, res, next) => {
 
 const createState = async (req, res, next) => {
   try {
-    const { code, description, zonal_id } = req.body;
+    const { code, description, zonal_id, is_hq, is_zonal_office } = req.body;
     if (!code || !description || !zonal_id) {
       return res.status(400).json({ success: false, message: "code, description, zonal_id required" });
     }
-    const state = await StateOffice.create({ code, description, zonal_id });
+    const state = await StateOffice.create({
+      code,
+      description,
+      zonal_id,
+      is_hq: Boolean(is_hq),
+      is_zonal_office: Boolean(is_zonal_office),
+    });
     res.status(201).json({ success: true, data: state });
   } catch (err) {
     if (err.name === "SequelizeUniqueConstraintError") {
@@ -291,7 +297,14 @@ const updateState = async (req, res, next) => {
   try {
     const state = await StateOffice.findByPk(req.params.id);
     if (!state) return notFound(res, "State");
-    await state.update(req.body);
+    const { code, description, zonal_id, is_hq, is_zonal_office } = req.body;
+    await state.update({
+      ...(code !== undefined ? { code } : {}),
+      ...(description !== undefined ? { description } : {}),
+      ...(zonal_id !== undefined ? { zonal_id } : {}),
+      ...(is_hq !== undefined ? { is_hq: Boolean(is_hq) } : {}),
+      ...(is_zonal_office !== undefined ? { is_zonal_office: Boolean(is_zonal_office) } : {}),
+    });
     res.json({ success: true, data: state });
   } catch (err) { next(err); }
 };

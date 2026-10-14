@@ -14,6 +14,8 @@ const StateOffice = sequelize.define(
       onDelete: "RESTRICT",
       onUpdate: "CASCADE",
     },
+    is_hq: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    is_zonal_office: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   },
   { tableName: "state_offices", modelName: "StateOffice" }
 );

@@ -1,3 +1,4 @@
+const sequelize = require("../config/database");
 const {
   StoreAsset,
   StoreInventoryItem,
@@ -388,7 +389,20 @@ exports.getInventoryMovements = async (req, res) => {
       });
     }
 
-    movements.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    const prepay = await PrepaymentAnalysis.findOne({ where: { controlNumber: item.itemCode } });
+    if (prepay) {
+      movements.push({
+        date: prepay.entryDate || prepay.created_at,
+        type: "Receipt",
+        ref: prepay.controlNumber,
+        qtyIn: Number(prepay.quantitySupplied || 0),
+        qtyOut: 0,
+        officer: prepay.contractorName,
+        note: "Prepayment analysis",
+      });
+    }
+
+    movements.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
     let balance = 0;
     const withBalance = movements.map((m) => {
       balance += Number(m.qtyIn || 0) - Number(m.qtyOut || 0);
@@ -902,6 +916,19 @@ exports.updatePhysicalVerification = async (req, res) => {
   }
 };
 
+function storeNameFromState(stateName) {
+  const name = String(stateName || "").trim();
+  if (!name) return "";
+  if (/\bstore\b/i.test(name)) return name;
+  return `${name} Store`;
+}
+
+function inventoryStatus(qty, reorder) {
+  if (qty <= 0) return "OUT_OF_STOCK";
+  if (qty <= reorder) return "LOW_STOCK";
+  return "IN_STOCK";
+}
+
 // ─── Prepayment Analysis Register ─────────────────────────────────────────────
 async function nextPrepaymentControl() {
   const year = new Date().getFullYear();
@@ -935,6 +962,7 @@ exports.getPrepaymentAnalysisById = async (req, res) => {
 };
 
 exports.createPrepaymentAnalysis = async (req, res) => {
+  const t = await sequelize.transaction();
   try {
     const body = { ...req.body };
     const controlNumber = body.controlNumber || (await nextPrepaymentControl());
@@ -943,6 +971,12 @@ exports.createPrepaymentAnalysis = async (req, res) => {
       body.awardLetterPath = `/uploads/store/${req.file.filename}`;
       body.awardLetterName = req.file.originalname;
     }
+
+    const quantitySupplied = Number(body.quantitySupplied) || 0;
+    const rate = Number(body.rate) || 0;
+    const reorderLevel = 10;
+    const storeLocation = String(body.storeLocation || "").trim() || storeNameFromState(body.state_name);
+    const itemName = String(body.itemDescription || "").trim().slice(0, 255);
 
     const row = await PrepaymentAnalysis.create({
       controlNumber,
@@ -953,8 +987,8 @@ exports.createPrepaymentAnalysis = async (req, res) => {
       refInvoiceDeliveryNote: body.refInvoiceDeliveryNote || null,
       itemDescription: body.itemDescription,
       quantityOrdered: Number(body.quantityOrdered) || 0,
-      quantitySupplied: Number(body.quantitySupplied) || 0,
-      rate: Number(body.rate) || 0,
+      quantitySupplied,
+      rate,
       awardLetterPath: body.awardLetterPath || null,
       awardLetterName: body.awardLetterName || null,
       remarks: body.remarks || null,
@@ -963,9 +997,28 @@ exports.createPrepaymentAnalysis = async (req, res) => {
       zone_name: body.zone_name || null,
       state_name: body.state_name || null,
       created_by: req.user?.id || null,
-    });
-    res.status(201).json({ success: true, data: row });
+    }, { transaction: t });
+
+    if (!itemName || !storeLocation) {
+      throw new Error("Select the state office store so the item can be added to inventory.");
+    }
+
+    await StoreInventoryItem.create({
+      itemCode: controlNumber,
+      name: itemName,
+      category: String(body.category || "Office Consumables").slice(0, 255),
+      unitOfMeasure: String(body.unitOfMeasure || "Units").slice(0, 64),
+      quantityInStock: quantitySupplied,
+      reorderLevel,
+      unitPrice: rate,
+      storeLocation,
+      status: inventoryStatus(quantitySupplied, reorderLevel),
+    }, { transaction: t });
+
+    await t.commit();
+    res.status(201).json({ success: true, data: row, inventoryPosted: true });
   } catch (err) {
+    await t.rollback();
     res.status(400).json({ success: false, error: err.message });
   }
 };

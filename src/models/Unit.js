@@ -8,6 +8,8 @@ const Unit = sequelize.define(
     unit_code: { type: DataTypes.STRING(20), allowNull: false, unique: true },
     name: { type: DataTypes.STRING(100), allowNull: false },
     description: { type: DataTypes.TEXT, allowNull: true },
+    /** division = HQ division under a department; state_unit = zone/state unit. */
+    location_role: { type: DataTypes.STRING(12), allowNull: true },
     department_id: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
