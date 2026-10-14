@@ -44,8 +44,7 @@ const functionalities = [
       name: "Director Enforcement",
       email: "hod-0003@nhia.gov.ng",
       password: hashed,
-      // National HQ scope so zone/state lookups & nationwide complaint views work
-      role: "hq-department",
+      role: "director",
       zone_id: null,
       state_id: null,
       department_id: dept?.id ?? null,
@@ -68,8 +67,8 @@ User ready:
   Name:     Director Enforcement
   Staff ID: ${STAFF_ID}
   Password: ${PASSWORD}
-  Office:   HQ Department (Enforcement Department)
-  Role:     hq-department (national zone/state view)
+  Office:   Enforcement Department
+  Role:     director
   Access:
     • Dashboard (Enforcement overview)
     • Compliance Management › Compliance Management

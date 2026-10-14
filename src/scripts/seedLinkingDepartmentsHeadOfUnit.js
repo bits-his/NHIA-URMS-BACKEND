@@ -63,7 +63,7 @@ const stockSupplyVerify = [
     functionalities: [
       "Stock Verification Dashboard",
       "Verification of Supply",
-      "Prepayment Analysis Register",
+      "Stock Prepayment Register",
     ],
   },
   ...notifications,

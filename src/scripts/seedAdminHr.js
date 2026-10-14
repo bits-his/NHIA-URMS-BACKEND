@@ -210,17 +210,31 @@ function accommodationPayload(i) {
 }
 
 function utilityPayload(i) {
+  const month = (i % 12) + 1;
+  const category = ["Generator Services", "Cleaning & Horticulture", "Security", "Generator Services", "Cleaning & Horticulture"][i];
+  const amount = [120000, 45000, 80000, 135000, 50000][i];
   return {
+    periodFrom: dateInMonth(YEAR, month, 1),
+    periodTo: dateInMonth(YEAR, month, 28),
     rows: [
       {
-        utilityCategory: ["Generator Services", "Cleaning & Horticulture", "Security", "Generator Services", "Cleaning & Horticulture"][i],
+        serviceLocation: i % 2 === 0 ? "State Office" : "Zonal Office",
+        serviceCategory: category,
         contractor: ["PowerPlus Ltd", "GreenClean", "SecureGuard", "GenTech", "Sparkle Facilities"][i],
-        amountDue: [120000, 45000, 80000, 135000, 50000][i],
-        paymentStatus: ["Paid", "Pending", "Paid", "Partial", "Pending"][i],
-        servicePeriod: `Q${(i % 4) + 1} ${YEAR}`,
+        amountDue: amount,
+        paymentRequestRef: `PR-${YEAR}-${100 + i}`,
         remarks: "Seed sample utility entry",
       },
     ],
+    totalAmountDue: amount,
+    attachments: [
+      { id: 1, name: "Duly signed Job Completion Certificate", attached: "Yes" },
+      { id: 2, name: "Firm's Request for Payment", attached: "Yes" },
+      { id: 3, name: "Invoice for Services Rendered", attached: "Yes" },
+    ],
+    preparedBy: ["A. Okonkwo", "B. Musa", "C. Adeyemi", "D. Bello", "E. Nwosu"][i],
+    designation: "Admin Officer",
+    signatureDate: dateInMonth(YEAR, (i % 12) + 1, 15),
   };
 }
 

@@ -42,10 +42,14 @@ function corsOptions() {
       // Non-browser clients (curl, server jobs) omit Origin — not a CORS concern.
       if (!origin) return callback(null, true);
 
+      // Dev: reflect any origin (LAN IP via vite --host, localhost, etc.)
+      // so phone/other-PC access does not break with empty CORS responses.
+      if (!isProduction) return callback(null, true);
+
       if (allowed.includes(origin)) return callback(null, true);
 
       const msg = `CORS blocked origin: ${origin}`;
-      if (!isProduction) console.warn(msg);
+      console.warn(msg);
       callback(new Error(msg));
     },
     credentials: true,
