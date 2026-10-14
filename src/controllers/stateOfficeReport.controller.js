@@ -547,6 +547,7 @@ const hcpChange = makeReportController(
     record_date: line.record_date || null,
     enrollee_name: line.enrollee_name,
     nhia_number: line.nhia_number,
+    entity_type: line.entity_type === "hmo" || line.entity_type === "hcp" ? line.entity_type : null,
     current_hcp_hmo: line.current_hcp_hmo || null,
     new_hcp_hmo: line.new_hcp_hmo || null,
     reason_for_transfer: line.reason_for_transfer || null,

@@ -12,6 +12,7 @@ const HcpChangeReportLine = sequelize.define("HcpChangeReportLine", {
   record_date: { type: DataTypes.DATEONLY, allowNull: true },
   enrollee_name: { type: DataTypes.STRING(150), allowNull: false },
   nhia_number: { type: DataTypes.STRING(50), allowNull: false },
+  entity_type: { type: DataTypes.STRING(10), allowNull: true }, // hcp | hmo
   current_hcp_hmo: { type: DataTypes.STRING(255), allowNull: true },
   new_hcp_hmo: { type: DataTypes.STRING(255), allowNull: true },
   reason_for_transfer: { type: DataTypes.TEXT, allowNull: true },
