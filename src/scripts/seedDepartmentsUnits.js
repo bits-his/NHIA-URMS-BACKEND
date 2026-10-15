@@ -6,7 +6,7 @@ const Unit = require("../models/Unit");
 const { DEPARTMENTS } = require("../utils/orgCatalog");
 const { logPartial } = require("../utils/seedUtils");
 
-async function seedDepartmentsUnits() {
+async function seedDepartmentsUnits({ quiet = false } = {}) {
   let deptCreated = 0;
   let deptSkipped = 0;
   let unitCreated = 0;
@@ -48,11 +48,18 @@ async function seedDepartmentsUnits() {
       }
     }
 
-    console.log(`  ✔  ${dept.name} (${units.length} units)`);
+    if (!quiet) console.log(`  ✔  ${dept.name} (${units.length} units)`);
   }
 
-  logPartial("Departments", deptCreated, deptSkipped);
-  logPartial("Units", unitCreated, unitSkipped);
+  if (!quiet) {
+    logPartial("Departments", deptCreated, deptSkipped);
+    logPartial("Units", unitCreated, unitSkipped);
+  }
+
+  return {
+    departments: { created: deptCreated, updated: deptSkipped },
+    units: { created: unitCreated, updated: unitSkipped },
+  };
 }
 
 if (require.main === module) {
