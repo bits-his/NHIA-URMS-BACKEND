@@ -245,13 +245,19 @@ const enrolment = makeReportController(
     program_name: line.program_name || null,
     enrolment_category: line.enrolment_category || null,
     beneficiary_category: line.beneficiary_category || null,
+    beneficiary_status: line.beneficiary_status || null,
     funding_option: line.funding_option || null,
+    supporting_evidence: line.supporting_evidence || null,
+    status_reason: line.status_reason || null,
     activity_budget: line.activity_budget != null && line.activity_budget !== "" ? Number(line.activity_budget) : null,
     approved_amount: line.approved_amount != null && line.approved_amount !== "" ? Number(line.approved_amount) : null,
     enrolment_count: Number(line.enrolment_count) || 0,
     enrollees_validated: line.enrollees_validated != null && line.enrollees_validated !== "" ? Number(line.enrollees_validated) : null,
     activity_status: line.activity_status || null,
     remarks: line.remarks || null,
+    program_details: line.program_details && typeof line.program_details === "object"
+      ? line.program_details
+      : (line.program_details ? (() => { try { return JSON.parse(line.program_details); } catch { return null; } })() : null),
     quarter,
   })
 );

@@ -197,22 +197,67 @@ function sshiaLine(sub_head, opening, receipts, expenditure) {
 }
 
 async function seedEnrolmentMonth(geo, year, month) {
-  const ref = refId("ENR", geo.code, year, month);
-  const [report, created] = await EnrolmentReport.findOrCreate({
-    where: { reference_id: ref },
-    defaults: { ...reportHeader(geo, year, month), reference_id: ref },
-  });
-  if (created) {
-    const q = quarterFromMonth(month);
-    const base = 80 + month * 12;
-    await EnrolmentReportLine.bulkCreate([
-      { report_id: report.id, category: "mop_up", enrolment_count: base + 40, quarter: q },
-      { report_id: report.id, category: "gifship", enrolment_count: base + 20, quarter: q },
-      { report_id: report.id, category: "ops", enrolment_count: Math.round(base * 0.4), quarter: q },
-      { report_id: report.id, category: "sshia", enrolment_count: base + 10, quarter: q },
-    ]);
+  // One activity per report (PPT-aligned). Prefer dedicated: npm run db:seed-enrolment
+  const q = quarterFromMonth(month);
+  const base = 80 + month * 12;
+  const day = String(Math.min(20, 8 + (month % 10))).padStart(2, "0");
+  const activityDate = `${year}-${String(month).padStart(2, "0")}-${day}`;
+  const samples = [
+    {
+      seq: "01",
+      line: {
+        category: "enrolment",
+        activity_code: "ENR-0001",
+        activity_date: activityDate,
+        enrolment_channel: "NHIA",
+        enrolment_type: "Fresh Enrolment",
+        program_code: "PRG-0001",
+        program_name: "FSSHIP",
+        enrolment_category: "Walk-in",
+        beneficiary_category: "Principal (FSSHIP)",
+        beneficiary_status: "Active",
+        funding_option: "Zero-Cost (Statutory Mandate)",
+        supporting_evidence: "Enrolment Register",
+        enrolment_count: base + 40,
+        activity_status: "Completed",
+        program_details: { surname: "Demo", first_name: "Enrollee" },
+        quarter: q,
+      },
+    },
+    {
+      seq: "02",
+      line: {
+        category: "nin_validation",
+        activity_code: "ENR-0002",
+        activity_date: activityDate,
+        program_code: "PRG-0001",
+        program_name: "FSSHIP",
+        enrolment_count: 0,
+        activity_status: "Validated",
+        program_details: {
+          enrollee_name: "Demo NIN Enrollee",
+          nin_number: `1000000000${month % 10}`,
+          validation_status: "Validated",
+          validation_date: activityDate,
+        },
+        quarter: q,
+      },
+    },
+  ];
+
+  let created = 0;
+  for (const sample of samples) {
+    const ref = `ENR-${year}-${geo.code}-${String(month).padStart(2, "0")}-${sample.seq}`;
+    const [report, wasCreated] = await EnrolmentReport.findOrCreate({
+      where: { reference_id: ref },
+      defaults: { ...reportHeader(geo, year, month), reference_id: ref },
+    });
+    if (wasCreated) {
+      await EnrolmentReportLine.create({ report_id: report.id, ...sample.line });
+      created += 1;
+    }
   }
-  return created ? 1 : 0;
+  return created;
 }
 
 async function seedMigrationMonth(geo, year, month) {

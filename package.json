@@ -14,6 +14,7 @@
     "db:seed-store": "node src/scripts/seedStoreManagement.js",
     "db:seed-all": "node src/scripts/seedAll.js",
     "db:seed-state-office": "node src/scripts/seedStateOfficeData.js",
+    "db:seed-enrolment": "node src/scripts/seedEnrolmentActivity.js",
     "db:seed-dashboard-demo": "node src/scripts/seedRoleDashboardDemo.js",
     "db:reset-org": "node src/scripts/resetOrgKeepAdminSdo.js",
     "db:seed-complaint-sla": "node src/scripts/seedComplaintSla.js",
