@@ -9,7 +9,9 @@ const {
   StoreAsset, StoreInventoryItem, SupplyVerification,
   AssetTransfer, AssetMaintenance, AssetDisposal,
   StockIssueVoucher, StockConversion, PhysicalAssetVerification,
+  PrepaymentAnalysis,
 } = require("../models");
+const { buildAssetRegister, buildPrepaymentRegister } = require("../utils/unitDashboards");
 
 // ─── Reference ID generator ───────────────────────────────────────────────────
 
@@ -340,8 +342,9 @@ const mapDrillRow = (row, fields) => ({
 const getDashboard = async (req, res, next) => {
   try {
     const { buildStateOfficeListWhere } = require("../utils/stateOfficeScope");
-    const where = await buildStateOfficeListWhere(req.user, req.query);
-    const assetWhere = await buildStockAssetWhere(req.user, req.query);
+    const geoQuery = { state_id: req.query.state_id, zone_id: req.query.zone_id };
+    const where = await buildStateOfficeListWhere(req.user, geoQuery);
+    const assetWhere = await buildStockAssetWhere(req.user, geoQuery);
 
     const [
       verifications, stockAssets, items, supplyVerifications,
@@ -464,6 +467,45 @@ const getDashboard = async (req, res, next) => {
       { module: "Capitalisation & Issuance", count: capitalisationIssuance, path: "/store-management/transfers/requests" },
     ].filter((row) => row.count > 0);
 
+    await PrepaymentAnalysis.ensurePrepaymentColumns().catch(() => {});
+    const prepWhere = {};
+    if (assetWhere.state_id) prepWhere.state_id = assetWhere.state_id;
+    const [registerAssets, prepayments, inventoryCats] = await Promise.all([
+      StoreAsset.findAll({ where: assetWhere }),
+      PrepaymentAnalysis.findAll({ where: prepWhere }),
+      StoreInventoryItem.findAll({ attributes: ["itemCode", "category"] }),
+    ]);
+    const categoryByControl = {};
+    for (const item of inventoryCats) {
+      if (item.itemCode && item.category) categoryByControl[item.itemCode] = item.category;
+    }
+    const registerQuery = {
+      year: req.query.year,
+      quarter: req.query.quarter,
+      month: req.query.month,
+      from: req.query.from,
+      to: req.query.to,
+      office: req.query.office,
+      category: req.query.category,
+      status: req.query.status,
+      condition: req.query.condition,
+    };
+    const officeStates = await StateOffice.findAll({
+      attributes: ["id", "description", "zonal_id"],
+      include: [{ model: ZonalOffice, as: "zone", attributes: ["description"] }],
+    });
+    const places = { byStateId: {}, byStateName: {} };
+    for (const state of officeStates) {
+      const entry = {
+        state: state.description,
+        zone: state.zone?.description || "Unassigned",
+      };
+      places.byStateId[state.id] = entry;
+      places.byStateName[String(state.description || "").trim().toLowerCase()] = entry;
+    }
+    const asset_register = buildAssetRegister(registerAssets, registerQuery, places);
+    const prepayment = buildPrepaymentRegister(prepayments, categoryByControl, registerQuery);
+
     res.json({
       success: true,
       data: {
@@ -496,6 +538,8 @@ const getDashboard = async (req, res, next) => {
         module_breakdown,
         monthly_activity: Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month)),
         state_activity,
+        asset_register,
+        prepayment,
       },
     });
   } catch (err) {

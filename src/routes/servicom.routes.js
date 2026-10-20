@@ -36,6 +36,7 @@ router.post("/visits/:id/evidence", blockCoordinatorWrites, requireCreateAccess,
 
 router.get("/investigating-officers", ctrl.listInvestigatingOfficers);
 router.get("/complaints", ctrl.listComplaints);
+router.get("/complaints-dashboard", ctrl.complaintsDashboard);
 router.get("/complaints/next-number", ctrl.previewComplaintNumber);
 router.get("/complaint-sla", ctrl.listComplaintSla);
 router.get("/complaints/:id", ctrl.getComplaint);
