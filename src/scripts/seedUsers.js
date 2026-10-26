@@ -71,7 +71,7 @@ const zonalAccess = [{
     "Monitoring Visits",
     "Mystery Shopping",
     "HMO Indebtedness Collation",
-    "Accreditation / Reaccreditation",
+    "Provider Management",
     "Stakeholder Engagement",
     "HMO Selection Process",
     "Additional / Extra Dependant",
@@ -131,6 +131,10 @@ const dgAccess = [
     access_to: "SOC/Zones",
     functionalities: ["SOC/Zones Dashboard"],
   },
+  {
+    access_to: "SDO",
+    functionalities: ["Provider Management Dashboard"],
+  },
 ];
 
 const sdoAccess = [
@@ -148,11 +152,19 @@ const sdoAccess = [
       "Physical Asset Verification",
       "Verification of Supply",
       "Ad-hoc / Special Assignment",
+      "Provider Management Dashboard",
     ],
   },
   {
     access_to: "Zonal",
-    functionalities: ["Monitoring Visits", "Mystery Shopping", "HMO Indebtedness Collation", "ICT Support Register"],
+    functionalities: [
+      "Monitoring Visits",
+      "Mystery Shopping",
+      "HMO Indebtedness Collation",
+      "ICT Support Register",
+      "Provider Management",
+      "Provider Management Dashboard",
+    ],
   },
   ...notifications,
 ];

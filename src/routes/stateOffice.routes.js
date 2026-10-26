@@ -20,6 +20,7 @@ const hmoMaster = require("../controllers/stateOfficeHmoMaster.controller");
 const reconciliation = require("../controllers/stateOfficeReconciliation.controller");
 const nhiaAccreditation = require("../controllers/nhiaAccreditation.controller");
 const stateOfficeDashboard = require("../controllers/stateOfficeDashboard.controller");
+const providerManagementDashboard = require("../controllers/providerManagementDashboard.controller");
 const adminHr = require("../controllers/adminHrReport.controller");
 const officeProfiles = require("../controllers/stateZonalOfficeProfile.controller");
 const focalPersons = require("../controllers/stateZonalFocalPerson.controller");
@@ -33,6 +34,7 @@ router.use(blockCoordinatorWrites);
 
 router.get("/dashboard", stateOfficeDashboard.dashboard);
 router.get("/dashboard/drill", stateOfficeDashboard.dashboardDrill);
+router.get("/accreditation/dashboard", providerManagementDashboard.dashboard);
 
 const profileRules = [
   body("zone_id").notEmpty().withMessage("Zone is required"),
@@ -107,6 +109,11 @@ router.post(
   "/stakeholder/reports/:id/lines/:lineId/files",
   beneficiaryUpload.array("files", 10),
   stakeholder.uploadLineFiles,
+);
+router.post(
+  "/accreditation/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.array("files", 10),
+  accreditation.uploadLineFiles,
 );
 router.post(
   "/extra-dependant/reports/:id/lines/:lineId/files",
