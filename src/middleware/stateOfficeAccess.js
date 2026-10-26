@@ -20,9 +20,8 @@ const ROUTE_FUNCTIONALITY = {
   "hmo-reconciliation": "HMO Indebtedness Collation",
   "hmo-master": "HMO Indebtedness Collation",
   "reconciliation-meetings": "Reconciliation Meetings",
-  accreditation: "Accreditation / Reaccreditation",
-  // Canonical privilege leaf in the app sidebar (legacy aliases below)
-  stakeholder: "Stakeholder Management",
+  accreditation: "Provider Management",
+  stakeholder: "Stakeholder Engagement",
   ...Object.fromEntries(ENROLMENT_DRIVE_TYPES.map((t) => [t.segment, t.title])),
   "hmo-selection": "HMO Selection Process",
   "extra-dependant": "Additional / Extra Dependant",
@@ -64,6 +63,7 @@ const SOC_ONLY_FUNCTIONALITIES = new Set([
 /** Privileges granted under SDO (still served by state-office APIs) */
 const SDO_FUNCTIONALITIES = new Set([
   "Ad-hoc / Special Assignment",
+  "Provider Management Dashboard",
 ]);
 
 /** Canonical title → legacy names stored in older user.functionalities rows */
@@ -83,9 +83,22 @@ const FUNCTIONALITY_ALIASES = {
     "Enrollee Complaints",
     "Compliance Visits",
   ],
+  "Provider Management": [
+    "Accreditation / Reaccreditation",
+    "Accreditation",
+    "Reaccreditation",
+    "Provider Management",
+    "Provider Management Dashboard",
+  ],
+  "Provider Management Dashboard": [
+    "Provider Management",
+    "Provider Management Dashboard",
+    "Accreditation / Reaccreditation",
+  ],
   "Accreditation / Reaccreditation": [
     "Accreditation",
     "Reaccreditation",
+    "Provider Management",
   ],
   "Stakeholder Management": [
     "Stakeholder Engagement",
@@ -135,6 +148,7 @@ const ACCREDITED_PROVIDER_SECTIONS = [
   "Weekly Compliance Report",
   "Enrollee Complaints",
   "Accreditation / Reaccreditation",
+  "Provider Management",
   "Reconciliation Meetings",
   "Compliance Monitoring",
   "Monitoring Visits",

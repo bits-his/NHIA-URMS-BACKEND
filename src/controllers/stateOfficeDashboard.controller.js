@@ -21,7 +21,7 @@ const MONTHLY_REPORT_SOURCES = [
   { key: "enrolment", label: "Enrolment", model: EnrolmentReport },
   { key: "migration", label: "Migration / Update Requests", model: MigrationReport },
   { key: "cemonc", label: "CEmONC & FFP Beneficiaries", model: CemoncReport },
-  { key: "accreditation", label: "Accreditation / Reaccreditation", model: AccreditationReport },
+  { key: "accreditation", label: "Provider Management", model: AccreditationReport },
   { key: "stakeholder", label: "Stakeholder Engagement", model: StakeholderReport },
   { key: "enrolment_drive", label: "Enrolment Drive", model: EnrolmentDriveReport },
   { key: "hmo_selection", label: "HMO Selection Process", model: HmoSelectionReport },
@@ -90,9 +90,11 @@ const bumpMonthly = (map, key, { total = 0, submitted = 0, approved = 0 } = {}) 
   map[key].approved += approved;
 };
 
+const PENDING_REVIEW_STATUSES = new Set(["submitted", "reviewed", "awaiting_review"]);
+
 const statusCounts = (rows) => {
-  const submitted = rows.filter((r) => r.status === "submitted" || r.status === "reviewed").length;
-  const approved = rows.filter((r) => r.status === "approved").length;
+  const submitted = rows.filter((r) => PENDING_REVIEW_STATUSES.has(r.status)).length;
+  const approved = rows.filter((r) => r.status === "approved" || r.status === "endorsed").length;
   return { submitted, approved };
 };
 
@@ -104,8 +106,8 @@ const aggregateMonthlyReports = async (Model, where) => {
   const monthlyMap = {};
   rows.forEach((r) => {
     const key = monthKeyFromReport(r.reporting_year, r.reporting_month);
-    const isSubmitted = r.status === "submitted";
-    const isApproved = r.status === "approved";
+    const isSubmitted = PENDING_REVIEW_STATUSES.has(r.status);
+    const isApproved = r.status === "approved" || r.status === "endorsed";
     bumpMonthly(monthlyMap, key, {
       total: 1,
       submitted: isSubmitted ? 1 : 0,
@@ -252,9 +254,9 @@ const toVisitWhere = (where = {}) => {
 /** Count monthly reports matching an optional status filter within a year/month */
 const countReportsInPeriod = async (where, year, month, statusFilter = null) => {
   const periodWhere = { ...where, reporting_year: year, reporting_month: month };
-  if (statusFilter === "draft") periodWhere.status = "draft";
-  else if (statusFilter === "submitted") periodWhere.status = { [Op.in]: ["submitted", "reviewed"] };
-  else if (statusFilter === "approved") periodWhere.status = "approved";
+  if (statusFilter === "draft") periodWhere.status = { [Op.in]: ["draft", "returned"] };
+  else if (statusFilter === "submitted") periodWhere.status = { [Op.in]: ["submitted", "reviewed", "awaiting_review"] };
+  else if (statusFilter === "approved") periodWhere.status = { [Op.in]: ["approved", "endorsed"] };
   let total = 0;
   for (const src of MONTHLY_REPORT_SOURCES) {
     total += await src.model.count({ where: periodWhere });
@@ -901,7 +903,7 @@ const dashboard = async (req, res, next) => {
 const applyMonthlyFilters = (where, query) => {
   const w = { ...where };
   if (query.status === "submitted") {
-    w.status = { [Op.in]: ["submitted", "reviewed"] };
+    w.status = { [Op.in]: ["submitted", "reviewed", "awaiting_review"] };
   } else if (query.status) {
     w.status = query.status;
   }

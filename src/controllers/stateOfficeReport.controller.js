@@ -5,6 +5,7 @@ const { ZonalOffice, StateOffice } = require("../models");
 const {
   buildStateOfficeListWhere, withCoordinatorTeam, assertRecordAccess, applyScopeToBody,
 } = require("../utils/stateOfficeScope");
+const { canReviewMonthlyReport } = require("../utils/monthlyReportScope");
 
 const quarterFromMonth = (month) => Math.ceil(Number(month) / 3);
 
@@ -27,49 +28,36 @@ const isCoordinatorRole = (role) => /(^|-)(state|zonal)-coordinator$/.test(Strin
 const patchBeneficiaryStatus = async (req, report) => {
   const { status, review_note: reviewNote, action } = req.body;
   const role = String(req.user?.role || "");
-  const coordinator = isCoordinatorRole(role);
+  const reviewer = role === "admin" || isCoordinatorRole(role) || await canReviewMonthlyReport(role);
   const note = reviewNote && String(reviewNote).trim() ? String(reviewNote).trim() : "";
   const reviewerName = req.user?.name || req.user?.staff_id || "Reviewer";
 
-  if (coordinator) {
+  if (action === "endorse" || action === "return") {
+    if (!reviewer) {
+      const err = new Error("Only a state coordinator can endorse or return this report");
+      err.status = 403;
+      throw err;
+    }
     if (report.status !== "submitted") {
       const err = new Error("Only reports sent for review can be endorsed or returned");
       err.status = 422;
       throw err;
     }
-    if (action === "endorse") {
-      if (!note) {
-        const err = new Error("A comment is required to endorse");
-        err.status = 422;
-        throw err;
-      }
-      await report.update({
-        status: "draft",
-        endorsed: true,
-        coordinator_review_note: note,
-        coordinator_reviewed_by: reviewerName,
-        coordinator_reviewed_at: new Date(),
-      });
-      return;
+    if (!note) {
+      const err = new Error(action === "endorse"
+        ? "A comment is required to endorse"
+        : "A comment is required when returning a report");
+      err.status = 422;
+      throw err;
     }
-    if (action === "return" || status === "draft") {
-      if (!note) {
-        const err = new Error("A comment is required when returning a report");
-        err.status = 422;
-        throw err;
-      }
-      await report.update({
-        status: "draft",
-        endorsed: false,
-        coordinator_review_note: note,
-        coordinator_reviewed_by: reviewerName,
-        coordinator_reviewed_at: new Date(),
-      });
-      return;
-    }
-    const err = new Error("Endorse the report with a comment, or return it for correction");
-    err.status = 422;
-    throw err;
+    await report.update({
+      status: "draft",
+      endorsed: action === "endorse",
+      coordinator_review_note: note,
+      coordinator_reviewed_by: reviewerName,
+      coordinator_reviewed_at: new Date(),
+    });
+    return;
   }
 
   if (action === "final_submit" || status === "approved") {
@@ -87,10 +75,16 @@ const patchBeneficiaryStatus = async (req, report) => {
   throw err;
 };
 
-const patchReportStatus = async (req, report) => {
+const STANDARD_STATUSES = ["draft", "submitted", "approved"];
+const PROVIDER_STATUSES = [
+  "draft", "awaiting_review", "returned", "endorsed", "submitted", "approved",
+];
+
+const patchReportStatus = async (req, report, { providerWorkflow = false } = {}) => {
   if (isBeneficiaryModel(report)) return patchBeneficiaryStatus(req, report);
-  const allowed = ["draft", "submitted", "approved"];
   const { status, review_note: reviewNote } = req.body;
+  const allowed = providerWorkflow ? PROVIDER_STATUSES : STANDARD_STATUSES;
+
   if (!allowed.includes(status)) {
     const err = new Error("Invalid status");
     err.status = 422;
@@ -99,6 +93,71 @@ const patchReportStatus = async (req, report) => {
   const role = String(req.user?.role || "");
   const isCoordinator = /(^|-)(state|zonal)-coordinator$/.test(role);
   const isReportingOfficer = role === "reporting-officer" || role.endsWith("-reporting-officer");
+  const reviewerName = req.user?.name || req.user?.staff_id || "Reviewer";
+  const note = reviewNote && String(reviewNote).trim() ? String(reviewNote).trim() : null;
+
+  if (providerWorkflow) {
+    const current = report.status;
+    if (isCoordinator) {
+      if (current === "awaiting_review") {
+        if (status !== "endorsed" && status !== "returned") {
+          const err = new Error("Coordinators may endorse or return reports awaiting review");
+          err.status = 422;
+          throw err;
+        }
+        if (status === "returned" && !note) {
+          const err = new Error("A comment is required when returning a report");
+          err.status = 422;
+          throw err;
+        }
+      } else if (current === "submitted") {
+        if (status !== "approved" && status !== "draft") {
+          const err = new Error("Coordinators may approve or return submitted reports");
+          err.status = 422;
+          throw err;
+        }
+        if (status === "draft" && !note) {
+          const err = new Error("A comment is required when returning a report");
+          err.status = 422;
+          throw err;
+        }
+      } else {
+        const err = new Error("Only reports awaiting review (or submitted) can be actioned by a coordinator");
+        err.status = 422;
+        throw err;
+      }
+      await report.update({
+        status,
+        coordinator_reviewed_by: reviewerName,
+        coordinator_reviewed_at: new Date(),
+        coordinator_review_note: note || (status === "endorsed" || status === "approved" ? null : report.coordinator_review_note),
+      });
+      return;
+    }
+    // Officer transitions
+    if (status === "awaiting_review" && !["draft", "returned"].includes(current)) {
+      const err = new Error("Only draft or returned reports can be sent for review");
+      err.status = 422;
+      throw err;
+    }
+    if (status === "submitted" && current !== "endorsed") {
+      const err = new Error("Report must be endorsed by the State Coordinator before submission");
+      err.status = 422;
+      throw err;
+    }
+    if (status === "draft" && !["draft", "returned"].includes(current)) {
+      const err = new Error("Cannot move this report back to draft from the current status");
+      err.status = 422;
+      throw err;
+    }
+    if (["endorsed", "returned", "approved"].includes(status) && !isCoordinator) {
+      const err = new Error("Only a State Coordinator can endorse or return this report");
+      err.status = 422;
+      throw err;
+    }
+    await report.update({ status });
+    return;
+  }
 
   if (isCoordinator) {
     if (report.status !== "submitted") {
@@ -112,7 +171,7 @@ const patchReportStatus = async (req, report) => {
       err.status = 422;
       throw err;
     }
-    if (status === "draft" && !(reviewNote && String(reviewNote).trim())) {
+    if (status === "draft" && !note) {
       const err = new Error("A comment is required when returning a report");
       err.status = 422;
       throw err;
@@ -129,22 +188,20 @@ const patchReportStatus = async (req, report) => {
     err.status = 403;
     throw err;
   }
-
-  const reviewerName = req.user?.name || req.user?.staff_id || "Reviewer";
-  const noteText = reviewNote && String(reviewNote).trim() ? String(reviewNote).trim() : null;
   await report.update({
     status,
     ...(isCoordinator ? {
       coordinator_reviewed_by: reviewerName,
       coordinator_reviewed_at: new Date(),
-      coordinator_review_note: noteText !== null
-        ? noteText
+      coordinator_review_note: note
+        ? note
         : (status === "approved" ? null : report.coordinator_review_note),
     } : {}),
   });
 };
 
-const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, headerExtras = {}, fixed = {}) => {
+const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, headerExtras = {}, fixed = {}, options = {}) => {
+  const providerWorkflow = !!options.providerWorkflow;
   /**
    * headerExtras: { field: (rawValue) => storedValue } for report-specific header columns.
    * fixed: column values stamped on create and required on every read/write (shared-table variants).
@@ -276,6 +333,26 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
         submission_date, submitted_by, status, lines = [],
       } = scoped;
 
+      if (providerWorkflow) {
+        // Endorsed: officer may only submit (no content edits / no revert to draft).
+        // Draft & returned remain fully editable. Awaiting review is locked.
+        if (report.status === "endorsed") {
+          if (status !== "submitted") {
+            await t.rollback();
+            return res.status(422).json({
+              success: false,
+              message: "Endorsed reports can only be submitted. Ask the coordinator to return it if changes are needed.",
+            });
+          }
+        } else if (!["draft", "returned"].includes(report.status)) {
+          await t.rollback();
+          return res.status(422).json({
+            success: false,
+            message: "This report cannot be edited in its current status",
+          });
+        }
+      }
+
       const quarter = quarterFromMonth(reporting_month);
       const beneficiary = isBeneficiaryModel(ReportModel);
       if (beneficiary && status === "approved" && !report.endorsed) {
@@ -299,11 +376,14 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
         ...pickHeaderExtras(scoped),
       }, { transaction: t });
 
-      await LineModel.destroy({ where: { report_id: report.id }, transaction: t });
+      // Content replace only when still editable (not a pure submit of endorsed)
+      if (!providerWorkflow || report.status !== "endorsed") {
+        await LineModel.destroy({ where: { report_id: report.id }, transaction: t });
 
-      if (lines.length > 0) {
-        const rows = lines.map((line) => mapLine(line, report.id, quarter));
-        await LineModel.bulkCreate(rows, { transaction: t });
+        if (lines.length > 0) {
+          const rows = lines.map((line) => mapLine(line, report.id, quarter));
+          await LineModel.bulkCreate(rows, { transaction: t });
+        }
       }
 
       await t.commit();
@@ -326,7 +406,7 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
       if (!access.ok) {
         return res.status(access.status).json({ success: false, message: access.message });
       }
-      await patchReportStatus(req, report);
+      await patchReportStatus(req, report, { providerWorkflow });
       res.json({ success: true, data: report });
     } catch (err) {
       if (err.status === 422) {
@@ -418,16 +498,39 @@ const optNum = (v) => (v != null && v !== "" && !Number.isNaN(Number(v)) ? Numbe
 const strArray = (v) => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
 
 const mapAccreditationLine = (line, reportId) => {
-  if (line.engagement_category || line.activity_date || line.activity_status) {
+  if (
+    line.engagement_category
+    || line.activity_date
+    || line.activity_status
+    || line.provider_management_id
+    || line.related_programme
+    || line.form_type
+  ) {
     const payload = { ...line };
     delete payload.indicator;
     delete payload.primary_count;
     delete payload.secondary_count;
+    delete payload.supportingFiles;
+    const covered = optNum(line.facilities_covered ?? line.stakeholders_engaged) || 0;
+    const planned = optNum(line.facilities_planned ?? line.planned_target_stakeholders) || 0;
+    payload.facilities_covered = covered;
+    payload.facilities_planned = planned;
+    // Linked display fields share the covered count (no duplicate entry)
+    if (payload.form_type === "accreditation" || payload.engagement_category === "Accreditation") {
+      payload.facilities_accredited = covered;
+      if (payload.related_programme === "BHCPF") payload.phcs_accredited = covered;
+    }
+    if (payload.form_type === "reaccreditation" || payload.engagement_category === "Re-accreditation") {
+      payload.facilities_reaccredited = covered;
+      if (payload.related_programme === "BHCPF") payload.phcs_reaccredited = covered;
+    }
+    if (payload.bhcpf_activity_type === "Accreditation") payload.phcs_accredited = covered;
+    if (payload.bhcpf_activity_type === "Reaccreditation") payload.phcs_reaccredited = covered;
     return {
       report_id: reportId,
       indicator: "accreditation_applications",
-      primary_count: optNum(line.stakeholders_engaged) || 0,
-      secondary_count: optNum(line.planned_target_stakeholders) || 0,
+      primary_count: covered,
+      secondary_count: planned,
       activity_template: payload,
     };
   }
@@ -446,7 +549,33 @@ const accreditation = makeReportController(
     planned_activities: optNum,
     activity_module: (v) => (v != null && String(v).trim() ? String(v).trim() : null),
   },
+  {},
+  { providerWorkflow: true },
 );
+
+accreditation.uploadLineFiles = async (req, res, next) => {
+  try {
+    const report = await AccreditationReport.findByPk(req.params.id);
+    const access = await assertRecordAccess(req.user, report);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
+    const line = await AccreditationReportLine.findOne({
+      where: { id: req.params.lineId, report_id: report.id },
+    });
+    if (!line) return res.status(404).json({ success: false, message: "Line not found" });
+    const files = req.files || [];
+    if (!files.length) return res.status(422).json({ success: false, message: "No file uploaded" });
+    const added = files.map((f) => ({ name: f.originalname, path: `/uploads/beneficiary/${f.filename}` }));
+    const tpl = line.activity_template && typeof line.activity_template === "object"
+      ? { ...line.activity_template }
+      : {};
+    const existing = Array.isArray(tpl.supporting_documents) ? tpl.supporting_documents : [];
+    tpl.supporting_documents = [...existing, ...added];
+    await line.update({ activity_template: tpl });
+    res.json({ success: true, data: line });
+  } catch (err) { next(err); }
+};
 
 const stakeholder = makeReportController(
   StakeholderReport, StakeholderReportLine, "STK",
@@ -512,6 +641,8 @@ const stakeholder = makeReportController(
     planned_activities: optNum,
     activity_module: (v) => (v != null && String(v).trim() ? String(v).trim() : null),
   },
+  {},
+  { providerWorkflow: true },
 );
 
 const makeStakeholderLineUpload = async (req, res, next) => {

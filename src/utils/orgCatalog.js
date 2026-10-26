@@ -52,7 +52,7 @@ const DEPARTMENTS = [
     name: "Standards & Quality Assurance",
     description: "Accreditation, facility compliance and QA visits (diagram SQA).",
     units: [
-      { unit_code: "SQA-ACC", name: "Accreditation / Reaccreditation", description: "Provider accreditation.", access: [pack("Zonal", "Accreditation / Reaccreditation")] },
+      { unit_code: "SQA-ACC", name: "Provider Management", description: "Provider accreditation, QA, and medical audit.", access: [pack("Zonal", "Provider Management")] },
       { unit_code: "SQA-CMP", name: "Facility Compliance", description: "Facility compliance template and SQA monthly pack.", access: [pack("Standards & Quality Assurance", "Compliance Management", "SQA Report")] },
       { unit_code: "SQA-MYS", name: "Mystery Shopping & QA Visits", description: "Mystery shopping and monitoring visits.", access: [pack("Zonal", "Mystery Shopping", "Monitoring Visits")] },
     ],
