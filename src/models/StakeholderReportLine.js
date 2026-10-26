@@ -30,10 +30,15 @@ const StakeholderReportLine = sequelize.define("StakeholderReportLine", {
   follow_up_required: { type: DataTypes.STRING(10), allowNull: true },
   follow_up_date: { type: DataTypes.DATEONLY, allowNull: true },
   follow_up_visits: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  /** PPT follow-up extras: priority, action, officer, status, findings, etc. */
+  follow_up_details: { type: DataTypes.JSON, allowNull: true },
+  location_specify: { type: DataTypes.STRING(255), allowNull: true },
   supporting_evidence_types: { type: DataTypes.JSON, allowNull: true, defaultValue: [] },
   supporting_documents: { type: DataTypes.JSON, allowNull: true, defaultValue: [] },
   outcome_category: { type: DataTypes.STRING(160), allowNull: true },
   specific_outcome: { type: DataTypes.STRING(200), allowNull: true },
+  /** Multiple outcome rows: [{ outcome_category, specific_outcome }] */
+  outcomes: { type: DataTypes.JSON, allowNull: true, defaultValue: [] },
   expected_output: { type: DataTypes.TEXT, allowNull: true },
   activity_status: { type: DataTypes.STRING(40), allowNull: true },
   remarks: { type: DataTypes.TEXT, allowNull: true },

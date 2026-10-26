@@ -351,14 +351,31 @@ const stakeholder = makeReportController(
     follow_up_required: line.follow_up_required || null,
     follow_up_date: line.follow_up_date || null,
     follow_up_visits: optNum(line.follow_up_visits),
+    follow_up_details: line.follow_up_details && typeof line.follow_up_details === "object"
+      ? line.follow_up_details
+      : null,
+    location_specify: line.location_specify || null,
     supporting_evidence_types: strArray(line.supporting_evidence_types),
     supporting_documents: Array.isArray(line.supporting_documents)
       ? line.supporting_documents
           .filter((d) => d && typeof d === "object" && d.path)
           .map((d) => ({ name: d.name || "Document", path: d.path }))
       : [],
-    outcome_category: line.outcome_category || null,
-    specific_outcome: line.specific_outcome || line.key_outcomes || null,
+    outcome_category: line.outcome_category
+      || (Array.isArray(line.outcomes) && line.outcomes[0]?.outcome_category)
+      || null,
+    specific_outcome: line.specific_outcome
+      || line.key_outcomes
+      || (Array.isArray(line.outcomes) && line.outcomes[0]?.specific_outcome)
+      || null,
+    outcomes: Array.isArray(line.outcomes)
+      ? line.outcomes
+          .filter((o) => o && (o.outcome_category || o.specific_outcome))
+          .map((o) => ({
+            outcome_category: o.outcome_category || null,
+            specific_outcome: o.specific_outcome || null,
+          }))
+      : [],
     expected_output: line.expected_output || null,
     activity_status: line.activity_status || null,
     remarks: line.remarks || null,
