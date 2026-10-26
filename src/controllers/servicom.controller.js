@@ -1334,10 +1334,31 @@ module.exports = {
 
   complaintsDashboard: async (req, res, next) => {
     try {
-      const geoWhere = await buildServicomListWhere(req.user, {
+      const role = req.user?.role;
+      const mineOnly = req.query.mine === "1" || req.query.mine === "true";
+      const createdOrAssigned = buildCreatedOrAssignedWhere(req.user, Op);
+      const zonalEscalationWhere = buildZonalEscalationWhere(req.user, Op);
+
+      let geoWhere = await buildServicomListWhere(req.user, {
         state_id: req.query.state_id,
         zone_id: req.query.zone_id,
       });
+
+      // Match listComplaints visibility so Dashboard and Register show the same set
+      if (isComplaintOfficerRole(role) && req.user?.zone_id) {
+        const parts = [
+          ...(createdOrAssigned ? [createdOrAssigned] : []),
+          ...(zonalEscalationWhere ? [zonalEscalationWhere] : []),
+        ];
+        geoWhere = parts.length
+          ? (parts.length > 1 ? { [Op.or]: parts } : { ...parts[0] })
+          : { id: -1 };
+      } else if (isReportingOfficerRole(role) || mineOnly) {
+        geoWhere = createdOrAssigned
+          ? { ...geoWhere, ...createdOrAssigned }
+          : { ...geoWhere, id: -1 };
+      }
+
       const where = { ...geoWhere };
       const setIf = (field, value) => {
         if (value && value !== "all") where[field] = value;

@@ -567,9 +567,12 @@ accreditation.uploadLineFiles = async (req, res, next) => {
     const files = req.files || [];
     if (!files.length) return res.status(422).json({ success: false, message: "No file uploaded" });
     const added = files.map((f) => ({ name: f.originalname, path: `/uploads/beneficiary/${f.filename}` }));
-    const tpl = line.activity_template && typeof line.activity_template === "object"
-      ? { ...line.activity_template }
-      : {};
+    // activity_template is LONGTEXT — may arrive as a JSON string; never replace with {}
+    let raw = line.activity_template;
+    if (typeof raw === "string") {
+      try { raw = JSON.parse(raw); } catch { raw = {}; }
+    }
+    const tpl = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw } : {};
     const existing = Array.isArray(tpl.supporting_documents) ? tpl.supporting_documents : [];
     tpl.supporting_documents = [...existing, ...added];
     await line.update({ activity_template: tpl });

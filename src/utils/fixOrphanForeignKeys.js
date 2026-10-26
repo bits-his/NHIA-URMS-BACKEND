@@ -26,6 +26,17 @@ async function tableExists(sequelize, table) {
   return Number(rowField(meta[0], "cnt", "CNT")) > 0;
 }
 
+/** True only for real tables — MySQL views cannot be UPDATE/DELETE'd for orphan cleanup. */
+async function isBaseTable(sequelize, table) {
+  const [meta] = await sequelize.query(
+    `SELECT TABLE_TYPE AS tableType FROM information_schema.tables
+     WHERE table_schema = DATABASE() AND table_name = ?`,
+    { replacements: [table] },
+  );
+  const type = String(rowField(meta[0], "tableType", "TABLE_TYPE") || "").toUpperCase();
+  return type === "BASE TABLE";
+}
+
 async function columnMeta(sequelize, table, column) {
   const [rows] = await sequelize.query(
     `SELECT COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT
@@ -91,6 +102,7 @@ async function deleteChildrenOfOrphans(sequelize, table, column, parentTable) {
 
 async function nullOrphanColumn(sequelize, table, column, parentTable) {
   if (!(await tableExists(sequelize, table))) return { cleared: 0, deleted: 0 };
+  if (!(await isBaseTable(sequelize, table))) return { cleared: 0, deleted: 0 };
 
   const col = await columnMeta(sequelize, table, column);
   if (!col) return { cleared: 0, deleted: 0 };
@@ -140,11 +152,14 @@ const GEO_CLEANUP = [
 /** Discover extra tables with state_id / zone_id so sync doesn't fail on missed models. */
 async function discoverGeoTables(sequelize) {
   const [rows] = await sequelize.query(
-    `SELECT DISTINCT table_name AS tableName, column_name AS columnName
-     FROM information_schema.columns
-     WHERE table_schema = DATABASE()
-       AND column_name IN ('state_id', 'zone_id')
-       AND table_name NOT IN ('state_offices', 'zonal_offices')`,
+    `SELECT DISTINCT c.table_name AS tableName, c.column_name AS columnName
+     FROM information_schema.columns c
+     INNER JOIN information_schema.tables t
+       ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+     WHERE c.table_schema = DATABASE()
+       AND t.table_type = 'BASE TABLE'
+       AND c.column_name IN ('state_id', 'zone_id')
+       AND c.table_name NOT IN ('state_offices', 'zonal_offices')`,
   );
   const byTable = new Map();
   for (const row of rows) {
