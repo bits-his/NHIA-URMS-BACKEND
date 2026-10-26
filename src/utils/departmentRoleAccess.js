@@ -51,11 +51,28 @@ function buildDepartmentRoles() {
 
 const DEPARTMENT_ROLES = buildDepartmentRoles();
 
+function withProviderManagementDashboard(access) {
+  if (!Array.isArray(access)) return access;
+  return access.map((entry) => {
+    if (entry?.access_to !== "Zonal") return entry;
+    const funcs = Array.isArray(entry.functionalities) ? [...entry.functionalities] : [];
+    if (funcs.includes("Provider Management") && !funcs.includes("Provider Management Dashboard")) {
+      funcs.push("Provider Management Dashboard");
+    }
+    return { ...entry, functionalities: funcs };
+  });
+}
+
 function getDefaultAccess(roleKey, unitCode) {
   const row = DEPARTMENT_ROLES.find((r) => r.key === roleKey);
   if (!row) return null;
   if (unitCode) return accessForUnit(unitCode);
-  return accessForDepartment(row.department_code);
+  const access = accessForDepartment(row.department_code);
+  // Coordinators get the PM dashboards; reporting officers keep the register only.
+  if (row.key.endsWith("-state-coordinator") || row.key.endsWith("-zonal-coordinator")) {
+    return withProviderManagementDashboard(access);
+  }
+  return access;
 }
 
 function getDepartmentCodeForRole(roleKey) {

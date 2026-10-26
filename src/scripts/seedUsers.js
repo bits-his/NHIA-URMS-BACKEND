@@ -72,6 +72,7 @@ const zonalAccess = [{
     "Mystery Shopping",
     "HMO Indebtedness Collation",
     "Provider Management",
+    "Provider Management Dashboard",
     "Stakeholder Engagement",
     "HMO Selection Process",
     "Additional / Extra Dependant",
