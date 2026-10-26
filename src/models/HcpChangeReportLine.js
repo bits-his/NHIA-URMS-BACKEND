@@ -21,6 +21,8 @@ const HcpChangeReportLine = sequelize.define("HcpChangeReportLine", {
   request_date: { type: DataTypes.DATEONLY, allowNull: true },
   process_end_date: { type: DataTypes.DATEONLY, allowNull: true },
   line_status: { type: DataTypes.STRING(60), allowNull: false, defaultValue: "pending" },
+  supporting_documents: { type: DataTypes.JSON, allowNull: true },
+  details: { type: DataTypes.JSON, allowNull: true },
 }, { tableName: "hcp_change_report_lines", modelName: "HcpChangeReportLine" });
 
 HcpChangeReport.hasMany(HcpChangeReportLine, { foreignKey: "report_id", as: "lines", onDelete: "CASCADE" });

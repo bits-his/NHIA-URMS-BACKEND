@@ -472,6 +472,7 @@ const hmoSelection = makeReportController(
     evidence_name: line.evidence_name || null,
     report_path: line.report_path || null,
     report_name: line.report_name || null,
+    details: line.details && typeof line.details === "object" ? line.details : null,
   })
 );
 
@@ -512,8 +513,10 @@ const extraDependant = makeReportController(
     line_status: line.line_status || "pending",
     supporting_documents: Array.isArray(line.supporting_documents)
       ? line.supporting_documents
-          .filter((d) => d && typeof d === "object" && d.path)
-          .map((d) => ({ name: d.name || "Document", path: d.path }))
+          .filter((d) => d && typeof d === "object" && (d.path || d.field))
+          .map((d) => (d.field
+            ? { field: String(d.field), value: d.value == null ? "" : String(d.value) }
+            : { name: d.name || "Document", path: d.path }))
       : [],
   })
 );
@@ -562,8 +565,41 @@ const hcpChange = makeReportController(
     request_date: line.request_date || null,
     process_end_date: line.process_end_date || null,
     line_status: line.line_status || "pending",
+    details: line.details && typeof line.details === "object" ? line.details : null,
+    supporting_documents: Array.isArray(line.supporting_documents)
+      ? line.supporting_documents
+          .filter((d) => d && typeof d === "object" && d.path)
+          .map((d) => ({ name: d.name || "Document", path: d.path }))
+      : [],
   })
 );
+
+hcpChange.uploadLineFiles = async (req, res, next) => {
+  try {
+    const report = await HcpChangeReport.findByPk(req.params.id);
+    const access = await assertRecordAccess(req.user, report);
+    if (!access.ok) {
+      return res.status(access.status).json({ success: false, message: access.message });
+    }
+    const line = await HcpChangeReportLine.findOne({
+      where: { id: req.params.lineId, report_id: report.id },
+    });
+    if (!line) return res.status(404).json({ success: false, message: "Line not found" });
+    const files = req.files || [];
+    if (!files.length) return res.status(422).json({ success: false, message: "No file uploaded" });
+    let existing = line.supporting_documents;
+    if (typeof existing === "string") {
+      try { existing = JSON.parse(existing); } catch { existing = []; }
+    }
+    if (!Array.isArray(existing)) existing = [];
+    const added = files.map((f) => ({
+      name: f.originalname,
+      path: `/uploads/beneficiary/${f.filename}`,
+    }));
+    await line.update({ supporting_documents: [...existing, ...added] });
+    res.json({ success: true, data: line });
+  } catch (err) { next(err); }
+};
 
 const makeTextReportController = (ReportModel, refPrefix, textFields = []) => {
   const generateRefId = async (t) => {
