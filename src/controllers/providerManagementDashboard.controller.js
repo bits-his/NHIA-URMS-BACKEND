@@ -392,24 +392,78 @@ function buildPayload(rows, level) {
     plan_achievement: pct(g.covered, g.planned),
   })).sort((a, b) => (b.plan_achievement ?? -1) - (a.plan_achievement ?? -1));
 
-  const byMonth = groupSum(
-    rows,
-    (r) => `${r.year}-${String(r.month).padStart(2, "0")}`,
-    ["planned", "covered", "accredited", "reaccredited", "bhcpf_phcs_accredited"],
-  ).map((g) => {
-    const [y, m] = g.label.split("-");
-    const monthLabel = new Date(Number(y), Number(m) - 1, 1).toLocaleString("en", { month: "short" });
-    return {
-      period: g.label,
-      label: monthLabel,
+  const monthMap = new Map();
+  for (const r of rows) {
+    const y = Number(r.year);
+    const m = Number(r.month);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) continue;
+    const key = `${y}-${String(m).padStart(2, "0")}`;
+    if (!monthMap.has(key)) {
+      monthMap.set(key, {
+        period: key,
+        label: new Date(y, m - 1, 1).toLocaleString("en", { month: "short" }),
+        year: y,
+        month: m,
+        planned: 0,
+        covered: 0,
+        accredited: 0,
+        reaccredited: 0,
+        bhcpf_phcs_accredited: 0,
+        planned_records: 0,
+        completed_records: 0,
+      });
+    }
+    const g = monthMap.get(key);
+    g.planned += num(r.planned);
+    g.covered += num(r.covered);
+    g.accredited += num(r.accredited);
+    g.reaccredited += num(r.reaccredited);
+    g.bhcpf_phcs_accredited += num(r.bhcpf_phcs_accredited);
+    g.planned_records += 1;
+    if (r.completed) g.completed_records += 1;
+  }
+
+  // Pad Jan–Dec for the selected year so the monthly trend always has a continuous series
+  const yearsInRows = [...new Set([...monthMap.values()].map((g) => g.year))];
+  const padYear = yearsInRows.length === 1
+    ? yearsInRows[0]
+    : (rows[0]?.year ? Number(rows[0].year) : new Date().getFullYear());
+  if (Number.isFinite(padYear)) {
+    for (let m = 1; m <= 12; m++) {
+      const key = `${padYear}-${String(m).padStart(2, "0")}`;
+      if (!monthMap.has(key)) {
+        monthMap.set(key, {
+          period: key,
+          label: new Date(padYear, m - 1, 1).toLocaleString("en", { month: "short" }),
+          year: padYear,
+          month: m,
+          planned: 0,
+          covered: 0,
+          accredited: 0,
+          reaccredited: 0,
+          bhcpf_phcs_accredited: 0,
+          planned_records: 0,
+          completed_records: 0,
+        });
+      }
+    }
+  }
+
+  const byMonth = [...monthMap.values()]
+    .sort((a, b) => a.period.localeCompare(b.period))
+    .map((g) => ({
+      period: g.period,
+      label: g.label,
       planned: g.planned,
       covered: g.covered,
-      completed: rows.filter((r) => `${r.year}-${String(r.month).padStart(2, "0")}` === g.label && r.completed).length,
       accredited: g.accredited,
       reaccredited: g.reaccredited,
       bhcpf_phcs_accredited: g.bhcpf_phcs_accredited,
-    };
-  }).sort((a, b) => a.period.localeCompare(b.period));
+      planned_records: g.planned_records,
+      completed_records: g.completed_records,
+      // Monthly activity trend uses activity-record counts (not facility sums)
+      completed: g.completed_records,
+    }));
 
   const byProgramme = groupSum(
     rows,
