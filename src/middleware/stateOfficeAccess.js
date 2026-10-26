@@ -292,6 +292,28 @@ function requireStateOfficeRoute(req, res, next) {
     return res.status(403).json({ success: false, message: "Access denied" });
   }
 
+  // Beneficiary form loads principal enrollees from enrolment without a separate Enrolment privilege.
+  if (
+    segment === "enrolment"
+    && req.method === "GET"
+    && parts[1] === "reports"
+    && String(req.query.principal_lookup || "") === "1"
+  ) {
+    if (req.user?.role === "admin") return next();
+    const access = parseAccess(req.user?.functionalities);
+    if (
+      grantForFunctionality(access, "Enrolment")
+      || grantForFunctionality(access, "Beneficiary Management")
+    ) {
+      return next();
+    }
+    return res.status(403).json({
+      success: false,
+      message: "Access denied",
+      required: "Beneficiary Management",
+    });
+  }
+
   const required = ROUTE_FUNCTIONALITY[segment];
   if (!required) return next();
   return requireStateOfficeSection(required)(req, res, next);

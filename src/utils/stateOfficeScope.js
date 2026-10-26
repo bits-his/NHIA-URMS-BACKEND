@@ -165,6 +165,22 @@ async function buildStateOfficeListWhere(user, query = {}, Model = null) {
     }
   }
 
+  // Enrollee lookup for Beneficiary Management. Match every state-office row with the
+  // same name (Oyo is stored twice) and do not limit the list to reports this user filed.
+  if (String(query.principal_lookup || "") === "1") {
+    const requested = query.state_id || (scope === "state" ? userStateId : null);
+    if (scope === "state" && userStateId) {
+      const allowed = await equivalentStateIds(userStateId);
+      const asked = requested ? await equivalentStateIds(requested) : [];
+      const sameState = asked.some((id) => allowed.includes(Number(id)));
+      where.state_id = { [Op.in]: sameState ? [...new Set([...allowed, ...asked.map(Number)])] : allowed };
+    } else if (requested) {
+      where.state_id = { [Op.in]: await equivalentStateIds(requested) };
+    }
+    delete where.zone_id;
+    return where;
+  }
+
   // Reporting officers only see / edit their own submissions
   if (isReportingOfficerRole(user?.role) && Model) {
     const own = ownCreatorWhere(user, Model);
