@@ -222,17 +222,25 @@ async function upsertDepartment(code, name, locationScope) {
   });
 }
 
-(async () => {
-  try {
-    await sequelize.authenticate();
-    await ensureColumns();
+/**
+ * Upsert HQ departments/divisions and zone-state units.
+ * @param {{ prune?: boolean }} [opts] — when prune is true, remove unreferenced extras (CLI default).
+ */
+async function syncDeptDivUnits({ prune = false } = {}) {
+  await ensureColumns();
 
-    for (const dept of HQ_DEPARTMENTS) {
-      const record = await upsertDepartment(dept.department_code, dept.name, "hq");
-      const keep = new Set(dept.divisions.map(([code]) => code));
-      for (const [code, name] of dept.divisions) {
-        await upsertUnit(code, name, record.id, "division");
-      }
+  let deptTouched = 0;
+  let unitTouched = 0;
+
+  for (const dept of HQ_DEPARTMENTS) {
+    const record = await upsertDepartment(dept.department_code, dept.name, "hq");
+    deptTouched++;
+    const keep = new Set(dept.divisions.map(([code]) => code));
+    for (const [code, name] of dept.divisions) {
+      await upsertUnit(code, name, record.id, "division");
+      unitTouched++;
+    }
+    if (prune) {
       const extras = await Unit.findAll({ where: { department_id: record.id } });
       for (const extra of extras) {
         if (keep.has(extra.unit_code)) continue;
@@ -244,25 +252,40 @@ async function upsertDepartment(code, name, locationScope) {
         await extra.destroy();
         console.log(`  removed ${extra.unit_code}`);
       }
-      console.log(`✔  ${dept.name}`);
     }
+  }
 
-    const stateDept = await upsertDepartment("ZSU", "Zones / States", "state");
-    const keepState = new Set(STATE_UNITS.map(([code]) => code));
-    for (const [code, name] of STATE_UNITS) {
-      await upsertUnit(code, name, stateDept.id, "state_unit");
-    }
+  const stateDept = await upsertDepartment("ZSU", "Zones / States", "state");
+  deptTouched++;
+  const keepState = new Set(STATE_UNITS.map(([code]) => code));
+  for (const [code, name] of STATE_UNITS) {
+    await upsertUnit(code, name, stateDept.id, "state_unit");
+    unitTouched++;
+  }
+  if (prune) {
     const stateExtras = await Unit.findAll({ where: { department_id: stateDept.id } });
     for (const extra of stateExtras) {
       if (keepState.has(extra.unit_code)) continue;
       if (!(await isReferenced(extra.id))) await extra.destroy();
     }
-    console.log("✔  Zones / States units");
-
-    console.log("\nDepartment and division register updated.");
-    process.exit(0);
-  } catch (err) {
-    console.error(err);
-    process.exit(1);
   }
-})();
+
+  return { departments: deptTouched, units: unitTouched };
+}
+
+module.exports = { syncDeptDivUnits, HQ_DEPARTMENTS, STATE_UNITS };
+
+if (require.main === module) {
+  (async () => {
+    try {
+      await sequelize.authenticate();
+      const result = await syncDeptDivUnits({ prune: true });
+      console.log(`✔  HQ + state location catalog synced (${result.departments} depts, ${result.units} units)`);
+      console.log("\nDepartment and division register updated.");
+      process.exit(0);
+    } catch (err) {
+      console.error(err);
+      process.exit(1);
+    }
+  })();
+}

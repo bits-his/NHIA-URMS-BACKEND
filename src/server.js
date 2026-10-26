@@ -147,6 +147,19 @@ app.use(errorHandler);
       // Table may not exist yet on fresh installs before sync scripts run.
     }
 
+    // Keep org + location department/unit catalogs current for deployments that never ran seed scripts
+    try {
+      const { seedDepartmentsUnits } = require("./scripts/seedDepartmentsUnits");
+      const { syncDeptDivUnits } = require("./scripts/syncDeptDivUnits");
+      const org = await seedDepartmentsUnits({ quiet: true });
+      const location = await syncDeptDivUnits({ prune: false });
+      console.log(
+        `✅  Departments & units ready (org +${org.departments.created}/~${org.departments.updated}, location ${location.departments} depts / ${location.units} units)`,
+      );
+    } catch (catalogErr) {
+      console.warn("⚠️  Department/unit catalog sync skipped:", catalogErr.message);
+    }
+
     // Start listening for HTTP connections
     app.listen(PORT, () => console.log(`🚀  Server running on http://localhost:${PORT}`));
   } catch (err) {

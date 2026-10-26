@@ -121,6 +121,11 @@ router.post(
   extraDependant.uploadLineFiles,
 );
 router.post(
+  "/hcf-change/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.array("files", 10),
+  hcpChange.uploadLineFiles,
+);
+router.post(
   "/etmc-tmc-action-point/reports/:id/document",
   etmcUpload.single("file"),
   etmcTmcActionPoint.uploadDocument,

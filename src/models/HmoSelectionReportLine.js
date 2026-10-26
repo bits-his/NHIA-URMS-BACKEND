@@ -23,6 +23,7 @@ const HmoSelectionReportLine = sequelize.define("HmoSelectionReportLine", {
   evidence_name: { type: DataTypes.STRING(255), allowNull: true },
   report_path: { type: DataTypes.STRING(255), allowNull: true },
   report_name: { type: DataTypes.STRING(255), allowNull: true },
+  details: { type: DataTypes.JSON, allowNull: true },
 }, { tableName: "hmo_selection_report_lines", modelName: "HmoSelectionReportLine" });
 
 HmoSelectionReport.hasMany(HmoSelectionReportLine, { foreignKey: "report_id", as: "lines", onDelete: "CASCADE" });
