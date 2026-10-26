@@ -31,7 +31,7 @@ const DEPARTMENTS = [
     description: "Stakeholder coordination and statistical reporting (diagram ISP/PRSD).",
     units: [
       { unit_code: "PRSD-STR", name: "Strategic Planning", description: "Corporate strategy and work plans.", access: [] },
-      { unit_code: "PRSD-STK", name: "Stakeholder / SSHIA Coordination", description: "Meetings with SSHIAs and stakeholder forums.", access: [pack("Zonal", "Stakeholder Engagement")] },
+      { unit_code: "PRSD-STK", name: "Stakeholder / SSHIA Coordination", description: "Meetings with SSHIAs and stakeholder forums.", access: [pack("Zonal", "Stakeholder Management")] },
       { unit_code: "PRSD-STAT", name: "Statistics & Reporting", description: "Data aggregation and statistical reports.", access: [] },
     ],
   },
@@ -129,7 +129,7 @@ const DEPARTMENTS = [
     units: [
       { unit_code: "COM-MED", name: "Media & Press", description: "Media parley and campaigns (reported via outreach).", access: [pack("Programmes", "Outreach Report"), pack("Zonal", "Media Parley / Campaigns")] },
       { unit_code: "COM-ADV", name: "Advocacy & Sensitization", description: "Community outreach and campaigns.", access: [pack("Programmes", "Outreach Report")] },
-      { unit_code: "COM-STK", name: "Stakeholder Relations", description: "Stakeholder engagement.", access: [pack("Zonal", "Stakeholder Engagement")] },
+      { unit_code: "COM-STK", name: "Stakeholder Relations", description: "Stakeholder engagement.", access: [pack("Zonal", "Stakeholder Management")] },
     ],
   },
   {

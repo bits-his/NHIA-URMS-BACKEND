@@ -20,6 +20,32 @@ function isCoordinatorRole(role) {
   return isStateCoordinatorRole(role) || isZonalCoordinatorRole(role);
 }
 
+function isReportingOfficerRole(role) {
+  const r = String(role || "");
+  return r === "reporting-officer" || r.endsWith("-reporting-officer");
+}
+
+/** Match records authored by this user (submitted_by / created_by). */
+function ownCreatorWhere(user, Model) {
+  const cols = creatorColumns(Model);
+  if (!cols.length || !user) return null;
+  const clauses = [];
+  const name = String(user.name || "").trim();
+  if (name) {
+    for (const c of cols) {
+      clauses.push({ [c]: name });
+      clauses.push({ [c]: { [Op.like]: `${name}%` } });
+    }
+  }
+  const staffId = String(user.staff_id || "").trim();
+  if (staffId) {
+    for (const c of cols) {
+      clauses.push({ [c]: { [Op.like]: `%(${staffId})%` } });
+    }
+  }
+  return clauses.length ? { [Op.or]: clauses } : null;
+}
+
 /**
  * Names of the coordinator + their team: users in the same state (state coordinator) or zone
  * (zonal coordinator) sharing the role prefix (e.g. "enf-"), else the same department.
@@ -101,7 +127,7 @@ async function resolveScope(user) {
   return ROLE_SCOPE_FALLBACK[roleKey] || "none";
 }
 
-async function buildStateOfficeListWhere(user, query = {}) {
+async function buildStateOfficeListWhere(user, query = {}, Model = null) {
   const where = {};
   const scope = await resolveScope(user);
   const { zone_id: userZoneId, state_id: userStateId } = userGeo(user);
@@ -114,10 +140,8 @@ async function buildStateOfficeListWhere(user, query = {}) {
   if (query.against_type) where.against_type = query.against_type;
 
   if (scope === "national" || scope === "none") {
-    return where;
-  }
-
-  if (scope === "state") {
+    // fall through — reporting officers still get own-creator filter below
+  } else if (scope === "state") {
     if (!userStateId) {
       where.state_id = -1;
       return where;
@@ -125,10 +149,7 @@ async function buildStateOfficeListWhere(user, query = {}) {
     where.state_id = userStateId;
     const zoneId = userZoneId || await resolveUserZoneId(user);
     if (zoneId) where.zone_id = zoneId;
-    return where;
-  }
-
-  if (scope === "zonal") {
+  } else if (scope === "zonal") {
     const zoneId = userZoneId || await resolveUserZoneId(user);
     if (!zoneId) {
       where.zone_id = -1;
@@ -142,14 +163,42 @@ async function buildStateOfficeListWhere(user, query = {}) {
       });
       if (!inZone) where.state_id = -1;
     }
-    return where;
+  }
+
+  // Reporting officers only see / edit their own submissions
+  if (isReportingOfficerRole(user?.role) && Model) {
+    const own = ownCreatorWhere(user, Model);
+    if (!own) {
+      where.id = -1;
+      return where;
+    }
+    return { ...where, ...own };
   }
 
   return where;
 }
 
+function userOwnsRecord(user, record) {
+  if (!user || !record) return false;
+  const creators = [record.submitted_by, record.created_by].filter(Boolean).map(String);
+  if (!creators.length) return false;
+  const name = String(user.name || "").trim();
+  if (name && creators.some((c) => c === name || c.startsWith(name))) return true;
+  const staffId = String(user.staff_id || "").trim();
+  if (staffId && creators.some((c) => c.includes(`(${staffId})`))) return true;
+  return false;
+}
+
 async function assertRecordAccess(user, record) {
   if (!record) return { ok: false, status: 404, message: "Not found" };
+
+  if (isReportingOfficerRole(user?.role)) {
+    if (!userOwnsRecord(user, record)) {
+      return { ok: false, status: 403, message: "Access denied — you can only open reports you created" };
+    }
+    return { ok: true };
+  }
+
   const result = await assertAreaAccess(user, record);
   if (result.ok || !isCoordinatorRole(user?.role)) return result;
   const names = await coordinatorTeamNames(user);
@@ -274,5 +323,6 @@ module.exports = {
   applyScopeToBody,
   withCoordinatorTeam,
   isCoordinatorRole,
+  isReportingOfficerRole,
   ROLE_SCOPE_FALLBACK,
 };

@@ -95,8 +95,9 @@ const patchReportStatus = async (req, report, { providerWorkflow = false } = {})
       err.status = 422;
       throw err;
     }
-    if (status !== "approved" && status !== "draft") {
-      const err = new Error("Coordinators may approve or return reports to draft");
+    // submitted = save review notes; draft = return for correction; approved = endorse
+    if (status !== "approved" && status !== "draft" && status !== "submitted") {
+      const err = new Error("Coordinators may save review, return for correction, or endorse");
       err.status = 422;
       throw err;
     }
@@ -105,6 +106,17 @@ const patchReportStatus = async (req, report, { providerWorkflow = false } = {})
       err.status = 422;
       throw err;
     }
+  } else if (isReportingOfficer) {
+    // Officers submit (or keep draft); they cannot approve or return others' work
+    if (status !== "draft" && status !== "submitted") {
+      const err = new Error("Reporting officers may only save drafts or submit reports");
+      err.status = 422;
+      throw err;
+    }
+  } else if (status === "approved" && role !== "admin") {
+    const err = new Error("Only coordinators may approve reports");
+    err.status = 403;
+    throw err;
   }
   await report.update({
     status,
@@ -184,7 +196,11 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
   const listReports = async (req, res, next) => {
     try {
       const where = {
-        ...(await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), ReportModel)),
+        ...(await withCoordinatorTeam(
+          req.user,
+          await buildStateOfficeListWhere(req.user, req.query, ReportModel),
+          ReportModel,
+        )),
         ...fixed,
       };
       if (req.query.activity_module) {
@@ -495,14 +511,31 @@ const stakeholder = makeReportController(
     follow_up_required: line.follow_up_required || null,
     follow_up_date: line.follow_up_date || null,
     follow_up_visits: optNum(line.follow_up_visits),
+    follow_up_details: line.follow_up_details && typeof line.follow_up_details === "object"
+      ? line.follow_up_details
+      : null,
+    location_specify: line.location_specify || null,
     supporting_evidence_types: strArray(line.supporting_evidence_types),
     supporting_documents: Array.isArray(line.supporting_documents)
       ? line.supporting_documents
           .filter((d) => d && typeof d === "object" && d.path)
           .map((d) => ({ name: d.name || "Document", path: d.path }))
       : [],
-    outcome_category: line.outcome_category || null,
-    specific_outcome: line.specific_outcome || line.key_outcomes || null,
+    outcome_category: line.outcome_category
+      || (Array.isArray(line.outcomes) && line.outcomes[0]?.outcome_category)
+      || null,
+    specific_outcome: line.specific_outcome
+      || line.key_outcomes
+      || (Array.isArray(line.outcomes) && line.outcomes[0]?.specific_outcome)
+      || null,
+    outcomes: Array.isArray(line.outcomes)
+      ? line.outcomes
+          .filter((o) => o && (o.outcome_category || o.specific_outcome))
+          .map((o) => ({
+            outcome_category: o.outcome_category || null,
+            specific_outcome: o.specific_outcome || null,
+          }))
+      : [],
     expected_output: line.expected_output || null,
     activity_status: line.activity_status || null,
     remarks: line.remarks || null,
@@ -758,7 +791,11 @@ const makeTextReportController = (ReportModel, refPrefix, textFields = []) => {
 
   const listReports = async (req, res, next) => {
     try {
-      const where = await withCoordinatorTeam(req.user, await buildStateOfficeListWhere(req.user, req.query), ReportModel);
+      const where = await withCoordinatorTeam(
+        req.user,
+        await buildStateOfficeListWhere(req.user, req.query, ReportModel),
+        ReportModel,
+      );
 
       const list = await ReportModel.findAll({
         where,
