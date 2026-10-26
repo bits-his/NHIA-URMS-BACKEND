@@ -5,8 +5,75 @@ const { ZonalOffice, StateOffice } = require("../models");
 const {
   buildStateOfficeListWhere, withCoordinatorTeam, assertRecordAccess, applyScopeToBody,
 } = require("../utils/stateOfficeScope");
+const { canReviewMonthlyReport } = require("../utils/monthlyReportScope");
 
 const quarterFromMonth = (month) => Math.ceil(Number(month) / 3);
+
+const BENEFICIARY_TABLES = new Set([
+  "extra_dependant_reports",
+  "hcp_change_reports",
+  "hmo_selection_reports",
+]);
+
+const tableNameOf = (modelOrInstance) => {
+  const model = modelOrInstance.tableName ? modelOrInstance : modelOrInstance.constructor;
+  const name = typeof model.getTableName === "function" ? model.getTableName() : model.tableName;
+  return typeof name === "string" ? name : name?.tableName;
+};
+
+const isBeneficiaryModel = (modelOrInstance) => BENEFICIARY_TABLES.has(tableNameOf(modelOrInstance));
+
+const isCoordinatorRole = (role) => /(^|-)(state|zonal)-coordinator$/.test(String(role || ""));
+
+const patchBeneficiaryStatus = async (req, report) => {
+  const { status, review_note: reviewNote, action } = req.body;
+  const role = String(req.user?.role || "");
+  const reviewer = role === "admin" || isCoordinatorRole(role) || await canReviewMonthlyReport(role);
+  const note = reviewNote && String(reviewNote).trim() ? String(reviewNote).trim() : "";
+  const reviewerName = req.user?.name || req.user?.staff_id || "Reviewer";
+
+  if (action === "endorse" || action === "return") {
+    if (!reviewer) {
+      const err = new Error("Only a state coordinator can endorse or return this report");
+      err.status = 403;
+      throw err;
+    }
+    if (report.status !== "submitted") {
+      const err = new Error("Only reports sent for review can be endorsed or returned");
+      err.status = 422;
+      throw err;
+    }
+    if (!note) {
+      const err = new Error(action === "endorse"
+        ? "A comment is required to endorse"
+        : "A comment is required when returning a report");
+      err.status = 422;
+      throw err;
+    }
+    await report.update({
+      status: "draft",
+      endorsed: action === "endorse",
+      coordinator_review_note: note,
+      coordinator_reviewed_by: reviewerName,
+      coordinator_reviewed_at: new Date(),
+    });
+    return;
+  }
+
+  if (action === "final_submit" || status === "approved") {
+    if (!report.endorsed) {
+      const err = new Error("The state coordinator must endorse this report before final submission");
+      err.status = 422;
+      throw err;
+    }
+    await report.update({ status: "approved" });
+    return;
+  }
+
+  const err = new Error("Send the report for review from the form");
+  err.status = 422;
+  throw err;
+};
 
 const STANDARD_STATUSES = ["draft", "submitted", "approved"];
 const PROVIDER_STATUSES = [
@@ -14,8 +81,10 @@ const PROVIDER_STATUSES = [
 ];
 
 const patchReportStatus = async (req, report, { providerWorkflow = false } = {}) => {
+  if (isBeneficiaryModel(report)) return patchBeneficiaryStatus(req, report);
   const { status, review_note: reviewNote } = req.body;
   const allowed = providerWorkflow ? PROVIDER_STATUSES : STANDARD_STATUSES;
+
   if (!allowed.includes(status)) {
     const err = new Error("Invalid status");
     err.status = 422;
@@ -23,6 +92,7 @@ const patchReportStatus = async (req, report, { providerWorkflow = false } = {})
   }
   const role = String(req.user?.role || "");
   const isCoordinator = /(^|-)(state|zonal)-coordinator$/.test(role);
+  const isReportingOfficer = role === "reporting-officer" || role.endsWith("-reporting-officer");
   const reviewerName = req.user?.name || req.user?.staff_id || "Reviewer";
   const note = reviewNote && String(reviewNote).trim() ? String(reviewNote).trim() : null;
 
@@ -168,6 +238,14 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
         submission_date, submitted_by, status = "draft", lines = [],
       } = scoped;
 
+      if (isBeneficiaryModel(ReportModel) && status === "approved") {
+        await t.rollback();
+        return res.status(422).json({
+          success: false,
+          message: "Send the report for review. Final approval follows the state coordinator's endorsement.",
+        });
+      }
+
       const reference_id = await generateRefId(t);
       const quarter = quarterFromMonth(reporting_month);
 
@@ -276,12 +354,25 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
       }
 
       const quarter = quarterFromMonth(reporting_month);
-      const nextStatus = status || report.status;
+      const beneficiary = isBeneficiaryModel(ReportModel);
+      if (beneficiary && status === "approved" && !report.endorsed) {
+        await t.rollback();
+        return res.status(422).json({
+          success: false,
+          message: "The state coordinator must endorse this report before final submission.",
+        });
+      }
 
       await report.update({
         zone_id, state_id, reporting_year, reporting_month,
         submission_date, submitted_by,
-        status: nextStatus,
+        ...(status && { status }),
+        ...(beneficiary && status === "submitted" ? {
+          endorsed: false,
+          coordinator_review_note: null,
+          coordinator_reviewed_by: null,
+          coordinator_reviewed_at: null,
+        } : {}),
         ...pickHeaderExtras(scoped),
       }, { transaction: t });
 
