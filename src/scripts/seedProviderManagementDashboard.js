@@ -1,10 +1,17 @@
 /**
- * Seed varied Provider Management (accreditation) activity lines so the
- * four dashboard levels have chartable data for the current year.
+ * Seed Provider Management (accreditation) activity data for dashboards.
+ *
+ * Default scope (production-friendly demo):
+ *   Zone  — North West
+ *   State — Kano
  *
  *   node src/scripts/seedProviderManagementDashboard.js
+ *
+ * Optional overrides:
+ *   PM_SEED_ZONE="North West" PM_SEED_STATE="Kano" node src/scripts/seedProviderManagementDashboard.js
  */
 require("dotenv").config();
+const { Op } = require("sequelize");
 const {
   AccreditationReport,
   AccreditationReportLine,
@@ -13,6 +20,9 @@ const {
 } = require("../models");
 
 const YEAR = new Date().getFullYear();
+const ZONE_NAME = process.env.PM_SEED_ZONE || "North West";
+const STATE_NAME = process.env.PM_SEED_STATE || "Kano";
+
 const ACTIVITIES = [
   { key: "accreditation", category: "Accreditation", code: "PM-0001" },
   { key: "reaccreditation", category: "Re-accreditation", code: "PM-0002" },
@@ -26,37 +36,63 @@ function pick(arr, i) {
   return arr[i % arr.length];
 }
 
-async function main() {
-  const states = await StateOffice.findAll({
-    include: [{ model: ZonalOffice, as: "zone", attributes: ["id", "description"] }],
-    order: [["id", "ASC"]],
-    limit: 12,
+async function resolveScope() {
+  // MySQL: case-insensitive match via LOWER + LIKE
+  const zone = await ZonalOffice.findOne({
+    where: {
+      [Op.or]: [
+        { description: { [Op.like]: `%${ZONE_NAME}%` } },
+        { zonal_code: "NW" },
+        { zonal_code: "nw" },
+      ],
+    },
   });
-  if (!states.length) throw new Error("No states found");
+  if (!zone) throw new Error(`Zone not found matching "${ZONE_NAME}"`);
+
+  const state = await StateOffice.findOne({
+    where: {
+      zonal_id: zone.id,
+      description: { [Op.like]: `%${STATE_NAME}%` },
+    },
+    include: [{ model: ZonalOffice, as: "zone", attributes: ["id", "description", "zonal_code"] }],
+  });
+  if (!state) {
+    throw new Error(`State not found matching "${STATE_NAME}" in zone "${zone.description}"`);
+  }
+
+  return { zone, state };
+}
+
+async function main() {
+  const { zone, state } = await resolveScope();
+  console.log(`📍  Scope: ${zone.description} (${zone.zonal_code}) → ${state.description}\n`);
 
   let reportN = 0;
   let lineN = 0;
+  let si = 0;
 
-  for (let si = 0; si < states.length; si++) {
-    const state = states[si];
-    for (let month = 1; month <= 6; month++) {
-      const activity = pick(ACTIVITIES, si + month);
-      const programme = pick(PROGRAMMES, si * 3 + month);
-      const status = pick(STATUSES, si + month);
-      const planned = 15 + ((si * 7 + month * 3) % 40);
+  // One report per month × activity so Level 1–4 charts are populated for this state
+  for (let month = 1; month <= 12; month++) {
+    for (let ai = 0; ai < ACTIVITIES.length; ai++) {
+      const activity = ACTIVITIES[ai];
+      const programme = pick(PROGRAMMES, month + ai);
+      const status = pick(STATUSES, month + ai);
+      const planned = 18 + ((month * 5 + ai * 7) % 35);
       const covered = status === "Completed"
-        ? Math.round(planned * (0.55 + ((si + month) % 5) * 0.08))
+        ? Math.round(planned * (0.6 + ((month + ai) % 4) * 0.08))
         : status === "In Progress"
-          ? Math.round(planned * 0.35)
-          : Math.round(planned * 0.1);
-      const totalState = 80 + (si % 6) * 25;
-      const ref = `ACC-PM-DASH-${YEAR}-${String(state.id).padStart(2, "0")}-M${String(month).padStart(2, "0")}`;
+          ? Math.round(planned * 0.4)
+          : Math.round(planned * 0.12);
+      const totalState = 120;
+      // Keep short — reference_id column is limited
+      const actCode = ["ACC", "REA", "QA", "MA"][ai];
+      const ref = `PM${YEAR}K${String(month).padStart(2, "0")}${actCode}`;
 
       let report = await AccreditationReport.findOne({ where: { reference_id: ref } });
       if (!report) {
         report = await AccreditationReport.create({
           reference_id: ref,
-          zone_id: state.zonal_id || state.zone?.id,
+          zone_id: zone.id,
           state_id: state.id,
           reporting_year: YEAR,
           reporting_month: month,
@@ -69,21 +105,25 @@ async function main() {
         reportN += 1;
       } else {
         await report.update({
+          zone_id: zone.id,
+          state_id: state.id,
           activity_module: activity.key,
           status: "submitted",
           planned_activities: 1,
+          reporting_year: YEAR,
+          reporting_month: month,
         });
       }
 
       await AccreditationReportLine.destroy({ where: { report_id: report.id } });
       const metrics = {};
       if (activity.key === "accreditation") {
-        metrics["Number of Facilities Awaiting Accreditation"] = 20 + (si % 8) * 5;
-        if (programme === "BHCPF") metrics["Number of PHCs Awaiting Accreditation"] = 12 + (si % 5) * 3;
+        metrics["Number of Facilities Awaiting Accreditation"] = 25 + (month % 8) * 6;
+        if (programme === "BHCPF") metrics["Number of PHCs Awaiting Accreditation"] = 14 + (month % 5) * 3;
       }
       if (activity.key === "reaccreditation") {
-        metrics["Number of Facilities Awaiting Re-accreditation"] = 10 + (si % 6) * 4;
-        if (programme === "BHCPF") metrics["Number of PHCs Awaiting Re-accreditation"] = 8 + (si % 4) * 2;
+        metrics["Number of Facilities Awaiting Re-accreditation"] = 12 + (month % 6) * 4;
+        if (programme === "BHCPF") metrics["Number of PHCs Awaiting Re-accreditation"] = 9 + (month % 4) * 2;
       }
 
       await AccreditationReportLine.create({
@@ -92,7 +132,7 @@ async function main() {
         primary_count: covered,
         secondary_count: planned,
         activity_template: {
-          provider_management_id: `PM-${YEAR}-${String(si * 10 + month).padStart(4, "0")}`,
+          provider_management_id: `PM-NW-KAN-${YEAR}-${String(month * 10 + ai).padStart(4, "0")}`,
           form_type: activity.key,
           engagement_code: activity.code,
           engagement_category: activity.category,
@@ -106,7 +146,7 @@ async function main() {
           facilities_covered: covered,
           funding_option: "Routine",
           activity_status: status,
-          remarks: "Dashboard seed",
+          remarks: `Dashboard seed · ${zone.description} · ${state.description}`,
           metrics,
           facilities_accredited: activity.key === "accreditation" ? covered : 0,
           facilities_reaccredited: activity.key === "reaccreditation" ? covered : 0,
@@ -116,14 +156,16 @@ async function main() {
         },
       });
       lineN += 1;
+      si += 1;
     }
   }
 
-  console.log(`Seeded/updated ${reportN} new reports, ${lineN} activity lines for ${YEAR}`);
+  console.log(`✅  Seeded/updated ${reportN} new reports, ${lineN} activity lines for ${YEAR}`);
+  console.log(`    Zone: ${zone.description} | State: ${state.description}`);
   process.exit(0);
 }
 
 main().catch((e) => {
-  console.error(e);
+  console.error("❌", e.message || e);
   process.exit(1);
 });
