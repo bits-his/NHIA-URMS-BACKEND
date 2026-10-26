@@ -378,12 +378,17 @@ function buildPayload(rows, level) {
     plan_achievement: pct(g.covered, g.planned),
   })).sort((a, b) => (b.plan_achievement ?? -1) - (a.plan_achievement ?? -1));
 
-  const byZone = groupSum(rows, (r) => r.zone, ["planned", "covered", "accredited", "reaccredited"]).map((g) => ({
+  const byZone = groupSum(rows, (r) => r.zone, [
+    "planned", "covered", "accredited", "reaccredited",
+    "awaiting_accreditation", "awaiting_reaccreditation",
+  ]).map((g) => ({
     name: g.label,
     planned: g.planned,
     covered: g.covered,
     accredited: g.accredited,
     reaccredited: g.reaccredited,
+    awaiting_accreditation: g.awaiting_accreditation,
+    awaiting_reaccreditation: g.awaiting_reaccreditation,
     plan_achievement: pct(g.covered, g.planned),
   })).sort((a, b) => (b.plan_achievement ?? -1) - (a.plan_achievement ?? -1));
 
