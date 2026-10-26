@@ -550,6 +550,8 @@ const stakeholder = makeReportController(
     planned_activities: optNum,
     activity_module: (v) => (v != null && String(v).trim() ? String(v).trim() : null),
   },
+  {},
+  { providerWorkflow: true },
 );
 
 const makeStakeholderLineUpload = async (req, res, next) => {
