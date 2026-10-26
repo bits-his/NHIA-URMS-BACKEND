@@ -135,17 +135,20 @@ function flattenActivities(reports, filters = {}) {
         ?? tpl.metrics?.["Number of PHCs Awaiting Re-accreditation"]
         ?? 0,
       );
-      const accredited = num(
-        tpl.facilities_accredited
-        ?? tpl.phcs_accredited
-        ?? (activity === "accreditation" ? covered : 0),
-      );
-      const reaccredited = num(
-        tpl.facilities_reaccredited
-        ?? tpl.phcs_reaccredited
-        ?? (activity === "reaccreditation" ? covered : 0),
-      );
+      // Do not treat "covered/visited" as accredited — keep pipelines separate (PPT rule).
+      const accredited = activity === "accreditation"
+        ? num(tpl.facilities_accredited ?? tpl.phcs_accredited)
+        : 0;
+      const reaccredited = activity === "reaccreditation"
+        ? num(tpl.facilities_reaccredited ?? tpl.phcs_reaccredited)
+        : 0;
       const isBhcpf = programme === "BHCPF";
+      const bhcpfAwaitAcc = isBhcpf
+        ? num(tpl.metrics?.["Number of PHCs Awaiting Accreditation"] ?? awaitingAcc)
+        : 0;
+      const bhcpfAwaitRe = isBhcpf
+        ? num(tpl.metrics?.["Number of PHCs Awaiting Re-accreditation"] ?? awaitingRe)
+        : 0;
 
       rows.push({
         report_id: report.id,
@@ -166,10 +169,12 @@ function flattenActivities(reports, filters = {}) {
         total_state: totalState,
         awaiting_accreditation: activity === "accreditation" ? awaitingAcc : 0,
         awaiting_reaccreditation: activity === "reaccreditation" ? awaitingRe : 0,
-        accredited: activity === "accreditation" ? (isBhcpf ? accredited || covered : accredited || covered) : 0,
-        reaccredited: activity === "reaccreditation" ? (isBhcpf ? reaccredited || covered : reaccredited || covered) : 0,
-        bhcpf_phcs_accredited: isBhcpf && activity === "accreditation" ? (accredited || covered) : 0,
-        bhcpf_phcs_reaccredited: isBhcpf && activity === "reaccreditation" ? (reaccredited || covered) : 0,
+        accredited,
+        reaccredited,
+        bhcpf_phcs_accredited: isBhcpf && activity === "accreditation" ? num(tpl.phcs_accredited ?? accredited) : 0,
+        bhcpf_phcs_reaccredited: isBhcpf && activity === "reaccreditation" ? num(tpl.phcs_reaccredited ?? reaccredited) : 0,
+        bhcpf_awaiting_accreditation: activity === "accreditation" ? bhcpfAwaitAcc : 0,
+        bhcpf_awaiting_reaccreditation: activity === "reaccreditation" ? bhcpfAwaitRe : 0,
         completed: COMPLETED_STATUSES.has(activityStatus),
       });
     }
@@ -179,6 +184,44 @@ function flattenActivities(reports, filters = {}) {
 
 function sumField(rows, field) {
   return rows.reduce((s, r) => s + num(r[field]), 0);
+}
+
+/** One facility-stock total per state (avoid double-counting across activity lines). */
+function uniqueStateFacilityStock(rows) {
+  const byState = new Map();
+  for (const r of rows) {
+    if (r.state_id == null) continue;
+    const cur = byState.get(r.state_id) || 0;
+    if (num(r.total_state) > cur) byState.set(r.state_id, num(r.total_state));
+  }
+  return [...byState.values()].reduce((a, b) => a + b, 0);
+}
+
+function previousPeriodQuery(query) {
+  const year = query.year ? Number(query.year) : new Date().getFullYear();
+  const month = query.month && query.month !== "all" ? Number(query.month) : null;
+  const quarter = query.quarter && query.quarter !== "all" ? Number(query.quarter) : null;
+  const next = { ...query };
+  if (month) {
+    if (month === 1) {
+      next.year = String(year - 1);
+      next.month = "12";
+    } else {
+      next.month = String(month - 1);
+    }
+    next.quarter = "all";
+  } else if (quarter) {
+    if (quarter === 1) {
+      next.year = String(year - 1);
+      next.quarter = "4";
+    } else {
+      next.quarter = String(quarter - 1);
+    }
+    next.month = "all";
+  } else {
+    next.year = String(year - 1);
+  }
+  return next;
 }
 
 function groupSum(rows, keyFn, fields) {
@@ -265,7 +308,7 @@ function buildActivityAnalysis(rows) {
       bullets: (g) => [
         `Planned audit activities: ${g.count}`,
         `Facilities covered: ${g.covered}`,
-        `Status and trend by state / period`,
+        `Completed records: ${g.completed_count}`,
       ],
       rate: (g) => pct(g.covered, g.planned),
     },
@@ -282,58 +325,88 @@ function buildActivityAnalysis(rows) {
       reaccredited: sumField(subset, "reaccredited"),
       bhcpf_phcs_accredited: sumField(subset, "bhcpf_phcs_accredited"),
       bhcpf_phcs_reaccredited: sumField(subset, "bhcpf_phcs_reaccredited"),
-      bhcpf_awaiting: sumField(subset.filter((r) => r.programme === "BHCPF"), "awaiting_accreditation"),
-      bhcpf_awaiting_re: sumField(subset.filter((r) => r.programme === "BHCPF"), "awaiting_reaccreditation"),
+      bhcpf_awaiting: sumField(subset, "bhcpf_awaiting_accreditation"),
+      bhcpf_awaiting_re: sumField(subset, "bhcpf_awaiting_reaccreditation"),
       count: subset.length,
+      completed_count: subset.filter((r) => r.completed).length,
     };
+    const byState = groupSum(subset, (r) => r.state, ["planned", "covered", "accredited", "reaccredited"]).map((s) => ({
+      name: s.label,
+      planned: s.planned,
+      covered: s.covered,
+      plan_achievement: pct(s.covered, s.planned),
+    }));
+    const byMonth = groupSum(subset, (r) => `${r.year}-${String(r.month).padStart(2, "0")}`, ["planned", "covered"]).map((m) => ({
+      period: m.label,
+      planned: m.planned,
+      covered: m.covered,
+    })).sort((a, b) => a.period.localeCompare(b.period));
+    const statusCounts = {};
+    for (const r of subset) statusCounts[r.activity_status] = (statusCounts[r.activity_status] || 0) + 1;
+    const byStatus = Object.entries(statusCounts).map(([name, count]) => ({ name, count }));
     return {
       key: d.key,
       title: d.title,
       bullets: d.bullets(g),
       plan_achievement: d.rate(g),
+      by_state: byState.slice(0, 8),
+      by_month: byMonth,
+      by_status: byStatus,
       ...g,
     };
   });
 }
 
+function signalFor(awaiting, output, rate) {
+  if (awaiting > output * 1.2) return { signal: "Pending high", focus: "Review pipeline by zone" };
+  if (rate != null && rate < 60) return { signal: "Output below plan", focus: "Check visit plans" };
+  if (rate != null && rate < 75) return { signal: "Uneven output", focus: "Target low-output zones" };
+  return { signal: "On track", focus: "Maintain monitoring cadence" };
+}
+
 function buildPriorityAreas(rows) {
-  const byProgAct = groupSum(
-    rows,
-    (r) => `${r.programme} · ${r.activity_label}`,
-    ["planned", "covered", "awaiting_accreditation", "awaiting_reaccreditation", "accredited", "reaccredited"],
-  );
-  return byProgAct
-    .map((g) => {
-      const rate = pct(g.covered, g.planned);
-      let signal = "On track";
-      let focus = "Maintain monitoring cadence";
-      if ((g.awaiting_accreditation + g.awaiting_reaccreditation) > (g.accredited + g.reaccredited) * 1.2) {
-        signal = "Pending high";
-        focus = "Review pipeline by zone / state";
-      } else if (rate != null && rate < 60) {
-        signal = "Output below plan";
-        focus = "Check visit plans and barriers";
-      } else if (rate != null && rate < 75) {
-        signal = "Uneven output";
-        focus = "Target low-output areas";
-      }
-      return {
-        area: g.label,
-        signal,
-        focus,
-        plan_achievement: rate,
-        awaiting: g.awaiting_accreditation + g.awaiting_reaccreditation,
-        output: g.accredited + g.reaccredited,
-      };
-    })
-    .sort((a, b) => (a.plan_achievement ?? 999) - (b.plan_achievement ?? 999))
-    .slice(0, 8);
+  const fsshipAcc = rows.filter((r) => r.programme === "FSSHIP" && r.activity === "accreditation");
+  const reacc = rows.filter((r) => r.activity === "reaccreditation");
+  const bhcpf = rows.filter((r) => r.programme === "BHCPF");
+
+  const blocks = [
+    {
+      area: "FSSHIP accreditation",
+      awaiting: sumField(fsshipAcc, "awaiting_accreditation"),
+      output: sumField(fsshipAcc, "accredited"),
+      rate: pct(sumField(fsshipAcc, "covered"), sumField(fsshipAcc, "planned")),
+    },
+    {
+      area: "Reaccreditation",
+      awaiting: sumField(reacc, "awaiting_reaccreditation"),
+      output: sumField(reacc, "reaccredited"),
+      rate: pct(sumField(reacc, "covered"), sumField(reacc, "planned")),
+    },
+    {
+      area: "BHCPF PHCs",
+      awaiting: sumField(bhcpf, "bhcpf_awaiting_accreditation") + sumField(bhcpf, "bhcpf_awaiting_reaccreditation"),
+      output: sumField(bhcpf, "bhcpf_phcs_accredited") + sumField(bhcpf, "bhcpf_phcs_reaccredited"),
+      rate: pct(sumField(bhcpf, "covered"), sumField(bhcpf, "planned")),
+    },
+  ];
+
+  return blocks.map((b) => {
+    const { signal, focus } = signalFor(b.awaiting, b.output, b.rate);
+    return {
+      area: b.area,
+      signal,
+      focus,
+      plan_achievement: b.rate,
+      awaiting: b.awaiting,
+      output: b.output,
+    };
+  });
 }
 
 function buildPayload(rows, level) {
   const plannedFacilities = sumField(rows, "planned");
   const coveredFacilities = sumField(rows, "covered");
-  const totalStateFacilities = sumField(rows, "total_state");
+  const totalStateFacilities = uniqueStateFacilityStock(rows);
   const activityRecords = rows.length;
   const completedRecords = rows.filter((r) => r.completed).length;
 
@@ -351,6 +424,8 @@ function buildPayload(rows, level) {
     reaccredited: sumField(rows, "reaccredited"),
     bhcpf_phcs_accredited: sumField(rows, "bhcpf_phcs_accredited"),
     bhcpf_phcs_reaccredited: sumField(rows, "bhcpf_phcs_reaccredited"),
+    bhcpf_awaiting_accreditation: sumField(rows, "bhcpf_awaiting_accreditation"),
+    bhcpf_awaiting_reaccreditation: sumField(rows, "bhcpf_awaiting_reaccreditation"),
   };
 
   const activityCounts = {};
@@ -485,8 +560,8 @@ function buildPayload(rows, level) {
   const programmeKpis = {
     fsship_accredited: sumField(fsship, "accredited"),
     fsship_reaccredited: sumField(fsship, "reaccredited"),
-    bhcpf_phcs_accredited: sumField(bhcpf, "bhcpf_phcs_accredited") || sumField(bhcpf.filter((r) => r.activity === "accreditation"), "covered"),
-    bhcpf_phcs_reaccredited: sumField(bhcpf, "bhcpf_phcs_reaccredited") || sumField(bhcpf.filter((r) => r.activity === "reaccreditation"), "covered"),
+    bhcpf_phcs_accredited: sumField(bhcpf, "bhcpf_phcs_accredited"),
+    bhcpf_phcs_reaccredited: sumField(bhcpf, "bhcpf_phcs_reaccredited"),
   };
 
   const pipelineBars = [
@@ -497,22 +572,23 @@ function buildPayload(rows, level) {
   ];
 
   const programmeActivityOutputs = [
-    { name: "FSSHIP Acc", value: sumField(fsship.filter((r) => r.activity === "accreditation"), "accredited") || sumField(fsship.filter((r) => r.activity === "accreditation"), "covered") },
-    { name: "FSSHIP Re-acc", value: sumField(fsship.filter((r) => r.activity === "reaccreditation"), "reaccredited") || sumField(fsship.filter((r) => r.activity === "reaccreditation"), "covered") },
+    { name: "FSSHIP Acc", value: sumField(fsship.filter((r) => r.activity === "accreditation"), "accredited") },
+    { name: "FSSHIP Re-acc", value: sumField(fsship.filter((r) => r.activity === "reaccreditation"), "reaccredited") },
     { name: "BHCPF Acc", value: programmeKpis.bhcpf_phcs_accredited },
     { name: "BHCPF Re-acc", value: programmeKpis.bhcpf_phcs_reaccredited },
   ];
 
-  const execTrend = byMonth.map((m) => ({
-    label: m.label,
-    period: m.period,
-    fsship_accreditation: rows.filter((r) => r.programme === "FSSHIP" && r.activity === "accreditation" && `${r.year}-${String(r.month).padStart(2, "0")}` === m.period)
-      .reduce((s, r) => s + (r.accredited || r.covered), 0),
-    fsship_reaccreditation: rows.filter((r) => r.programme === "FSSHIP" && r.activity === "reaccreditation" && `${r.year}-${String(r.month).padStart(2, "0")}` === m.period)
-      .reduce((s, r) => s + (r.reaccredited || r.covered), 0),
-    bhcpf_accreditation: rows.filter((r) => r.programme === "BHCPF" && r.activity === "accreditation" && `${r.year}-${String(r.month).padStart(2, "0")}` === m.period)
-      .reduce((s, r) => s + (r.bhcpf_phcs_accredited || r.covered), 0),
-  }));
+  const execTrend = byMonth.map((m) => {
+    const inMonth = (r) => `${r.year}-${String(r.month).padStart(2, "0")}` === m.period;
+    return {
+      label: m.label,
+      period: m.period,
+      fsship_accreditation: sumField(rows.filter((r) => r.programme === "FSSHIP" && r.activity === "accreditation" && inMonth(r)), "accredited"),
+      fsship_reaccreditation: sumField(rows.filter((r) => r.programme === "FSSHIP" && r.activity === "reaccreditation" && inMonth(r)), "reaccredited"),
+      bhcpf_accreditation: sumField(rows.filter((r) => r.programme === "BHCPF" && r.activity === "accreditation" && inMonth(r)), "bhcpf_phcs_accredited"),
+      bhcpf_reaccreditation: sumField(rows.filter((r) => r.programme === "BHCPF" && r.activity === "reaccreditation" && inMonth(r)), "bhcpf_phcs_reaccredited"),
+    };
+  });
 
   return {
     level,
@@ -552,14 +628,37 @@ function levelFromRole(role) {
 
 const dashboard = async (req, res, next) => {
   try {
-    const reports = await loadScopedReports(req.user, req.query);
-    const rows = flattenActivities(reports, {
+    const filters = {
       programme: req.query.programme,
       activity: req.query.activity,
       activity_status: req.query.activity_status,
-    });
+    };
+    const reports = await loadScopedReports(req.user, req.query);
+    const rows = flattenActivities(reports, filters);
     const level = req.query.level ? Number(req.query.level) : levelFromRole(req.user?.role);
     const payload = buildPayload(rows, level);
+
+    if (String(req.query.compare_with || "") === "previous") {
+      const prevQuery = previousPeriodQuery(req.query);
+      const prevReports = await loadScopedReports(req.user, prevQuery);
+      const prevRows = flattenActivities(prevReports, filters);
+      const prev = buildPayload(prevRows, level);
+      const delta = (cur, old) => (cur == null || old == null ? null : Number(cur) - Number(old));
+      payload.previous = {
+        kpis: prev.kpis,
+        year: prevQuery.year,
+        month: prevQuery.month,
+        quarter: prevQuery.quarter,
+      };
+      payload.kpis = {
+        ...payload.kpis,
+        fsship_accredited_delta: delta(payload.kpis.fsship_accredited, prev.kpis.fsship_accredited),
+        fsship_reaccredited_delta: delta(payload.kpis.fsship_reaccredited, prev.kpis.fsship_reaccredited),
+        bhcpf_phcs_accredited_delta: delta(payload.kpis.bhcpf_phcs_accredited, prev.kpis.bhcpf_phcs_accredited),
+        bhcpf_phcs_reaccredited_delta: delta(payload.kpis.bhcpf_phcs_reaccredited, prev.kpis.bhcpf_phcs_reaccredited),
+      };
+    }
+
     res.json({ success: true, data: payload });
   } catch (err) {
     next(err);
