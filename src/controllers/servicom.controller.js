@@ -30,6 +30,7 @@ const {
   listComplaintSlaRulesFormatted,
 } = require("../utils/complaintSla");
 const { canSubmitForms } = require("../utils/monthlyReportScope");
+const { matchesPeriod, buildServicomQuality, buildComplaintRegister } = require("../utils/unitDashboards");
 
 const VISIT_INCLUDES = [
   { model: ZonalOffice, as: "zone", attributes: ["id", "description", "zonal_code"] },
@@ -1293,6 +1294,20 @@ module.exports = {
       );
       const { top_states, low_states } = splitTopLowPerformingStates(state_satisfaction_rankings);
 
+      const period = {
+        year: req.query.year,
+        quarter: req.query.quarter,
+        month: req.query.month,
+      };
+      const provider = String(req.query.provider || "").trim().toLowerCase();
+      const cardsForQuality = commentCards.filter((card) => matchesPeriod(card.card_date, period));
+      const surveysForQuality = satisfactionSurveys.filter((survey) => {
+        if (!matchesPeriod(survey.survey_date, { ...period, date: req.query.survey_date })) return false;
+        if (provider && !String(survey.provider_name || "").toLowerCase().includes(provider)) return false;
+        return true;
+      });
+      const quality = buildServicomQuality(cardsForQuality, surveysForQuality);
+
       res.json({
         success: true,
         data: {
@@ -1311,8 +1326,46 @@ module.exports = {
           state_satisfaction_rankings,
           top_states,
           low_states,
+          quality,
         },
       });
+    } catch (err) { next(err); }
+  },
+
+  complaintsDashboard: async (req, res, next) => {
+    try {
+      const geoWhere = await buildServicomListWhere(req.user, {
+        state_id: req.query.state_id,
+        zone_id: req.query.zone_id,
+      });
+      const where = { ...geoWhere };
+      const setIf = (field, value) => {
+        if (value && value !== "all") where[field] = value;
+      };
+      setIf("priority_rating", req.query.priority);
+      setIf("complaint_category", req.query.category);
+      setIf("complaint_type", req.query.type);
+      setIf("transmission_route", req.query.route);
+      setIf("status", req.query.status);
+      setIf("complaint_domain", req.query.domain);
+
+      const rows = await ServicomComplaint.findAll({
+        where,
+        include: [
+          { model: StateOffice, as: "state", attributes: ["id", "description"] },
+          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
+        ],
+      });
+      const filtered = rows.filter((row) => matchesPeriod(row.date_received || row.complaint_date, {
+        year: req.query.year,
+        quarter: req.query.quarter,
+        month: req.query.month,
+        from: req.query.from,
+        to: req.query.to,
+        date: req.query.date,
+      }));
+      const rules = await loadComplaintSlaRules();
+      res.json({ success: true, data: buildComplaintRegister(filtered, rules) });
     } catch (err) { next(err); }
   },
 

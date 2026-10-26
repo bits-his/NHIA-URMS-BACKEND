@@ -36,6 +36,18 @@ const PrepaymentAnalysis = sequelize.define("PrepaymentAnalysis", {
     type: DataTypes.TEXT,
     allowNull: false,
   },
+  category: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  unitOfMeasure: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  storeLocation: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   quantityOrdered: {
     type: DataTypes.INTEGER,
     defaultValue: 0,
@@ -71,5 +83,34 @@ const PrepaymentAnalysis = sequelize.define("PrepaymentAnalysis", {
   createdAt: "created_at",
   updatedAt: "updated_at",
 });
+
+let columnsReady = false;
+async function ensurePrepaymentColumns() {
+  if (columnsReady) return;
+  const qi = sequelize.getQueryInterface();
+  let table;
+  try {
+    table = await qi.describeTable("prepayment_analyses");
+  } catch {
+    return;
+  }
+  const spec = { type: DataTypes.STRING, allowNull: true };
+  const align = async (camel, snake) => {
+    if (table[snake]) return;
+    if (table[camel]) {
+      await sequelize.query(
+        `ALTER TABLE prepayment_analyses CHANGE \`${camel}\` \`${snake}\` VARCHAR(255) NULL`,
+      );
+      return;
+    }
+    await qi.addColumn("prepayment_analyses", snake, spec);
+  };
+  if (!table.category) await qi.addColumn("prepayment_analyses", "category", spec);
+  await align("unitOfMeasure", "unit_of_measure");
+  await align("storeLocation", "store_location");
+  columnsReady = true;
+}
+
+PrepaymentAnalysis.ensurePrepaymentColumns = ensurePrepaymentColumns;
 
 module.exports = PrepaymentAnalysis;

@@ -962,6 +962,7 @@ exports.getPrepaymentAnalysisById = async (req, res) => {
 };
 
 exports.createPrepaymentAnalysis = async (req, res) => {
+  await PrepaymentAnalysis.ensurePrepaymentColumns().catch(() => {});
   const t = await sequelize.transaction();
   try {
     const body = { ...req.body };
@@ -986,6 +987,9 @@ exports.createPrepaymentAnalysis = async (req, res) => {
       contractorAddress: body.contractorAddress || null,
       refInvoiceDeliveryNote: body.refInvoiceDeliveryNote || null,
       itemDescription: body.itemDescription,
+      category: body.category || null,
+      unitOfMeasure: body.unitOfMeasure || null,
+      storeLocation: storeLocation || null,
       quantityOrdered: Number(body.quantityOrdered) || 0,
       quantitySupplied,
       rate,
