@@ -88,12 +88,9 @@ const FUNCTIONALITY_ALIASES = {
     "Accreditation",
     "Reaccreditation",
     "Provider Management",
-    "Provider Management Dashboard",
   ],
   "Provider Management Dashboard": [
-    "Provider Management",
     "Provider Management Dashboard",
-    "Accreditation / Reaccreditation",
   ],
   "Accreditation / Reaccreditation": [
     "Accreditation",
@@ -212,7 +209,13 @@ function grantForFunctionality(access, requiredFunctionality) {
     // Legacy: previously under SOC/Zones
     const socEntry = findSocZonesEntry(access);
     if (socEntry && hasFunctionality(socEntry, requiredFunctionality)) return true;
-    return false;
+    // Provider Management Dashboard is also granted under Zonal for coordinators
+    if (requiredFunctionality === "Provider Management Dashboard") {
+      const zonalEntry = findZonalEntry(access);
+      if (zonalEntry && hasFunctionality(zonalEntry, requiredFunctionality)) return true;
+    } else {
+      return false;
+    }
   }
 
   // Prefer Zonal / SOC entries, then any state-office-related module row
@@ -248,11 +251,17 @@ function requireStateOfficeSection(requiredFunctionality) {
 
 /** Derive required section from the first path segment (e.g. /enrolment/reports → Enrolment) */
 function requireStateOfficeRoute(req, res, next) {
-  const segment = req.path.split("/").filter(Boolean)[0];
+  const parts = req.path.split("/").filter(Boolean);
+  const segment = parts[0];
 
   // Executive / national home dashboards call /dashboard(+ /drill)
   if (segment === "dashboard" && NATIONAL_DASHBOARD_ROLES.has(req.user?.role)) {
     return next();
+  }
+
+  // Provider Management Dashboard is a separate privilege from the activity register
+  if (segment === "accreditation" && parts[1] === "dashboard") {
+    return requireStateOfficeSection("Provider Management Dashboard")(req, res, next);
   }
 
   if (segment === "accredited-providers" && req.method === "GET") {
