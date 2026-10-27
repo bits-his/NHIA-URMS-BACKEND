@@ -1,26 +1,28 @@
 const sequelize = require("../config/database");
-const { ZonalOffice, StateOffice } = require("../models");
-const ComplaintsComplianceReport = require("../models/ComplaintsComplianceReport");
+const {
+  ZonalOffice, StateOffice, ComplaintsComplianceReport, ComplaintsComplianceLine,
+} = require("../models");
 const {
   buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
 } = require("../utils/stateOfficeScope");
-const {
-  ComplaintSummaryLine, ComplaintStatusLine, ComplianceVisitLine, ReconciliationLine,
-} = require("../models/ComplaintsComplianceLines");
 
-const quarterFromMonth = (month) => Math.ceil(Number(month) / 3);
-
-const complaintsIncludes = [
+const geoInclude = [
   { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
   { model: StateOffice, as: "state", attributes: ["id", "description"] },
-  { model: ComplaintSummaryLine, as: "summary_lines" },
-  { model: ComplaintStatusLine, as: "status_lines" },
-  { model: ComplianceVisitLine, as: "visit_lines" },
-  { model: ReconciliationLine, as: "reconciliation_lines" },
 ];
 
-const findComplaintsReport = (id) =>
-  ComplaintsComplianceReport.findByPk(id, { include: complaintsIncludes });
+function groupComplaintLines(report) {
+  if (!report) return report;
+  const lines = report.lines || [];
+  report.summary_lines = lines.filter((line) => line.line_kind === "summary");
+  report.status_lines = lines.filter((line) => line.line_kind === "status");
+  report.visit_lines = lines.filter((line) => line.line_kind === "visit");
+  report.reconciliation_lines = lines.filter((line) => line.line_kind === "reconciliation");
+  return report;
+}
+
+const findComplaintsReport = async (id) =>
+  groupComplaintLines(await ComplaintsComplianceReport.findByPk(id, { include: geoInclude }));
 
 const generateRefId = async (t) => {
   const year = new Date().getFullYear();
@@ -34,56 +36,43 @@ const saveComplaintsChildren = async (reportId, body, t) => {
     visit_lines = [], reconciliation_lines = [],
   } = body;
 
-  await ComplaintSummaryLine.destroy({ where: { report_id: reportId }, transaction: t });
-  await ComplaintStatusLine.destroy({ where: { report_id: reportId }, transaction: t });
-  await ComplianceVisitLine.destroy({ where: { report_id: reportId }, transaction: t });
-  await ReconciliationLine.destroy({ where: { report_id: reportId }, transaction: t });
+  await ComplaintsComplianceLine.destroy({ where: { report_id: reportId }, transaction: t });
 
-  if (summary_lines.length) {
-    await ComplaintSummaryLine.bulkCreate(
-      summary_lines.map((l) => ({
-        report_id: reportId,
-        category: l.category,
-        complaint_count: Number(l.complaint_count) || 0,
-      })),
-      { transaction: t }
-    );
-  }
-  if (status_lines.length) {
-    await ComplaintStatusLine.bulkCreate(
-      status_lines.map((l) => ({
-        report_id: reportId,
-        status: l.status,
-        status_count: Number(l.status_count) || 0,
-      })),
-      { transaction: t }
-    );
-  }
-  if (visit_lines.length) {
-    await ComplianceVisitLine.bulkCreate(
-      visit_lines.map((l) => ({
-        report_id: reportId,
-        facility_visited: l.facility_visited,
-        visit_date: l.visit_date || null,
-        purpose: l.purpose || null,
-        outcome: l.outcome || null,
-      })),
-      { transaction: t }
-    );
-  }
-  if (reconciliation_lines.length) {
-    await ReconciliationLine.bulkCreate(
-      reconciliation_lines.map((l) => ({
-        report_id: reportId,
-        hmo: l.hmo,
-        facility: l.facility,
-        amount_owed: Number(l.amount_owed) || 0,
-        recon_status: l.recon_status || null,
-        comment: l.comment || null,
-      })),
-      { transaction: t }
-    );
-  }
+  const rows = [
+    ...summary_lines.map((l) => ({
+      report_id: reportId,
+      line_kind: "summary",
+      category: l.category,
+      complaint_count: Number(l.complaint_count) || 0,
+    })),
+    ...status_lines.map((l) => ({
+      report_id: reportId,
+      line_kind: "status",
+      status: l.status,
+      status_count: Number(l.status_count) || 0,
+    })),
+    ...visit_lines.map((l) => ({
+      report_id: reportId,
+      line_kind: "visit",
+      facility_visited: l.facility_visited,
+      facility_name: l.facility_visited,
+      visit_date: l.visit_date || null,
+      purpose: l.purpose || null,
+      outcome: l.outcome || null,
+    })),
+    ...reconciliation_lines.map((l) => ({
+      report_id: reportId,
+      line_kind: "reconciliation",
+      hmo: l.hmo,
+      facility: l.facility,
+      facility_name: l.facility,
+      amount_owed: Number(l.amount_owed) || 0,
+      amount: Number(l.amount_owed) || 0,
+      recon_status: l.recon_status || null,
+      comment: l.comment || null,
+    })),
+  ];
+  if (rows.length) await ComplaintsComplianceLine.bulkCreate(rows, { transaction: t });
 };
 
 const createReport = async (req, res, next) => {
@@ -117,10 +106,10 @@ const listReports = async (req, res, next) => {
 
     const list = await ComplaintsComplianceReport.findAll({
       where,
-      include: complaintsIncludes,
+      include: geoInclude,
       order: [["created_at", "DESC"]],
     });
-    res.json({ success: true, data: list });
+    res.json({ success: true, data: list.map(groupComplaintLines) });
   } catch (err) { next(err); }
 };
 

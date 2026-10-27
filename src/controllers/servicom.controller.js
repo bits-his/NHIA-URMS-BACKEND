@@ -3,7 +3,7 @@ const fs = require("fs");
 const { Op } = require("sequelize");
 const sequelize = require("../config/database");
 const {
-  MonitoringVisit, ServicomAssessmentIndicator, ServicomAssessmentScore,
+  MonitoringVisit, MonitoringVisitLine, ServicomAssessmentIndicator, ServicomAssessmentScore,
   ServicomKpiRecord, ServicomComplaint, ServicomComplaintComment, ServicomSatisfactionSurvey, ServicomCommentCard,
   ServicomFinding, ServicomRecommendation,
   ServicomEvidence, ServicomAuditLog, ServicomFacility,
@@ -62,7 +62,8 @@ async function genRefId(Model, prefix, t, field) {
   let maxSeq = 0;
   const re = new RegExp(`^${prefix}-${year}-(\\d+)$`);
   for (const row of rows) {
-    const match = String(row.get(idField) || "").match(re);
+    const value = typeof row.get === "function" ? row.get(idField) : row[idField];
+    const match = String(value || "").match(re);
     if (match) maxSeq = Math.max(maxSeq, parseInt(match[1], 10));
   }
   return `${prefix}-${year}-${String(maxSeq + 1).padStart(5, "0")}`;
@@ -98,52 +99,75 @@ async function logAudit(entity_type, entity_id, action, actor, details, t) {
 }
 
 async function replaceNested(visitId, body, t) {
-  const scores = body.scores || [];
-  const scoreValues = [];
-  await ServicomAssessmentScore.destroy({ where: { visit_id: visitId }, transaction: t });
-  for (const s of scores) {
-    if (!s.indicator_id || !s.score) continue;
-    await ServicomAssessmentScore.create(
-      { visit_id: visitId, indicator_id: s.indicator_id, score: s.score },
-      { transaction: t },
-    );
-    scoreValues.push(Number(s.score));
-  }
+  const scores = (body.scores || []).filter((s) => s.indicator_id && s.score);
+  const scoreValues = scores.map((s) => Number(s.score));
   const assessment = computeAssessmentScores(scoreValues);
   await MonitoringVisit.update(assessment, { where: { id: visitId }, transaction: t });
 
+  const rows = [
+    ...scores.map((s) => ({
+      report_id: visitId,
+      line_kind: "score",
+      indicator_id: s.indicator_id,
+      score: s.score,
+    })),
+  ];
   if (body.kpi) {
     const metrics = computeKpiMetrics(body.kpi);
-    const kpiPayload = { visit_id: visitId, ...body.kpi, ...metrics };
-    const existing = await ServicomKpiRecord.findOne({ where: { visit_id: visitId }, transaction: t });
-    if (existing) await existing.update(kpiPayload, { transaction: t });
-    else await ServicomKpiRecord.create(kpiPayload, { transaction: t });
+    rows.push({ report_id: visitId, line_kind: "kpi", ...body.kpi, ...metrics });
   }
+  for (const finding of body.findings || []) {
+    if (!finding.description) continue;
+    rows.push({
+      report_id: visitId,
+      line_kind: "finding",
+      finding_type: finding.finding_type,
+      description: finding.description,
+    });
+  }
+  for (const recommendation of body.recommendations || []) {
+    if (!recommendation.description) continue;
+    rows.push({
+      report_id: visitId,
+      line_kind: "recommendation",
+      description: recommendation.description,
+      priority: recommendation.priority || "medium",
+      responsible_officer: recommendation.responsible_officer || null,
+      timeline: recommendation.timeline || null,
+      status: recommendation.status || "open",
+    });
+  }
+  const kept = await MonitoringVisitLine.findAll({
+    include: [{ as: "report", where: { id: visitId } }],
+    transaction: t,
+  });
+  const evidence = kept
+    .filter((line) => line.line_kind === "evidence")
+    .map((line) => ({
+      report_id: visitId,
+      line_kind: "evidence",
+      file_name: line.file_name,
+      file_path: line.file_path,
+      file_type: line.file_type,
+      mime_type: line.mime_type,
+      file_size: line.file_size,
+      description: line.description,
+      uploaded_by: line.uploaded_by,
+    }));
+  await MonitoringVisitLine.destroy({ where: { visit_id: visitId }, transaction: t });
+  const allRows = [...rows, ...evidence];
+  if (allRows.length) await MonitoringVisitLine.bulkCreate(allRows, { transaction: t });
+}
 
-  await ServicomFinding.destroy({ where: { visit_id: visitId }, transaction: t });
-  for (const f of body.findings || []) {
-    if (!f.description) continue;
-    await ServicomFinding.create(
-      { visit_id: visitId, finding_type: f.finding_type, description: f.description },
-      { transaction: t },
-    );
-  }
-
-  await ServicomRecommendation.destroy({ where: { visit_id: visitId }, transaction: t });
-  for (const r of body.recommendations || []) {
-    if (!r.description) continue;
-    await ServicomRecommendation.create(
-      {
-        visit_id: visitId,
-        description: r.description,
-        priority: r.priority || "medium",
-        responsible_officer: r.responsible_officer || null,
-        timeline: r.timeline || null,
-        status: r.status || "open",
-      },
-      { transaction: t },
-    );
-  }
+function shapeVisit(row) {
+  if (!row) return row;
+  const lines = row.lines || [];
+  row.scores = lines.filter((line) => line.line_kind === "score");
+  row.findings = lines.filter((line) => line.line_kind === "finding");
+  row.recommendations = lines.filter((line) => line.line_kind === "recommendation");
+  row.evidence = lines.filter((line) => line.line_kind === "evidence");
+  row.kpi = lines.find((line) => line.line_kind === "kpi") || null;
+  return row;
 }
 
 function pickVisitFields(body) {
@@ -401,21 +425,21 @@ module.exports = {
   listVisits: async (req, res, next) => {
     try {
       const where = await buildServicomListWhere(req.user, req.query);
-      const rows = await MonitoringVisit.findAll({
+      const rows = (await MonitoringVisit.findAll({
         where,
         include: [
           { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
           { model: StateOffice, as: "state", attributes: ["id", "description"] },
         ],
         order: [["visit_date", "DESC"], ["created_at", "DESC"]],
-      });
+      })).map(shapeVisit);
       res.json({ success: true, data: rows });
     } catch (err) { next(err); }
   },
 
   getVisit: async (req, res, next) => {
     try {
-      const row = await MonitoringVisit.findByPk(req.params.id, { include: VISIT_INCLUDES });
+      const row = shapeVisit(await MonitoringVisit.findByPk(req.params.id, { include: VISIT_INCLUDES }));
       if (!row) return res.status(404).json({ success: false, message: "Visit not found" });
       res.json({ success: true, data: row });
     } catch (err) { next(err); }
@@ -434,7 +458,7 @@ module.exports = {
       await replaceNested(visit.id, req.body, t);
       await logAudit("monitoring_visit", visit.id, "created", req.user?.name, null, t);
       await t.commit();
-      const full = await MonitoringVisit.findByPk(visit.id, { include: VISIT_INCLUDES });
+      const full = shapeVisit(await MonitoringVisit.findByPk(visit.id, { include: VISIT_INCLUDES }));
       res.status(201).json({ success: true, data: full });
     } catch (err) { await t.rollback(); next(err); }
   },
@@ -452,7 +476,7 @@ module.exports = {
       await replaceNested(visit.id, req.body, t);
       await logAudit("monitoring_visit", visit.id, "updated", req.user?.name, null, t);
       await t.commit();
-      const full = await MonitoringVisit.findByPk(visit.id, { include: VISIT_INCLUDES });
+      const full = shapeVisit(await MonitoringVisit.findByPk(visit.id, { include: VISIT_INCLUDES }));
       res.json({ success: true, data: full });
     } catch (err) { await t.rollback(); next(err); }
   },
@@ -528,8 +552,9 @@ module.exports = {
       const visit = await MonitoringVisit.findByPk(req.params.id);
       if (!visit) return res.status(404).json({ success: false, message: "Visit not found" });
       if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
-      const row = await ServicomEvidence.create({
-        visit_id: visit.id,
+      const [row] = await MonitoringVisitLine.bulkCreate([{
+        report_id: visit.id,
+        line_kind: "evidence",
         file_name: req.file.originalname,
         file_path: `/uploads/servicom/${req.file.filename}`,
         file_type: path.extname(req.file.originalname).replace(".", ""),
@@ -537,7 +562,7 @@ module.exports = {
         file_size: req.file.size,
         description: req.body.description || null,
         uploaded_by: req.user?.name || null,
-      });
+      }]);
       await logAudit("servicom_evidence", row.id, "uploaded", req.user?.name, { visit_id: visit.id });
       res.status(201).json({ success: true, data: row });
     } catch (err) { next(err); }

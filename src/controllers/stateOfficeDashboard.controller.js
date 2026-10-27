@@ -4,7 +4,7 @@ const {
   AccreditationReport, StakeholderReport, EnrolmentDriveReport, HmoSelectionReport, ChallengesReport,
   ComplaintsComplianceReport, IgrReport, SshiaFinancialReport, ExpenditureProfileReport,
   WeeklyActionableReport, ContractedServicesReport, MonitoringVisit,
-  WeeklyActionableReportLine, ContractedServicesReportLine,
+  WeeklyActionableReportLine, ContractedServicesReportLine, ChallengesReportLine,
   MonthlyEnrolleeRegister, EtmcTmcActionPointRegister,
   ExtraDependantReport, HcpChangeReport,
   StateOffice, ZonalOffice,
@@ -336,7 +336,6 @@ const buildOperationalControl = async (where, combinedMonthly, actionableLines, 
     aggregatePlanVsActual(where, cy, cm),
     (async () => {
       try {
-        const ChallengesReportLine = require("../models/ChallengesReportLine");
         const lines = await ChallengesReportLine.findAll({
           attributes: ["status"],
           include: [{
@@ -498,7 +497,6 @@ const buildComparativeOversight = async (where, operational) => {
       })(),
       (async () => {
         try {
-          const ChallengesReportLine = require("../models/ChallengesReportLine");
           const lines = await ChallengesReportLine.findAll({
             attributes: ["status", "challenge_category", "support_required", "responsible_department"],
             include: [{
