@@ -187,7 +187,7 @@ async function isReferenced(unitId) {
   ];
   for (const table of tables) {
     const [rows] = await sequelize.query(
-      `SELECT COUNT(*) AS n FROM \`${table}\` WHERE unit_id = :unitId`,
+      `SELECT COUNT(*) AS n FROM \`${table}\` WHERE unit_id = :unitId OR unit_code = :unitId`,
       { replacements: { unitId } }
     );
     if (Number(rows[0]?.n || 0) > 0) return true;
@@ -195,16 +195,16 @@ async function isReferenced(unitId) {
   return false;
 }
 
-async function upsertUnit(unitCode, name, departmentId, locationRole) {
+async function upsertUnit(unitCode, name, departmentCode, locationRole) {
   const existing = await Unit.findOne({ where: { unit_code: unitCode } });
   if (existing) {
-    await existing.update({ name, department_id: departmentId, location_role: locationRole });
+    await existing.update({ name, department_code: departmentCode, location_role: locationRole });
     return existing;
   }
   return Unit.create({
     unit_code: unitCode,
     name,
-    department_id: departmentId,
+    department_code: departmentCode,
     location_role: locationRole,
   });
 }
@@ -237,11 +237,11 @@ async function syncDeptDivUnits({ prune = false } = {}) {
     deptTouched++;
     const keep = new Set(dept.divisions.map(([code]) => code));
     for (const [code, name] of dept.divisions) {
-      await upsertUnit(code, name, record.id, "division");
+      await upsertUnit(code, name, record.department_code, "division");
       unitTouched++;
     }
     if (prune) {
-      const extras = await Unit.findAll({ where: { department_id: record.id } });
+      const extras = await Unit.findAll({ where: { department_code: record.department_code } });
       for (const extra of extras) {
         if (keep.has(extra.unit_code)) continue;
         if (await isReferenced(extra.id)) {
@@ -259,11 +259,11 @@ async function syncDeptDivUnits({ prune = false } = {}) {
   deptTouched++;
   const keepState = new Set(STATE_UNITS.map(([code]) => code));
   for (const [code, name] of STATE_UNITS) {
-    await upsertUnit(code, name, stateDept.id, "state_unit");
+    await upsertUnit(code, name, stateDept.department_code, "state_unit");
     unitTouched++;
   }
   if (prune) {
-    const stateExtras = await Unit.findAll({ where: { department_id: stateDept.id } });
+    const stateExtras = await Unit.findAll({ where: { department_code: stateDept.department_code } });
     for (const extra of stateExtras) {
       if (keepState.has(extra.unit_code)) continue;
       if (!(await isReferenced(extra.id))) await extra.destroy();

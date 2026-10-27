@@ -77,9 +77,6 @@ const STATES = [
     }
     logPartial("Zonal offices", zonesCreated, zonesSkipped);
 
-    const zones = await ZonalOffice.findAll();
-    const zoneMap = Object.fromEntries(zones.map(z => [z.zonal_code, z.id]));
-
     let statesCreated = 0;
     let statesSkipped = 0;
     for (const s of STATES) {
@@ -88,7 +85,7 @@ const STATES = [
         defaults: {
           code: s.code,
           description: s.description,
-          zonal_id: zoneMap[s.zone],
+          zonal_code: s.zone,
         },
       });
       if (created) statesCreated++;

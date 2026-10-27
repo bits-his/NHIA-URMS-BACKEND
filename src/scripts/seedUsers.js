@@ -183,7 +183,7 @@ function stateSuffix(state) {
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return base.slice(0, 12) || `ST${state.id}`;
+  return base.slice(0, 12) || String(state.code || "ST");
 }
 
 async function removeLegacyPilotUsers() {
@@ -204,10 +204,10 @@ async function upsertUser(spec) {
     email: spec.email,
     password: hashed,
     role: spec.role,
-    zone_id: spec.zone_id ?? null,
-    state_id: spec.state_id ?? null,
-    department_id: spec.department_id ?? null,
-    unit_id: spec.unit_id ?? null,
+    zonal_code: spec.zonal_code ?? null,
+    state_code: spec.state_code ?? null,
+    department_code: spec.department_code ?? null,
+    unit_code: spec.unit_code ?? null,
     is_active: true,
     functionalities: spec.functionalities,
   });
@@ -219,7 +219,7 @@ async function upsertUser(spec) {
 async function buildUserSpecs(deptMap, unitMap) {
   const states = await StateOffice.findAll({
     order: [["description", "ASC"]],
-    include: [{ model: ZonalOffice, as: "zone", attributes: ["id", "zonal_code", "description"] }],
+    include: [{ model: ZonalOffice, as: "zone", attributes: ["zonal_code", "description"] }],
   });
 
   if (!states.length) {
@@ -250,7 +250,7 @@ async function buildUserSpecs(deptMap, unitMap) {
   });
 
   // ── Zonal coordinators (one per zone in DB) ──
-  const zones = await ZonalOffice.findAll({ order: [["id", "ASC"]] });
+  const zones = await ZonalOffice.findAll({ order: [["zonal_code", "ASC"]] });
   zones.forEach((zone, i) => {
     const staff_id = `ZC-${String(i + 1).padStart(4, "0")}`;
     specs.push({
@@ -258,7 +258,7 @@ async function buildUserSpecs(deptMap, unitMap) {
       name: `${zone.description} Coordinator`,
       email: staffEmail(staff_id),
       role: "zonal-coordinator",
-      zone_id: zone.id,
+      zonal_code: zone.zonal_code,
       functionalities: zonalCoordinatorAccess,
     });
   });
@@ -267,12 +267,13 @@ async function buildUserSpecs(deptMap, unitMap) {
   for (const state of states) {
     let suffix = stateSuffix(state);
     if (usedSuffixes.has(suffix)) {
-      suffix = `${suffix}-${state.id}`;
+      suffix = `${suffix}-${state.code}`;
     }
     usedSuffixes.set(suffix, true);
 
     const label = state.description.replace(/\([^)]*\)/g, "").trim();
-    const zoneId = state.zonal_id || state.zone?.id || null;
+    const zoneCode = state.zonal_code || state.zone?.zonal_code || null;
+    const stateCode = state.code;
 
     const scId = `SC-${suffix}`;
     const finId = `DO-FIN-${suffix}`;
@@ -284,8 +285,8 @@ async function buildUserSpecs(deptMap, unitMap) {
       name: `${label} State Coordinator`,
       email: staffEmail(scId),
       role: "state-coordinator",
-      zone_id: zoneId,
-      state_id: state.id,
+      zonal_code: zoneCode,
+      state_code: stateCode,
       state_label: label,
       functionalities: allMonthlyModules,
     });
@@ -295,11 +296,11 @@ async function buildUserSpecs(deptMap, unitMap) {
       name: `${label} Finance Officer`,
       email: staffEmail(finId),
       role: "department-officer",
-      zone_id: zoneId,
-      state_id: state.id,
+      zonal_code: zoneCode,
+      state_code: stateCode,
       state_label: label,
-      department_id: deptMap.AFD || null,
-      unit_id: null,
+      department_code: deptMap.AFD || null,
+      unit_code: null,
       functionalities: [...dashboard, ...financeMonthly, ...notifications],
     });
 
@@ -308,11 +309,11 @@ async function buildUserSpecs(deptMap, unitMap) {
       name: `${label} Programmes Officer`,
       email: staffEmail(progId),
       role: "department-officer",
-      zone_id: zoneId,
-      state_id: state.id,
+      zonal_code: zoneCode,
+      state_code: stateCode,
       state_label: label,
-      department_id: deptMap.FSD || null,
-      unit_id: null,
+      department_code: deptMap.FSD || null,
+      unit_code: null,
       functionalities: [...dashboard, ...programmesMonthly, ...notifications],
     });
 
@@ -321,11 +322,11 @@ async function buildUserSpecs(deptMap, unitMap) {
       name: `${label} SQA Officer`,
       email: staffEmail(sqaId),
       role: "department-officer",
-      zone_id: zoneId,
-      state_id: state.id,
+      zonal_code: zoneCode,
+      state_code: stateCode,
       state_label: label,
-      department_id: deptMap.SQA || null,
-      unit_id: null,
+      department_code: deptMap.SQA || null,
+      unit_code: null,
       functionalities: [...dashboard, ...sqaMonthly, ...notifications],
     });
   }
@@ -353,18 +354,18 @@ async function buildUserSpecs(deptMap, unitMap) {
     await removeLegacyPilotUsers();
 
     const departments = await Department.findAll();
-    const deptMap = Object.fromEntries(departments.map((d) => [d.department_code, d.id]));
+    const deptMap = Object.fromEntries(departments.map((d) => [d.department_code, d.department_code]));
 
     const units = await Unit.findAll();
-    const unitMap = Object.fromEntries(units.map((u) => [u.unit_code, u.id]));
+    const unitMap = Object.fromEntries(units.map((u) => [u.unit_code, u.unit_code]));
 
     const specs = await buildUserSpecs(deptMap, unitMap);
 
     let created = 0;
     let skipped = 0;
 
-    const nationalAndZonal = specs.filter((s) => !s.state_id);
-    const stateUsers = specs.filter((s) => s.state_id);
+    const nationalAndZonal = specs.filter((s) => !s.state_code);
+    const stateUsers = specs.filter((s) => s.state_code);
 
     console.log("Seeding national & zonal users…\n");
     console.log(
@@ -378,9 +379,9 @@ async function buildUserSpecs(deptMap, unitMap) {
       else if (wasSkipped) skipped++;
 
       let location = "National";
-      if (spec.zone_id) {
-        const z = await ZonalOffice.findByPk(spec.zone_id, { attributes: ["description"] });
-        location = z?.description || `zone #${spec.zone_id}`;
+      if (spec.zonal_code) {
+        const z = await ZonalOffice.findByPk(spec.zonal_code, { attributes: ["description"] });
+        location = z?.description || spec.zonal_code;
       }
 
       console.log(
@@ -396,8 +397,8 @@ async function buildUserSpecs(deptMap, unitMap) {
 
     const byState = new Map();
     for (const spec of stateUsers) {
-      if (!byState.has(spec.state_id)) byState.set(spec.state_id, { label: spec.state_label, users: [] });
-      byState.get(spec.state_id).users.push(spec);
+      if (!byState.has(spec.state_code)) byState.set(spec.state_code, { label: spec.state_label, users: [] });
+      byState.get(spec.state_code).users.push(spec);
     }
 
     for (const [, { label, users }] of byState) {

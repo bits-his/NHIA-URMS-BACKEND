@@ -40,10 +40,10 @@ const login = async (req, res, next) => {
         ],
       },
       include: [
-        { association: "zone",       attributes: ["id", "zonal_code", "description"] },
-        { association: "state",      attributes: ["id", "code", "description"] },
-        { association: "department", attributes: ["id", "name", "department_code"] },
-        { association: "unit",       attributes: ["id", "name", "unit_code"] },
+        { association: "zone",       attributes: ["zonal_code", "description"] },
+        { association: "state",      attributes: ["code", "description", "zonal_code"] },
+        { association: "department", attributes: ["department_code", "name"] },
+        { association: "unit",       attributes: ["unit_code", "name"] },
       ],
     });
 
@@ -80,10 +80,10 @@ const me = async (req, res, next) => {
     const user = await User.findByPk(req.user.id, {
       attributes: { exclude: ["password"] },
       include: [
-        { association: "zone",       attributes: ["id", "zonal_code", "description"] },
-        { association: "state",      attributes: ["id", "code", "description"] },
-        { association: "department", attributes: ["id", "name", "department_code"] },
-        { association: "unit",       attributes: ["id", "name", "unit_code"] },
+        { association: "zone",       attributes: ["zonal_code", "description"] },
+        { association: "state",      attributes: ["code", "description", "zonal_code"] },
+        { association: "department", attributes: ["department_code", "name"] },
+        { association: "unit",       attributes: ["unit_code", "name"] },
       ],
     });
     if (!user) {

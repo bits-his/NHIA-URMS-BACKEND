@@ -42,7 +42,7 @@ const stateSearchTerms = (description) => {
 };
 
 const resolveNhiaPrefix = async (stateId) => {
-  const state = await StateOffice.findByPk(stateId, { attributes: ["id", "code", "description"] });
+  const state = await StateOffice.findByPk(stateId, { attributes: ["code", "description"] });
   if (!state) return null;
 
   const code = (state.code || "").trim().toUpperCase();

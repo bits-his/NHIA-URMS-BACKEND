@@ -1,55 +1,38 @@
 /**
- * ─── NHIA URMS Backend Server Entry Point ─────────────────────────────────────
- * Express server initialization file. Configures security headers, global
- * middleware, database connections, Sequelize models, and RESTful API routes.
+ * NHIA URMS Backend — form-by-form rebuild mode.
+ * Loads ONLY active (core) models. Legacy report routes are NOT mounted.
  */
-
 require("dotenv").config();
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const { corsOptions, isProduction } = require("./config/cors");
-
-// Database configuration & Sequelize ORM initialization
 const sequelize = require("./config/database");
+const { APPROVED_FORMS, CORE_TABLES } = require("./config/activeSchema");
 
-// Register all Sequelize database models & model associations
-require("./models/index");
+// Core + approved forms only — does NOT register legacy report models
+require("./models/active");
 
-// ─── API Route Imports ────────────────────────────────────────────────────────
-const annualReportRoutes = require("./routes/annualReport.routes");
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
-const stockRoutes = require("./routes/stockVerification.routes");
-const monthlyRoutes = require("./routes/monthlyReport.routes");
-const servicomRoutes = require("./routes/servicom.routes");
-const stateOfficeRoutes = require("./routes/stateOffice.routes");
 const accreditedProvidersRoutes = require("./routes/accreditedProviders.routes");
 const hcfFacilitiesRoutes = require("./routes/hcfFacilities.routes");
 const hmoProvidersRoutes = require("./routes/hmoProviders.routes");
-const complianceReportRoutes = require("./routes/complianceReport.routes");
-const storeManagementRoutes = require("./routes/storeManagementRoutes");
 const notificationsRoutes = require("./routes/notifications.routes");
+const platformRoutes = require("./routes/redesign/platform.routes");
 const { errorHandler } = require("./middleware/errorHandler");
 
-// Initialize Express application instance
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// ─── Security & Global Middleware ─────────────────────────────────────────────
-
-// Enable Cross-Origin Resource Sharing (CORS) based on environment configuration
 app.use(cors(corsOptions()));
-
-// Avoid stale GET responses for dynamic API data (browsers were 304-caching empty profiles)
 app.set("etag", false);
 app.use("/api", (req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   next();
 });
 
-// Security Headers Middleware: Set defensive HTTP response headers
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -60,111 +43,114 @@ app.use((req, res, next) => {
   next();
 });
 
-// JSON body parser with 2MB payload ceiling for large report submissions
 app.use(express.json({ limit: "2mb" }));
-
-// Static asset file server for uploaded documents & attachments
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
-
-// HTTP request logger middleware
 app.use(morgan("dev"));
 
-// ─── API Route Registrations ──────────────────────────────────────────────────
-
-/**
- * GET /health
- * System health check endpoint returning service status, backend version,
- * and key API route references.
- */
 app.get("/health", (req, res) =>
   res.json({
     status: "ok",
+    mode: "form-by-form-rebuild",
     version: require("../package.json").version,
+    core_tables: CORE_TABLES.length,
+    approved_forms: Object.keys(APPROVED_FORMS),
     endpoints: {
-      stockDashboard: "/api/stock/dashboard",
-      socDashboard: "/api/state-office/dashboard",
-      stateOfficeReports: "/api/state-office/{section}/reports",
-      servicomDashboard: "/api/servicom/dashboard",
+      auth: "/api/auth",
+      admin: "/api/admin",
+      lookups: "/api/platform/lookups/:domainKey",
+      providers: "/api/accredited-providers | /api/hcf-facilities | /api/hmo-providers",
     },
   }),
 );
 
-// Mount domain-specific API route handlers
+// ── Core routes only ─────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/annual-reports", annualReportRoutes);
-app.use("/api/stock", stockRoutes);
-app.use("/api/monthly", monthlyRoutes);
-app.use("/api/servicom", servicomRoutes);
 app.use("/api/accredited-providers", accreditedProvidersRoutes);
 app.use("/api/hcf-facilities", hcfFacilitiesRoutes);
 app.use("/api/hmo-providers", hmoProvidersRoutes);
-app.use("/api/state-office", stateOfficeRoutes);
-app.use("/api/sqa/compliance-reports", complianceReportRoutes);
-app.use("/api/store-management", storeManagementRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/platform", platformRoutes);
 
-// ─── 404 Fallback Handler ─────────────────────────────────────────────────────
+// Explicit 503 for legacy domains until their form design is approved
+const notRebuilt = (name) => (req, res) => {
+  res.status(503).json({
+    success: false,
+    message: `${name} is disabled during database rebuild. Approve the form design first, then it will be re-enabled.`,
+  });
+};
 
-// Catch-all handler for undefined API routes
+app.use("/api/annual-reports", notRebuilt("Annual reports"));
+app.use("/api/stock", notRebuilt("Stock"));
+app.use("/api/monthly", notRebuilt("Monthly HQ reports"));
+// Approved SERVICOM packs; other SERVICOM routes stay 503
+if (APPROVED_FORMS["comment-card"]) {
+  app.use("/api/servicom/comment-cards", require("./routes/commentCard.routes"));
+}
+if (APPROVED_FORMS["satisfaction-survey"]) {
+  app.use("/api/servicom/satisfaction-surveys", require("./routes/satisfactionSurvey.routes"));
+}
+if (APPROVED_FORMS.complaints) {
+  const complaintsRoutes = require("./routes/complaints.routes");
+  const complaintsCtrl = require("./controllers/complaints.controller");
+  const { authenticate } = require("./middleware/auth");
+  app.use("/api/servicom/complaints", complaintsRoutes);
+  // Legacy FE paths used by the complaints pack
+  app.get("/api/servicom/complaint-sla", authenticate, complaintsCtrl.listComplaintSla);
+  app.get("/api/servicom/investigating-officers", authenticate, complaintsCtrl.listInvestigatingOfficers);
+}
+// Dashboards for approved SERVICOM packs (comment-card / satisfaction / complaints)
+if (
+  APPROVED_FORMS["comment-card"]
+  || APPROVED_FORMS["satisfaction-survey"]
+  || APPROVED_FORMS.complaints
+) {
+  const { authenticate } = require("./middleware/auth");
+  const servicomDash = require("./controllers/servicomDashboard.controller");
+  app.get("/api/servicom/dashboard", authenticate, servicomDash.dashboard);
+  app.get("/api/servicom/dashboard/drill", authenticate, servicomDash.dashboardDrill);
+  app.get("/api/servicom/complaints-dashboard", authenticate, servicomDash.complaintsDashboard);
+}
+app.use("/api/servicom", notRebuilt("SERVICOM"));
+app.use("/api/state-office", notRebuilt("State office forms"));
+app.use("/api/sqa", notRebuilt("SQA compliance"));
+if (APPROVED_FORMS["store-management"]) {
+  app.use("/api/store-management", require("./routes/storePack.routes"));
+} else {
+  app.use("/api/store-management", notRebuilt("Store management"));
+}
+
 app.use((req, res) => res.status(404).json({ success: false, message: "Route not found" }));
-
-// ─── Centralized Error Handler ────────────────────────────────────────────────
-
-// Global error handling middleware for handling thrown exceptions & async errors
 app.use(errorHandler);
-
-// ─── Database Connection & Server Bootstrapping ───────────────────────────────
 
 (async () => {
   try {
-    // Authenticate database connection via Sequelize ORM
     await sequelize.authenticate();
     console.log("✅  MySQL connected");
+    console.log(`ℹ️   Rebuild mode — core tables only. Approved forms: ${Object.keys(APPROVED_FORMS).join(", ") || "(none yet)"}`);
 
+    // Light org column patches (safe if tables exist)
     const qi = sequelize.getQueryInterface();
-    const stateCols = await qi.describeTable("state_offices");
-    const flagCol = { type: "TINYINT(1)", allowNull: false, defaultValue: 0 };
-    if (!stateCols.is_hq) await qi.addColumn("state_offices", "is_hq", flagCol);
-    if (!stateCols.is_zonal_office) await qi.addColumn("state_offices", "is_zonal_office", flagCol);
-    const deptCols = await qi.describeTable("departments");
-    if (!deptCols.location_scope) {
-      await qi.addColumn("departments", "location_scope", { type: "VARCHAR(10)", allowNull: true });
-    }
-    const unitCols = await qi.describeTable("units");
-    if (!unitCols.location_role) {
-      await qi.addColumn("units", "location_role", { type: "VARCHAR(12)", allowNull: true });
-    }
     try {
-      const profileCols = await qi.describeTable("state_zonal_office_profiles");
-      if (!profileCols.staff_members) {
-        await qi.addColumn("state_zonal_office_profiles", "staff_members", { type: "JSON", allowNull: true });
-      }
-      if (!profileCols.accommodation_entries) {
-        await qi.addColumn("state_zonal_office_profiles", "accommodation_entries", { type: "JSON", allowNull: true });
-      }
-    } catch (_) {
-      // Table may not exist yet on fresh installs before sync scripts run.
-    }
+      const stateCols = await qi.describeTable("state_offices");
+      const flagCol = { type: "TINYINT(1)", allowNull: false, defaultValue: 0 };
+      if (!stateCols.is_hq) await qi.addColumn("state_offices", "is_hq", flagCol);
+      if (!stateCols.is_zonal_office) await qi.addColumn("state_offices", "is_zonal_office", flagCol);
+    } catch (_) { /* */ }
 
-    // Keep org + location department/unit catalogs current for deployments that never ran seed scripts
     try {
       const { seedDepartmentsUnits } = require("./scripts/seedDepartmentsUnits");
       const { syncDeptDivUnits } = require("./scripts/syncDeptDivUnits");
-      const org = await seedDepartmentsUnits({ quiet: true });
-      const location = await syncDeptDivUnits({ prune: false });
-      console.log(
-        `✅  Departments & units ready (org +${org.departments.created}/~${org.departments.updated}, location ${location.departments} depts / ${location.units} units)`,
-      );
+      // These scripts require models — point them at active via models/index
+      await seedDepartmentsUnits({ quiet: true });
+      await syncDeptDivUnits({ prune: false });
     } catch (catalogErr) {
       console.warn("⚠️  Department/unit catalog sync skipped:", catalogErr.message);
     }
 
-    // Start listening for HTTP connections
-    app.listen(PORT, () => console.log(`🚀  Server running on http://localhost:${PORT}`));
+    app.listen(PORT, () => console.log(`🚀  Server running on http://localhost:${PORT} (rebuild mode)`));
   } catch (err) {
     console.error("❌  Cannot connect to DB:", err.message);
     process.exit(1);
   }
 })();
-

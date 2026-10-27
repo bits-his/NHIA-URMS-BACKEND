@@ -5,7 +5,9 @@ const { authenticate, blockCoordinatorWrites } = require("../middleware/auth");
 const { requireStateOfficeRoute } = require("../middleware/stateOfficeAccess");
 const {
   enrolment, migration, cemonc,
-  accreditation, stakeholder, enrolmentDrives, hmoSelection, challenges, complaints,  igr, sshiaFinancial, expenditureProfile,
+  accreditation, providerAccreditation, providerReaccreditation,
+  providerMedicalAudits, providerQaInspections,
+  stakeholder, enrolmentDrives, hmoSelection, challenges, complaints, igr, sshiaFinancial, expenditureProfile,
   weeklyActionable, contractedServices, ictSupport, adhocAssignment,
   enrolleeRegister, etmcTmcActionPoint,
   extraDependant, hcpChange,
@@ -74,7 +76,11 @@ mount("enrolment", enrolment);
 mount("migration", migration);
 mount("cemonc", cemonc);
 mount("complaints", complaints);
-mount("accreditation", accreditation);
+mount("accreditation", accreditation); // alias → provider_accreditation_reports
+mount("provider-accreditation", providerAccreditation);
+mount("provider-reaccreditation", providerReaccreditation);
+mount("provider-medical-audits", providerMedicalAudits);
+mount("provider-qa-inspections", providerQaInspections);
 mount("stakeholder", stakeholder);
 Object.entries(enrolmentDrives).forEach(([segment, ctrl]) => mount(segment, ctrl));
 mount("hmo-selection", hmoSelection);
@@ -114,6 +120,26 @@ router.post(
   "/accreditation/reports/:id/lines/:lineId/files",
   beneficiaryUpload.array("files", 10),
   accreditation.uploadLineFiles,
+);
+router.post(
+  "/provider-accreditation/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.array("files", 10),
+  providerAccreditation.uploadLineFiles,
+);
+router.post(
+  "/provider-reaccreditation/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.array("files", 10),
+  providerReaccreditation.uploadLineFiles,
+);
+router.post(
+  "/provider-medical-audits/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.array("files", 10),
+  providerMedicalAudits.uploadLineFiles,
+);
+router.post(
+  "/provider-qa-inspections/reports/:id/lines/:lineId/files",
+  beneficiaryUpload.array("files", 10),
+  providerQaInspections.uploadLineFiles,
 );
 router.post(
   "/extra-dependant/reports/:id/lines/:lineId/files",

@@ -4,13 +4,17 @@ const sequelize = require("../config/database");
 const StateOffice = sequelize.define(
   "StateOffice",
   {
-    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
-    code: { type: DataTypes.STRING(20), allowNull: false, unique: true },
-    description: { type: DataTypes.STRING(100), allowNull: false },
-    zonal_id: {
-      type: DataTypes.INTEGER.UNSIGNED,
+    /** Business primary key — no auto-increment id */
+    code: {
+      type: DataTypes.STRING(20),
       allowNull: false,
-      references: { model: "zonal_offices", key: "id" },
+      primaryKey: true,
+    },
+    description: { type: DataTypes.STRING(100), allowNull: false },
+    zonal_code: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      references: { model: "zonal_offices", key: "zonal_code" },
       onDelete: "RESTRICT",
       onUpdate: "CASCADE",
     },

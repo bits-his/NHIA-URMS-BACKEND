@@ -11,31 +11,31 @@ const User = sequelize.define(
     password: { type: DataTypes.STRING(255), allowNull: false },
     /** Role key — references roles.key */
     role: { type: DataTypes.STRING(50), allowNull: false, defaultValue: "state-officer" },
-    zone_id: {
-      type: DataTypes.INTEGER.UNSIGNED,
+    zonal_code: {
+      type: DataTypes.STRING(20),
       allowNull: true,
-      references: { model: "zonal_offices", key: "id" },
+      references: { model: "zonal_offices", key: "zonal_code" },
       onDelete: "SET NULL",
       onUpdate: "CASCADE",
     },
-    state_id: {
-      type: DataTypes.INTEGER.UNSIGNED,
+    state_code: {
+      type: DataTypes.STRING(20),
       allowNull: true,
-      references: { model: "state_offices", key: "id" },
+      references: { model: "state_offices", key: "code" },
       onDelete: "SET NULL",
       onUpdate: "CASCADE",
     },
-    department_id: {
-      type: DataTypes.INTEGER.UNSIGNED,
+    department_code: {
+      type: DataTypes.STRING(20),
       allowNull: true,
-      references: { model: "departments", key: "id" },
+      references: { model: "departments", key: "department_code" },
       onDelete: "SET NULL",
       onUpdate: "CASCADE",
     },
-    unit_id: {
-      type: DataTypes.INTEGER.UNSIGNED,
+    unit_code: {
+      type: DataTypes.STRING(20),
       allowNull: true,
-      references: { model: "units", key: "id" },
+      references: { model: "units", key: "unit_code" },
       onDelete: "SET NULL",
       onUpdate: "CASCADE",
     },

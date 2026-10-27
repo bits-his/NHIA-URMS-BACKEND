@@ -13,7 +13,7 @@ function isStateCoordinatorRole(role) {
 
 function isZonalCoordinatorRole(role) {
   const r = String(role || "");
-  return r === "zonal-coordinator" || r.endsWith("-zonal-coordinator");
+  return r === "zonal-coordinator" || r === "zc" || r.endsWith("-zonal-coordinator");
 }
 
 function isCoordinatorRole(role) {

@@ -1,5 +1,5 @@
 /**
- * Complaint IDs: ENF/{HCF|HMO|ENR}/{STATE}/{MON} {YY}/{seq}
+ * Complaint IDs: ENF/{HCF|HMO|ENR}/{STATE}/{MON YY}/{seq}
  * e.g. ENF/HCF/TAR/SEP 26/001
  * Sequence resets each month per state + respondent party.
  */
@@ -13,7 +13,6 @@ function partyCode(against) {
   if (/^enrollee$/i.test(p) || /^enr$/i.test(p)) return "ENR";
   if (/^hmo$/i.test(p)) return "HMO";
   if (/^hcf$/i.test(p) || /^healthcare facility$/i.test(p)) return "HCF";
-  // Complainant category labels that are not HCF/HMO map to enrollee/other
   if (/facility/i.test(p)) return "HCF";
   if (/hmo/i.test(p)) return "HMO";
   if (p) return "ENR";
@@ -53,10 +52,18 @@ function previewComplaintNumber(against, stateCode, dateReceived) {
   return `${complaintNumberPrefix(against, code === "…" ? "…" : code, dateReceived)}/…`;
 }
 
-async function nextComplaintNumber({ against, stateId, dateReceived, sequelizeModel, transaction }) {
-  const state = stateId ? await StateOffice.findByPk(stateId, { transaction }) : null;
-  const stateCode = stateCodeFromOffice(state);
-  const prefix = complaintNumberPrefix(against || "HCF", stateCode, dateReceived);
+async function nextComplaintNumber({
+  against,
+  stateCode,
+  stateId,
+  dateReceived,
+  sequelizeModel,
+  transaction,
+}) {
+  const codeKey = stateCode || stateId;
+  const state = codeKey ? await StateOffice.findByPk(codeKey, { transaction }) : null;
+  const resolved = stateCodeFromOffice(state);
+  const prefix = complaintNumberPrefix(against || "HCF", resolved, dateReceived);
   const like = `${prefix}/%`;
   const rows = await sequelizeModel.findAll({
     attributes: ["complaint_number"],

@@ -547,10 +547,24 @@ function buildComplaintRegister(rows, rulesMap = FALLBACK_RULES) {
     if (n > 1) repeatCount += n - 1;
   }
 
+  const stateCodeByName = new Map();
+  const zoneCodeByName = new Map();
+  for (const c of enriched) {
+    const sn = c.state?.description || c.state_name;
+    const sc = c.state_code || c.state?.code;
+    if (sn && sc) stateCodeByName.set(sn, sc);
+    const zn = c.zone?.description || c.zone_name;
+    const zc = c.zonal_code || c.zone?.zonal_code;
+    if (zn && zc) zoneCodeByName.set(zn, zc);
+  }
   const stateCounts = countMap(enriched, (c) => c.state?.description || c.state_name);
   const zoneCounts = countMap(enriched, (c) => c.zone?.description || c.zone_name);
-  const namedStates = stateCounts.filter((s) => s.name && s.name !== "Not specified");
-  const namedZones = zoneCounts.filter((s) => s.name && s.name !== "Not specified");
+  const namedStates = stateCounts
+    .filter((s) => s.name && s.name !== "Not specified")
+    .map((s) => ({ ...s, code: stateCodeByName.get(s.name) || null }));
+  const namedZones = zoneCounts
+    .filter((s) => s.name && s.name !== "Not specified")
+    .map((s) => ({ ...s, code: zoneCodeByName.get(s.name) || null }));
 
   const resolutionDaysBy = (keyFn) => {
     const map = new Map();

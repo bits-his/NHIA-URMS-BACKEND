@@ -4,12 +4,17 @@
  * facility coverage, activity completion, separate accreditation pipelines).
  */
 const { Op } = require("sequelize");
+const { StateOffice, ZonalOffice } = require("../models");
 const {
-  AccreditationReport,
-  AccreditationReportLine,
-  StateOffice,
-  ZonalOffice,
-} = require("../models");
+  ProviderAccreditationReport,
+  ProviderAccreditationReportLine,
+  ProviderReaccreditationReport,
+  ProviderReaccreditationReportLine,
+  ProviderMedicalAuditReport,
+  ProviderMedicalAuditReportLine,
+  ProviderQaInspectionReport,
+  ProviderQaInspectionReportLine,
+} = require("../models/providerManagement");
 const { buildStateOfficeListWhere } = require("../utils/stateOfficeScope");
 
 const ACTIVITY_KEYS = ["accreditation", "reaccreditation", "qa-inspections", "medical-audits"];
@@ -19,6 +24,29 @@ const ACTIVITY_LABELS = {
   "qa-inspections": "Quality Assurance",
   "medical-audits": "Medical Audit",
 };
+
+const PROVIDER_SOURCES = [
+  {
+    key: "accreditation",
+    Report: ProviderAccreditationReport,
+    Line: ProviderAccreditationReportLine,
+  },
+  {
+    key: "reaccreditation",
+    Report: ProviderReaccreditationReport,
+    Line: ProviderReaccreditationReportLine,
+  },
+  {
+    key: "medical-audits",
+    Report: ProviderMedicalAuditReport,
+    Line: ProviderMedicalAuditReportLine,
+  },
+  {
+    key: "qa-inspections",
+    Report: ProviderQaInspectionReport,
+    Line: ProviderQaInspectionReportLine,
+  },
+];
 
 const COMPLETED_STATUSES = new Set(["Completed", "completed"]);
 
@@ -46,7 +74,8 @@ function resolvePeriod(query) {
   const year = query.year ? Number(query.year) : null;
   const month = query.month && query.month !== "all" ? Number(query.month) : null;
   const quarter = query.quarter && query.quarter !== "all" ? Number(query.quarter) : null;
-  return { year, month, quarter };
+  const period = String(query.period || "").toLowerCase().trim();
+  return { year, month, quarter, period };
 }
 
 function monthsForQuarter(q) {
@@ -55,6 +84,7 @@ function monthsForQuarter(q) {
 }
 
 function activityKeyFromReport(report, tpl) {
+  if (report._provider_activity_key) return report._provider_activity_key;
   const fromTpl = String(tpl.form_type || "").trim();
   if (ACTIVITY_KEYS.includes(fromTpl)) return fromTpl;
   const mod = String(report.activity_module || "").trim();
@@ -82,21 +112,42 @@ async function loadScopedReports(user, query) {
     year: query.year,
     month: query.month && query.month !== "all" ? query.month : undefined,
   });
-  const { year, month, quarter } = resolvePeriod(query);
+  const { year, month, quarter, period } = resolvePeriod(query);
   if (year) where.reporting_year = year;
-  if (month) where.reporting_month = month;
-  else if (quarter && quarter >= 1 && quarter <= 4) {
+  if (month) {
+    where.reporting_month = month;
+  } else if (quarter && quarter >= 1 && quarter <= 4) {
     where.reporting_month = { [Op.in]: monthsForQuarter(quarter) };
+  } else if (period === "ytd") {
+    const now = new Date();
+    const ytdYear = year || now.getFullYear();
+    const endMonth = ytdYear === now.getFullYear() ? now.getMonth() + 1 : 12;
+    where.reporting_year = ytdYear;
+    where.reporting_month = { [Op.in]: Array.from({ length: endMonth }, (_, i) => i + 1) };
   }
 
-  return AccreditationReport.findAll({
-    where,
-    include: [
-      { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
-      { model: StateOffice, as: "state", attributes: ["id", "description"] },
-      { model: AccreditationReportLine, as: "lines" },
-    ],
-    order: [["reporting_year", "DESC"], ["reporting_month", "DESC"]],
+  const batches = await Promise.all(
+    PROVIDER_SOURCES.map(async ({ key, Report, Line }) => {
+      const rows = await Report.findAll({
+        where,
+        include: [
+          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
+          { model: StateOffice, as: "state", attributes: ["id", "description"] },
+          { model: Line, as: "lines" },
+        ],
+        order: [["reporting_year", "DESC"], ["reporting_month", "DESC"]],
+      });
+      return rows.map((r) => {
+        const json = r.toJSON();
+        json.activity_module = key;
+        json._provider_activity_key = key;
+        return json;
+      });
+    }),
+  );
+  return batches.flat().sort((a, b) => {
+    if (b.reporting_year !== a.reporting_year) return b.reporting_year - a.reporting_year;
+    return b.reporting_month - a.reporting_month;
   });
 }
 
@@ -201,6 +252,7 @@ function previousPeriodQuery(query) {
   const year = query.year ? Number(query.year) : new Date().getFullYear();
   const month = query.month && query.month !== "all" ? Number(query.month) : null;
   const quarter = query.quarter && query.quarter !== "all" ? Number(query.quarter) : null;
+  const period = String(query.period || "").toLowerCase().trim();
   const next = { ...query };
   if (month) {
     if (month === 1) {
@@ -210,6 +262,7 @@ function previousPeriodQuery(query) {
       next.month = String(month - 1);
     }
     next.quarter = "all";
+    next.period = undefined;
   } else if (quarter) {
     if (quarter === 1) {
       next.year = String(year - 1);
@@ -218,6 +271,13 @@ function previousPeriodQuery(query) {
       next.quarter = String(quarter - 1);
     }
     next.month = "all";
+    next.period = undefined;
+  } else if (period === "ytd") {
+    // Same YTD window in the previous calendar year
+    next.year = String(year - 1);
+    next.period = "ytd";
+    next.month = "all";
+    next.quarter = "all";
   } else {
     next.year = String(year - 1);
   }
@@ -261,9 +321,7 @@ function buildActionQueue(rows, level) {
     items.push("Escalate recurring operational barriers");
   } else if (level === 4) {
     return [
-      "Direct follow-up by programme and activity",
-      "Request time-bound improvement plans from zones",
-      "Monitor accreditation and reaccreditation separately",
+      "Direct follow-up by programme and activity; request time-bound improvement plans from zones; monitor accreditation and re-accreditation separately.",
     ];
   }
   if (!items.length) items.push("No urgent operational exceptions in the selected filters");
@@ -621,7 +679,7 @@ function levelFromRole(role) {
   const r = String(role || "");
   if (r === "dg-ceo") return 4;
   if (r === "sdo" || r === "admin") return 3;
-  if (r === "zonal-coordinator" || r.endsWith("-zonal-coordinator")) return 2;
+  if (r === "zonal-coordinator" || r === "zc" || r.endsWith("-zonal-coordinator")) return 2;
   if (r === "state-coordinator" || r.endsWith("-state-coordinator")) return 1;
   return 1;
 }

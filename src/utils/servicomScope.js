@@ -78,22 +78,22 @@ function applyComplaintExtraFilters(where, query = {}) {
     and.push({ transmission_route: query.transmission_route });
   }
 
-  if (query.hmo_id) {
+  const hmoKey = query.hmo_code || query.hmo_id;
+  if (hmoKey && !/^\d+$/.test(String(hmoKey))) {
     and.push({
       [Op.or]: [
-        { complainant_hmo_id: query.hmo_id },
-        { respondent_hmo_id: query.hmo_id },
+        { complainant_hmo_code: hmoKey },
+        { respondent_hmo_code: hmoKey },
       ],
     });
   }
 
-  const facilityId = query.facility_id || query.hcf_id;
-  if (facilityId) {
+  const facilityKey = query.facility_code || query.hcf_code || query.facility_id || query.hcf_id;
+  if (facilityKey && !/^\d+$/.test(String(facilityKey))) {
     and.push({
       [Op.or]: [
-        { facility_id: facilityId },
-        { complainant_hcf_id: facilityId },
-        { respondent_hcf_id: facilityId },
+        { complainant_hcf_code: facilityKey },
+        { respondent_hcf_code: facilityKey },
       ],
     });
   }
@@ -102,7 +102,8 @@ function applyComplaintExtraFilters(where, query = {}) {
     const like = { [Op.like]: `%${String(query.facility_name).trim()}%` };
     and.push({
       [Op.or]: [
-        { facility_name: like },
+        { complainant_hcf_name: like },
+        { respondent_hcf_name: like },
         { respondent_name: like },
         { complainant_name: like },
       ],

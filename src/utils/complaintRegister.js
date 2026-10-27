@@ -92,10 +92,8 @@ function buildAssigneeWhere(user, Op) {
     if (n) {
       clauses.push(
         { officer_assigned: n },
-        { assigned_officer: n },
         { escalated_to: n },
         { officer_assigned: { [Op.like]: `${n}%` } },
-        { assigned_officer: { [Op.like]: `${n}%` } },
         { escalated_to: { [Op.like]: `${n}%` } },
       );
     }
@@ -105,10 +103,8 @@ function buildAssigneeWhere(user, Op) {
     if (s) {
       clauses.push(
         { officer_assigned: { [Op.like]: `%(${s})%` } },
-        { assigned_officer: { [Op.like]: `%(${s})%` } },
         { escalated_to: { [Op.like]: `%(${s})%` } },
         { officer_assigned: { [Op.like]: `%${s}%` } },
-        { assigned_officer: { [Op.like]: `%${s}%` } },
         { escalated_to: { [Op.like]: `%${s}%` } },
       );
     }
@@ -151,8 +147,12 @@ function buildDepartmentEscalationWhere(user, Op, dept = null) {
   return { escalated: true, [Op.or]: clauses };
 }
 
+function normalizeRoleKey(role) {
+  return String(role || "").trim().toLowerCase().replace(/_/g, "-").replace(/\s+/g, "-");
+}
+
 function isComplaintOfficerRole(role) {
-  const r = String(role || "").toLowerCase().replace(/_/g, "-");
+  const r = normalizeRoleKey(role);
   return r === "complaint-officer"
     || r.endsWith("-complaint-officer")
     || r.includes("complaint-officer");
@@ -188,11 +188,12 @@ function isZonalOfficeEscalation(row) {
  */
 function buildZonalEscalationWhere(user, Op) {
   if (!canAccessZonalOfficeInbox(user)) return null;
+  const zoneCode = user?.zonal_code ?? user?.get?.("zonal_code") ?? null;
   const zoneId = user?.zone_id ?? user?.get?.("zone_id") ?? null;
-  if (!zoneId) return null;
+  if (!zoneCode && !zoneId) return null;
   return {
     escalated: true,
-    zone_id: zoneId,
+    ...(zoneCode ? { zonal_code: zoneCode } : { zone_id: zoneId }),
     [Op.or]: [
       { escalated_to: "Zonal Office" },
       { escalated_to: "Zonal Coordinator" },
@@ -202,28 +203,9 @@ function buildZonalEscalationWhere(user, Op) {
 }
 
 /** Match complaints created by the logged-in user. */
-function buildCreatorWhere(user, Op) {
-  if (!user?.name && !user?.staff_id) return null;
-  const clauses = [];
-  if (user.name) {
-    const n = String(user.name).trim();
-    if (n) {
-      clauses.push(
-        { created_by: n },
-        { created_by: { [Op.like]: `${n}%` } },
-      );
-    }
-  }
-  if (user.staff_id) {
-    const s = String(user.staff_id).trim();
-    if (s) {
-      clauses.push(
-        { created_by_staff_id: s },
-        { created_by: { [Op.like]: `%(${s})%` } },
-      );
-    }
-  }
-  return clauses.length ? { [Op.or]: clauses } : null;
+function buildCreatorWhere(user) {
+  if (user?.id == null) return null;
+  return { created_by_user_id: user.id };
 }
 
 function isStateCoordinatorRole(role) {
@@ -232,8 +214,9 @@ function isStateCoordinatorRole(role) {
 }
 
 function isZonalCoordinatorRole(role) {
-  const r = String(role || "");
-  return r === "zonal-coordinator" || r.endsWith("-zonal-coordinator");
+  const r = normalizeRoleKey(role);
+  // "zc" is the short system key used for the generic "Zonal Coordinator" role
+  return r === "zonal-coordinator" || r === "zc" || r.endsWith("-zonal-coordinator");
 }
 
 function isReportingOfficerRole(role) {

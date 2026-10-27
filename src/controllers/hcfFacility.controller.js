@@ -3,8 +3,8 @@ const { HcfFacility, ZonalOffice, StateOffice } = require("../models");
 const { resolveNhiaPrefix } = require("../utils/nhiaStateFilter");
 
 const includeGeo = [
-  { model: ZonalOffice, as: "zone", attributes: ["id", "description", "zonal_code"] },
-  { model: StateOffice, as: "state", attributes: ["id", "description", "code"] },
+  { model: ZonalOffice, as: "zone", attributes: ["zonal_code", "description"] },
+  { model: StateOffice, as: "state", attributes: ["code", "description", "zonal_code"] },
 ];
 
 const BAD_CODE = /^(yes|no|nil|n\/a|na|none|0+|not issued|newly registered|accreditation|non\b.*)$/i;
@@ -57,7 +57,7 @@ function uniqueHospitals(rows) {
   const unnamed = [];
   for (const r of rows) {
     const code = hospitalCodeBase(r.facility_code) || hospitalCodeBase(r.accreditation_code);
-    const statePart = String(r.state_id || r.state_name || "").toLowerCase();
+    const statePart = String(r.state_code || r.state_name || "").toLowerCase();
     if (code) {
       const key = `${code}|${statePart}`;
       byCode.set(key, pickBetterHospital(byCode.get(key), r));
@@ -68,12 +68,12 @@ function uniqueHospitals(rows) {
 
   const namesTaken = new Set();
   for (const r of byCode.values()) {
-    namesTaken.add(`${normHospitalName(r.name)}|${String(r.state_id || r.state_name || "").toLowerCase()}`);
+    namesTaken.add(`${normHospitalName(r.name)}|${String(r.state_code || r.state_name || "").toLowerCase()}`);
   }
 
   const byName = new Map();
   for (const r of unnamed) {
-    const nameKey = `${normHospitalName(r.name)}|${String(r.state_id || r.state_name || "").toLowerCase()}`;
+    const nameKey = `${normHospitalName(r.name)}|${String(r.state_code || r.state_name || "").toLowerCase()}`;
     if (!nameKey.startsWith("|") && namesTaken.has(nameKey)) continue;
     byName.set(nameKey, pickBetterHospital(byName.get(nameKey), r));
   }
@@ -81,7 +81,7 @@ function uniqueHospitals(rows) {
   const merged = [...byCode.values(), ...byName.values()];
   const byHospitalName = new Map();
   for (const r of merged) {
-    const nameKey = `${normHospitalName(r.name)}|${String(r.state_id || r.state_name || "").toLowerCase()}`;
+    const nameKey = `${normHospitalName(r.name)}|${String(r.state_code || r.state_name || "").toLowerCase()}`;
     byHospitalName.set(nameKey, pickBetterHospital(byHospitalName.get(nameKey), r));
   }
 
@@ -99,13 +99,17 @@ function uniqueHospitals(rows) {
 
 async function stateMatchClause(stateId) {
   if (!stateId) return null;
-  const or = [{ state_id: stateId }];
-  const state = await StateOffice.findByPk(stateId, { attributes: ["id", "description", "code"] });
+  const code = String(stateId).trim();
+  const or = [{ state_code: code }];
+  const state = await StateOffice.findByPk(code, { attributes: ["description", "code"] });
   const desc = (state?.description || "").replace(/\(.*?\)/g, "").trim();
   if (desc) {
     or.push({ state_name: { [Op.like]: `%${desc}%` } });
   }
-  const resolved = await resolveNhiaPrefix(stateId);
+  if (state?.code && state.code !== code) {
+    or.push({ state_code: state.code });
+  }
+  const resolved = await resolveNhiaPrefix(code);
   if (resolved?.prefix) {
     or.push({ accreditation_code: { [Op.like]: `${resolved.prefix}/%` } });
     or.push({ facility_code: { [Op.like]: `${resolved.prefix}/%` } });
@@ -120,7 +124,7 @@ async function stateMatchClause(stateId) {
 const listFacilities = async (req, res, next) => {
   try {
     const and = [{ is_active: true }];
-    const stateClause = await stateMatchClause(req.query.state_id);
+    const stateClause = await stateMatchClause(req.query.state_code || req.query.state_id);
     if (stateClause) and.push(stateClause);
     if (req.query.service) {
       and.push({ service_applied_for: { [Op.like]: `%${String(req.query.service).trim()}%` } });

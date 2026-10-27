@@ -54,6 +54,7 @@ function isCoordinatorRole(role) {
   return r === "state-coordinator"
     || r.endsWith("-state-coordinator")
     || r === "zonal-coordinator"
+    || r === "zc"
     || r.endsWith("-zonal-coordinator");
 }
 
@@ -171,10 +172,11 @@ async function notifyOfficerLabel(label, payload) {
 
 async function findStateCoordinatorUserIds(stateId) {
   if (!stateId) return [];
+  const stateKey = /^\d+$/.test(String(stateId)) ? { state_id: stateId } : { state_code: stateId };
   const users = await User.findAll({
     where: {
       is_active: true,
-      state_id: stateId,
+      ...stateKey,
       [Op.or]: [
         { role: "state-coordinator" },
         { role: { [Op.like]: "%-state-coordinator" } },
@@ -188,12 +190,14 @@ async function findStateCoordinatorUserIds(stateId) {
 
 async function findZonalCoordinatorUserIds(zoneId) {
   if (!zoneId) return [];
+  const zoneKey = /^\d+$/.test(String(zoneId)) ? { zone_id: zoneId } : { zonal_code: zoneId };
   const users = await User.findAll({
     where: {
       is_active: true,
-      zone_id: zoneId,
+      ...zoneKey,
       [Op.or]: [
         { role: "zonal-coordinator" },
+        { role: "zc" },
         { role: { [Op.like]: "%-zonal-coordinator" } },
       ],
     },
@@ -215,10 +219,11 @@ function isComplaintOfficerRole(role) {
  */
 async function findZoneComplaintOfficerUserIds(zoneId) {
   if (!zoneId) return [];
+  const zoneKey = /^\d+$/.test(String(zoneId)) ? { zone_id: zoneId } : { zonal_code: zoneId };
   const users = await User.findAll({
     where: {
       is_active: true,
-      zone_id: zoneId,
+      ...zoneKey,
       [Op.or]: [
         { role: "complaint-officer" },
         { role: { [Op.like]: "%complaint-officer%" } },

@@ -184,7 +184,7 @@ function mapRow(headers, values, sheetName) {
 
 async function buildStateLookup() {
   const states = await StateOffice.findAll({
-    attributes: ["id", "description", "zonal_id", "code"],
+    attributes: ["code", "description", "zonal_code"],
   });
   const byDesc = new Map();
   for (const s of states) {
@@ -203,7 +203,7 @@ async function buildStateLookup() {
 }
 
 function resolveState(stateName, lookup) {
-  if (!stateName) return { state_id: null, zone_id: null };
+  if (!stateName) return { state_code: null, zonal_code: null };
   const key = stateName.toLowerCase();
   let hit = lookup.byDesc.get(key);
   if (!hit) {
@@ -219,8 +219,8 @@ function resolveState(stateName, lookup) {
       }
     }
   }
-  if (!hit) return { state_id: null, zone_id: null };
-  return { state_id: hit.id, zone_id: hit.zonal_id || null };
+  if (!hit) return { state_code: null, zonal_code: null };
+  return { state_code: hit.code || null, zonal_code: hit.zonal_code || null };
 }
 
 async function seed() {

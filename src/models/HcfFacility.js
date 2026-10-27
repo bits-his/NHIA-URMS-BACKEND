@@ -22,8 +22,8 @@ const HcfFacility = sequelize.define("HcfFacility", {
   facility_code: { type: DataTypes.STRING(100), allowNull: true },
   standby_generator: { type: DataTypes.STRING(40), allowNull: true },
   source_sheet: { type: DataTypes.STRING(80), allowNull: false },
-  zone_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
-  state_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+  zonal_code: { type: DataTypes.STRING(20), allowNull: true },
+  state_code: { type: DataTypes.STRING(20), allowNull: true },
   is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
 }, {
   tableName: "hcf_facilities",
@@ -31,7 +31,7 @@ const HcfFacility = sequelize.define("HcfFacility", {
   indexes: [
     { fields: ["name"] },
     { fields: ["accreditation_code"] },
-    { fields: ["state_id"] },
+    { fields: ["state_code"] },
     { fields: ["state_name"] },
     { fields: ["service_applied_for"] },
     { fields: ["source_sheet"] },

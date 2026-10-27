@@ -119,7 +119,7 @@ const requireReviewAccess = async (req, res, next) => {
 const blockCoordinatorWrites = async (req, res, next) => {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
   const role = String(req.user?.role || "");
-  if (/(^|-)(state|zonal)-coordinator$/.test(role)) {
+  if (role === "zc" || /(^|-)(state|zonal)-coordinator$/.test(role)) {
     if (req.method === "PATCH" && /\/reports\/[^/]+\/status$/.test(req.path)) {
       return requireReviewAccess(req, res, next);
     }

@@ -202,6 +202,7 @@ const patchReportStatus = async (req, report, { providerWorkflow = false } = {})
 
 const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, headerExtras = {}, fixed = {}, options = {}) => {
   const providerWorkflow = !!options.providerWorkflow;
+  const afterPersist = typeof options.afterPersist === "function" ? options.afterPersist : null;
   /**
    * headerExtras: { field: (rawValue) => storedValue } for report-specific header columns.
    * fixed: column values stamped on create and required on every read/write (shared-table variants).
@@ -264,6 +265,9 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
 
       await t.commit();
       const full = await findReport(report.id);
+      if (afterPersist) {
+        afterPersist(full, { action: "create", userId: req.user?.id, fromStatus: null }).catch(() => {});
+      }
       res.status(201).json({ success: true, data: full });
     } catch (err) {
       await t.rollback();
@@ -281,7 +285,8 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
         )),
         ...fixed,
       };
-      if (req.query.activity_module) {
+      // Only apply when the model still has activity_module (legacy shared tables).
+      if (req.query.activity_module && ReportModel.rawAttributes?.activity_module) {
         const mod = String(req.query.activity_module);
         where.activity_module = mod === "engagement-coordination"
           ? { [Op.or]: [mod, null] }
@@ -388,6 +393,9 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
 
       await t.commit();
       const full = await findReport(report.id);
+      if (afterPersist) {
+        afterPersist(full, { action: "update", userId: req.user?.id }).catch(() => {});
+      }
       res.json({ success: true, data: full });
     } catch (err) {
       await t.rollback();
@@ -406,7 +414,17 @@ const makeReportController = (ReportModel, LineModel, refPrefix, mapLine, header
       if (!access.ok) {
         return res.status(access.status).json({ success: false, message: access.message });
       }
+      const fromStatus = report.status;
       await patchReportStatus(req, report, { providerWorkflow });
+      if (afterPersist) {
+        const full = await findReport(report.id);
+        afterPersist(full, {
+          action: req.body?.action || req.body?.status || "status",
+          userId: req.user?.id,
+          fromStatus,
+          note: req.body?.review_note || null,
+        }).catch(() => {});
+      }
       res.json({ success: true, data: report });
     } catch (err) {
       if (err.status === 422) {
@@ -433,6 +451,7 @@ const {
   MonthlyEnrolleeRegister,
   EtmcTmcActionPointRegister, EtmcTmcActionPointLine,
 } = require("../models");
+const { dualWriteEnrolment } = require("../services/redesign/enrolmentDualWrite");
 
 const enrolment = makeReportController(
   EnrolmentReport, EnrolmentReportLine, "ENR",
@@ -461,7 +480,10 @@ const enrolment = makeReportController(
       ? line.program_details
       : (line.program_details ? (() => { try { return JSON.parse(line.program_details); } catch { return null; } })() : null),
     quarter,
-  })
+  }),
+  {},
+  {},
+  { afterPersist: dualWriteEnrolment },
 );
 
 const migration = makeReportController(
@@ -542,25 +564,21 @@ const mapAccreditationLine = (line, reportId) => {
   };
 };
 
-const accreditation = makeReportController(
-  AccreditationReport, AccreditationReportLine, "ACC",
-  mapAccreditationLine,
-  {
-    planned_activities: optNum,
-    activity_module: (v) => (v != null && String(v).trim() ? String(v).trim() : null),
-  },
-  {},
-  { providerWorkflow: true },
-);
+const {
+  ProviderAccreditationReport, ProviderAccreditationReportLine,
+  ProviderReaccreditationReport, ProviderReaccreditationReportLine,
+  ProviderMedicalAuditReport, ProviderMedicalAuditReportLine,
+  ProviderQaInspectionReport, ProviderQaInspectionReportLine,
+} = require("../models/providerManagement");
 
-accreditation.uploadLineFiles = async (req, res, next) => {
+const makeProviderUpload = (ReportModel, LineModel) => async (req, res, next) => {
   try {
-    const report = await AccreditationReport.findByPk(req.params.id);
+    const report = await ReportModel.findByPk(req.params.id);
     const access = await assertRecordAccess(req.user, report);
     if (!access.ok) {
       return res.status(access.status).json({ success: false, message: access.message });
     }
-    const line = await AccreditationReportLine.findOne({
+    const line = await LineModel.findOne({
       where: { id: req.params.lineId, report_id: report.id },
     });
     if (!line) return res.status(404).json({ success: false, message: "Line not found" });
@@ -576,6 +594,54 @@ accreditation.uploadLineFiles = async (req, res, next) => {
     res.json({ success: true, data: line });
   } catch (err) { next(err); }
 };
+
+/** Dedicated tables — one physical table family per Provider Management form */
+const providerAccreditation = makeReportController(
+  ProviderAccreditationReport, ProviderAccreditationReportLine, "PACC",
+  mapAccreditationLine,
+  { planned_activities: optNum },
+  {},
+  { providerWorkflow: true },
+);
+providerAccreditation.uploadLineFiles = makeProviderUpload(
+  ProviderAccreditationReport, ProviderAccreditationReportLine,
+);
+
+const providerReaccreditation = makeReportController(
+  ProviderReaccreditationReport, ProviderReaccreditationReportLine, "PREC",
+  mapAccreditationLine,
+  { planned_activities: optNum },
+  {},
+  { providerWorkflow: true },
+);
+providerReaccreditation.uploadLineFiles = makeProviderUpload(
+  ProviderReaccreditationReport, ProviderReaccreditationReportLine,
+);
+
+const providerMedicalAudits = makeReportController(
+  ProviderMedicalAuditReport, ProviderMedicalAuditReportLine, "PMED",
+  mapAccreditationLine,
+  { planned_activities: optNum },
+  {},
+  { providerWorkflow: true },
+);
+providerMedicalAudits.uploadLineFiles = makeProviderUpload(
+  ProviderMedicalAuditReport, ProviderMedicalAuditReportLine,
+);
+
+const providerQaInspections = makeReportController(
+  ProviderQaInspectionReport, ProviderQaInspectionReportLine, "PQA",
+  mapAccreditationLine,
+  { planned_activities: optNum },
+  {},
+  { providerWorkflow: true },
+);
+providerQaInspections.uploadLineFiles = makeProviderUpload(
+  ProviderQaInspectionReport, ProviderQaInspectionReportLine,
+);
+
+/** @deprecated alias — same as providerAccreditation (dedicated table) */
+const accreditation = providerAccreditation;
 
 const stakeholder = makeReportController(
   StakeholderReport, StakeholderReportLine, "STK",
@@ -1636,7 +1702,9 @@ const complaints = require("./complaintsCompliance.controller");
 
 module.exports = {
   enrolment, migration, cemonc,
-  accreditation, stakeholder, enrolmentDrives, hmoSelection, challenges,
+  accreditation, providerAccreditation, providerReaccreditation,
+  providerMedicalAudits, providerQaInspections,
+  stakeholder, enrolmentDrives, hmoSelection, challenges,
   complaints, igr, sshiaFinancial, expenditureProfile,
   weeklyActionable, contractedServices, ictSupport, adhocAssignment,
   enrolleeRegister, etmcTmcActionPoint,

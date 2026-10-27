@@ -29,8 +29,12 @@ const listUsers = async (req, res, next) => {
     const { limit, offset, page } = paginate(req.query);
     const where = {};
     if (req.query.role) where.role = req.query.role;
-    if (req.query.zone_id) where.zone_id = req.query.zone_id;
-    if (req.query.state_id) where.state_id = req.query.state_id;
+    if (req.query.zonal_code || req.query.zone_id) {
+      where.zonal_code = req.query.zonal_code || req.query.zone_id;
+    }
+    if (req.query.state_code || req.query.state_id) {
+      where.state_code = req.query.state_code || req.query.state_id;
+    }
     if (req.query.search) {
       where[Op.or] = [
         { name: { [Op.like]: `%${req.query.search}%` } },
@@ -44,10 +48,10 @@ const listUsers = async (req, res, next) => {
       offset,
       attributes: { exclude: ["password"] },
       include: [
-        { association: "zone",       attributes: ["id", "zonal_code", "description"] },
-        { association: "state",      attributes: ["id", "code", "description"] },
-        { association: "department", attributes: ["id", "department_code", "name"] },
-        { association: "unit",       attributes: ["id", "unit_code", "name"] },
+        { association: "zone",       attributes: ["zonal_code", "description"] },
+        { association: "state",      attributes: ["code", "description", "zonal_code"] },
+        { association: "department", attributes: ["department_code", "name"] },
+        { association: "unit",       attributes: ["unit_code", "name"] },
       ],
       order: [["createdAt", "DESC"]],
     });
@@ -92,7 +96,10 @@ const ROLE_PREFIX = {
 
 const createUser = async (req, res, next) => {
   try {
-    const { name, email, password, role, zone_id, state_id, department_id, unit_id, access } = req.body;
+    const {
+      name, email, password, role, zonal_code, zone_id, state_code, state_id,
+      department_code, department_id, unit_code, unit_id, access,
+    } = req.body;
     if (!name || !password || !role) {
       return res.status(400).json({ success: false, message: "name, password, role required" });
     }
@@ -103,19 +110,44 @@ const createUser = async (req, res, next) => {
     const staff_id = await generateStaffId(role);
     const hashed = await bcrypt.hash(password, 12);
 
-    let departmentId = department_id || null;
-    if (!departmentId) {
-      const deptCode = getDepartmentCodeForRole(role);
-      if (deptCode) {
-        const dept = await Department.findOne({ where: { department_code: deptCode } });
-        if (dept) departmentId = dept.id;
+    // department_code is PK; also accept body.department_id when it is the code string
+    let deptCode = department_code
+      || (department_id != null && department_id !== "" ? String(department_id) : null)
+      || null;
+    if (deptCode && /^\d+$/.test(deptCode)) {
+      // numeric legacy id is no longer valid
+      deptCode = null;
+    }
+    if (!deptCode) {
+      const inferred = getDepartmentCodeForRole(role);
+      if (inferred) {
+        const dept = await Department.findByPk(inferred);
+        if (dept) deptCode = dept.department_code;
       }
     }
 
-    let unitCode = null;
-    if (unit_id) {
-      const unit = await Unit.findByPk(unit_id);
+    let unitCode = unit_code
+      || (unit_id != null && unit_id !== "" && !/^\d+$/.test(String(unit_id)) ? String(unit_id) : null)
+      || null;
+    if (unitCode) {
+      const unit = await Unit.findByPk(unitCode);
       unitCode = unit?.unit_code || null;
+    }
+
+    let zoneCode = zonal_code
+      || (zone_id != null && zone_id !== "" && !/^\d+$/.test(String(zone_id)) ? String(zone_id) : null)
+      || null;
+    if (zoneCode) {
+      const zone = await ZonalOffice.findByPk(zoneCode);
+      zoneCode = zone?.zonal_code || null;
+    }
+
+    let stateCode = state_code
+      || (state_id != null && state_id !== "" && !/^\d+$/.test(String(state_id)) ? String(state_id) : null)
+      || null;
+    if (stateCode) {
+      const state = await StateOffice.findByPk(stateCode);
+      stateCode = state?.code || null;
     }
 
     let accessPayload = Array.isArray(access) ? access : [];
@@ -125,7 +157,7 @@ const createUser = async (req, res, next) => {
 
     const user = await User.create({
       name, staff_id, email, password: hashed, role,
-      zone_id, state_id, department_id: departmentId, unit_id,
+      zonal_code: zoneCode, state_code: stateCode, department_code: deptCode, unit_code: unitCode,
       functionalities: accessPayload,
     });
     const { password: _pw, ...data } = user.toJSON();
@@ -143,8 +175,41 @@ const updateUser = async (req, res, next) => {
     const user = await User.findByPk(req.params.id);
     if (!user) return notFound(res, "User");
 
-    const { name, email, role, zone_id, state_id, department_id, unit_id, is_active, password } = req.body;
-    const updates = { name, email, role, zone_id, state_id, department_id, unit_id, is_active };
+    const {
+      name, email, role, zonal_code, zone_id, state_code, state_id,
+      department_code, department_id, unit_code, unit_id, is_active, password,
+    } = req.body;
+    const updates = {
+      name, email, role, is_active,
+      zonal_code: zonal_code !== undefined
+        ? zonal_code
+        : (zone_id !== undefined
+          ? (zone_id != null && zone_id !== "" && !/^\d+$/.test(String(zone_id))
+            ? String(zone_id)
+            : null)
+          : undefined),
+      state_code: state_code !== undefined
+        ? state_code
+        : (state_id !== undefined
+          ? (state_id != null && state_id !== "" && !/^\d+$/.test(String(state_id))
+            ? String(state_id)
+            : null)
+          : undefined),
+      department_code: department_code !== undefined
+        ? department_code
+        : (department_id !== undefined
+          ? (department_id != null && department_id !== "" && !/^\d+$/.test(String(department_id))
+            ? String(department_id)
+            : null)
+          : undefined),
+      unit_code: unit_code !== undefined
+        ? unit_code
+        : (unit_id !== undefined
+          ? (unit_id != null && unit_id !== "" && !/^\d+$/.test(String(unit_id))
+            ? String(unit_id)
+            : null)
+          : undefined),
+    };
     if (password) updates.password = await bcrypt.hash(password, 12);
 
     // Remove undefined keys
@@ -213,7 +278,7 @@ const updatePrivileges = async (req, res, next) => {
 const listZones = async (req, res, next) => {
   try {
     const zones = await ZonalOffice.findAll({
-      include: [{ association: "states", attributes: ["id", "code", "description"] }],
+      include: [{ association: "states", attributes: ["code", "description"] }],
       order: [["zonal_code", "ASC"]],
     });
     res.json({ success: true, data: zones });
@@ -240,7 +305,9 @@ const updateZone = async (req, res, next) => {
   try {
     const zone = await ZonalOffice.findByPk(req.params.id);
     if (!zone) return notFound(res, "Zone");
-    await zone.update(req.body);
+    // PK is zonal_code — do not allow changing it via body
+    const { description } = req.body;
+    await zone.update({ description });
     res.json({ success: true, data: zone });
   } catch (err) { next(err); }
 };
@@ -261,10 +328,11 @@ const deleteZone = async (req, res, next) => {
 const listStates = async (req, res, next) => {
   try {
     const where = {};
-    if (req.query.zone_id) where.zonal_id = req.query.zone_id;
+    const zoneKey = req.query.zonal_code || req.query.zone_id;
+    if (zoneKey) where.zonal_code = zoneKey;
     const states = await StateOffice.findAll({
       where,
-      include: [{ association: "zone", attributes: ["id", "zonal_code", "description"] }],
+      include: [{ association: "zone", attributes: ["zonal_code", "description"] }],
       order: [["code", "ASC"]],
     });
     res.json({ success: true, data: states });
@@ -273,14 +341,15 @@ const listStates = async (req, res, next) => {
 
 const createState = async (req, res, next) => {
   try {
-    const { code, description, zonal_id, is_hq, is_zonal_office } = req.body;
-    if (!code || !description || !zonal_id) {
-      return res.status(400).json({ success: false, message: "code, description, zonal_id required" });
+    const { code, description, zonal_code, zonal_id, is_hq, is_zonal_office } = req.body;
+    const zoneCode = zonal_code || zonal_id;
+    if (!code || !description || !zoneCode) {
+      return res.status(400).json({ success: false, message: "code, description, zonal_code required" });
     }
     const state = await StateOffice.create({
       code,
       description,
-      zonal_id,
+      zonal_code: String(zoneCode),
       is_hq: Boolean(is_hq),
       is_zonal_office: Boolean(is_zonal_office),
     });
@@ -297,11 +366,12 @@ const updateState = async (req, res, next) => {
   try {
     const state = await StateOffice.findByPk(req.params.id);
     if (!state) return notFound(res, "State");
-    const { code, description, zonal_id, is_hq, is_zonal_office } = req.body;
+    // PK is code — do not allow changing it via body
+    const { description, zonal_code, zonal_id, is_hq, is_zonal_office } = req.body;
+    const zoneCode = zonal_code !== undefined ? zonal_code : zonal_id;
     await state.update({
-      ...(code !== undefined ? { code } : {}),
       ...(description !== undefined ? { description } : {}),
-      ...(zonal_id !== undefined ? { zonal_id } : {}),
+      ...(zoneCode !== undefined ? { zonal_code: String(zoneCode) } : {}),
       ...(is_hq !== undefined ? { is_hq: Boolean(is_hq) } : {}),
       ...(is_zonal_office !== undefined ? { is_zonal_office: Boolean(is_zonal_office) } : {}),
     });
@@ -325,7 +395,7 @@ const deleteState = async (req, res, next) => {
 const listDepartments = async (req, res, next) => {
   try {
     const depts = await Department.findAll({
-      include: [{ association: "units", attributes: ["id", "unit_code", "name"] }],
+      include: [{ association: "units", attributes: ["unit_code", "name"] }],
       order: [["department_code", "ASC"]],
     });
     res.json({ success: true, data: depts });
@@ -355,7 +425,9 @@ const updateDepartment = async (req, res, next) => {
   try {
     const dept = await Department.findByPk(req.params.id);
     if (!dept) return notFound(res, "Department");
-    await dept.update(req.body);
+    // PK is department_code — do not allow changing it via body
+    const { name, description, location_scope } = req.body;
+    await dept.update({ name, description, location_scope });
     res.json({ success: true, data: dept });
   } catch (err) { next(err); }
 };
@@ -376,10 +448,11 @@ const deleteDepartment = async (req, res, next) => {
 const listUnits = async (req, res, next) => {
   try {
     const where = {};
-    if (req.query.department_id) where.department_id = req.query.department_id;
+    const deptKey = req.query.department_code || req.query.department_id;
+    if (deptKey) where.department_code = deptKey;
     const units = await Unit.findAll({
       where,
-      include: [{ association: "department", attributes: ["id", "department_code", "name"] }],
+      include: [{ association: "department", attributes: ["department_code", "name"] }],
       order: [["unit_code", "ASC"]],
     });
     res.json({ success: true, data: units });
@@ -388,14 +461,17 @@ const listUnits = async (req, res, next) => {
 
 const createUnit = async (req, res, next) => {
   try {
-    const { name, description, department_id } = req.body;
-    if (!name || !department_id) {
-      return res.status(400).json({ success: false, message: "name and department_id required" });
+    const { name, description, department_code, department_id } = req.body;
+    const deptCode = department_code || department_id;
+    if (!name || !deptCode) {
+      return res.status(400).json({ success: false, message: "name and department_code required" });
     }
     // Auto-generate: UNIT-001, UNIT-002, ...
     const count = await Unit.count();
     const unit_code = `UNIT-${String(count + 1).padStart(3, "0")}`;
-    const unit = await Unit.create({ unit_code, name, description, department_id });
+    const unit = await Unit.create({
+      unit_code, name, description, department_code: String(deptCode),
+    });
     res.status(201).json({ success: true, data: unit });
   } catch (err) {
     if (err.name === "SequelizeUniqueConstraintError") {
@@ -409,7 +485,9 @@ const updateUnit = async (req, res, next) => {
   try {
     const unit = await Unit.findByPk(req.params.id);
     if (!unit) return notFound(res, "Unit");
-    await unit.update(req.body);
+    // PK is unit_code — do not allow changing it via body
+    const { name, description, location_role, department_code } = req.body;
+    await unit.update({ name, description, location_role, department_code });
     res.json({ success: true, data: unit });
   } catch (err) { next(err); }
 };

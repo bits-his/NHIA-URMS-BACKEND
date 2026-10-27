@@ -35,7 +35,7 @@ async function seedDepartmentsUnits({ quiet = false } = {}) {
         unit_code: unit.unit_code,
         name: unit.name,
         description: unit.description,
-        department_id: deptRecord.id,
+        department_code: deptRecord.department_code,
       };
       const [unitRecord, unitWasCreated] = await Unit.findOrCreate({
         where: { unit_code: unit.unit_code },
