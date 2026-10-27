@@ -147,6 +147,16 @@ const updateUser = async (req, res, next) => {
     const updates = { name, email, role, zone_id, state_id, department_id, unit_id, is_active };
     if (password) updates.password = await bcrypt.hash(password, 12);
 
+    // Optional FKs: empty string / null clears the assignment; omit (undefined) leaves unchanged
+    for (const key of ["zone_id", "state_id", "department_id", "unit_id"]) {
+      if (!(key in req.body)) {
+        delete updates[key];
+        continue;
+      }
+      const v = req.body[key];
+      updates[key] = v === "" || v === null ? null : Number(v);
+    }
+
     // Remove undefined keys
     Object.keys(updates).forEach(k => updates[k] === undefined && delete updates[k]);
 
