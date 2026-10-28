@@ -112,6 +112,28 @@ if (
   app.get("/api/servicom/complaints-dashboard", authenticate, servicomDash.complaintsDashboard);
 }
 app.use("/api/servicom", notRebuilt("SERVICOM"));
+// Approved state-office packs first; remaining state-office paths stay 503
+if (APPROVED_FORMS.enrolment) {
+  app.use("/api/state-office/enrolment", require("./routes/enrolmentPack.routes"));
+}
+if (APPROVED_FORMS["enrolment-drives"]) {
+  require("./routes/enrolmentDrivePack.routes").mountEnrolmentDrivePack(app);
+}
+if (APPROVED_FORMS["beneficiary-management"]) {
+  require("./routes/beneficiaryPack.routes").mountBeneficiaryPack(app);
+}
+if (APPROVED_FORMS["stakeholder-management"]) {
+  app.use("/api/state-office/stakeholder", require("./routes/stakeholderPack.routes"));
+}
+if (APPROVED_FORMS["provider-management"]) {
+  require("./routes/providerPack.routes").mountProviderPack(app);
+}
+if (APPROVED_FORMS["weekly-compliance"]) {
+  app.use("/api/state-office/weekly-compliance", require("./routes/weeklyCompliancePack.routes"));
+}
+if (APPROVED_FORMS["hmo-indebtedness"]) {
+  require("./routes/hmoIndebtednessPack.routes").mountHmoIndebtednessPack(app);
+}
 app.use("/api/state-office", notRebuilt("State office forms"));
 app.use("/api/sqa", notRebuilt("SQA compliance"));
 if (APPROVED_FORMS["store-management"]) {

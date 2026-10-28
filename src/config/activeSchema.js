@@ -37,7 +37,7 @@ const CORE_TABLES = [
  *
  * "enrolment": {
  *   title: "Enrolment",
- *   tables: ["enrolment_reports", "enrolment_report_lines"],
+ *   tables: ["enrolment_reports"],
  *   routeSegment: "enrolment",
  * }
  */
@@ -67,6 +67,46 @@ const APPROVED_FORMS = {
       "physical_asset_verification_items",
     ],
     routeSegment: "store-management",
+  },
+  enrolment: {
+    title: "Enrolment Activity Reporting",
+    tables: ["enrolment_reports"],
+    routeSegment: "enrolment",
+  },
+  "enrolment-drives": {
+    title: "Enrolment Drives",
+    tables: ["enrolment_drive_reports"],
+    routeSegment: "enrolment-drives",
+  },
+  "beneficiary-management": {
+    title: "Beneficiary Management",
+    tables: ["beneficiary_management_reports", "form_documents"],
+    routeSegment: "beneficiary-management",
+  },
+  "stakeholder-management": {
+    title: "Stakeholder Management",
+    tables: ["stakeholder_reports", "stakeholder_outcomes", "form_documents"],
+    routeSegment: "stakeholder",
+  },
+  "provider-management": {
+    title: "Provider Management",
+    tables: ["provider_management_reports", "form_documents"],
+    routeSegment: "provider-management",
+  },
+  "weekly-compliance": {
+    title: "Weekly Compliance Report",
+    tables: ["weekly_compliance_reports", "weekly_compliance_indicators"],
+    routeSegment: "weekly-compliance",
+  },
+  "hmo-indebtedness": {
+    title: "HMO Indebtedness",
+    tables: [
+      "hmo_indebtedness_reports",
+      "hmo_indebtedness_lines",
+      "hmo_recon_reports",
+      "hmo_recon_lines",
+    ],
+    routeSegment: "hmo-indebtedness",
   },
 };
 

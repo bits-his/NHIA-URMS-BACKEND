@@ -1,21 +1,14 @@
 /**
- * Provider Management dashboards — four levels on one activity register.
+ * Provider Management dashboards — four levels on provider_management_reports.
  * KPIs match the Provider Management Dashboards PPT (plan achievement,
  * facility coverage, activity completion, separate accreditation pipelines).
  */
 const { Op } = require("sequelize");
-const { StateOffice, ZonalOffice } = require("../models");
 const {
-  ProviderAccreditationReport,
-  ProviderAccreditationReportLine,
-  ProviderReaccreditationReport,
-  ProviderReaccreditationReportLine,
-  ProviderMedicalAuditReport,
-  ProviderMedicalAuditReportLine,
-  ProviderQaInspectionReport,
-  ProviderQaInspectionReportLine,
-} = require("../models/providerManagement");
-const { buildStateOfficeListWhere } = require("../utils/stateOfficeScope");
+  ProviderManagementReport,
+  StateOffice,
+  ZonalOffice,
+} = require("../models");
 
 const ACTIVITY_KEYS = ["accreditation", "reaccreditation", "qa-inspections", "medical-audits"];
 const ACTIVITY_LABELS = {
@@ -24,29 +17,6 @@ const ACTIVITY_LABELS = {
   "qa-inspections": "Quality Assurance",
   "medical-audits": "Medical Audit",
 };
-
-const PROVIDER_SOURCES = [
-  {
-    key: "accreditation",
-    Report: ProviderAccreditationReport,
-    Line: ProviderAccreditationReportLine,
-  },
-  {
-    key: "reaccreditation",
-    Report: ProviderReaccreditationReport,
-    Line: ProviderReaccreditationReportLine,
-  },
-  {
-    key: "medical-audits",
-    Report: ProviderMedicalAuditReport,
-    Line: ProviderMedicalAuditReportLine,
-  },
-  {
-    key: "qa-inspections",
-    Report: ProviderQaInspectionReport,
-    Line: ProviderQaInspectionReportLine,
-  },
-];
 
 const COMPLETED_STATUSES = new Set(["Completed", "completed"]);
 
@@ -58,16 +28,6 @@ function num(v) {
 function pct(numr, den) {
   if (!den || den <= 0) return null;
   return Math.round((numr / den) * 1000) / 10;
-}
-
-function parseTpl(raw) {
-  if (!raw) return {};
-  if (typeof raw === "object") return raw;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
 }
 
 function resolvePeriod(query) {
@@ -83,35 +43,13 @@ function monthsForQuarter(q) {
   return [start, start + 1, start + 2];
 }
 
-function activityKeyFromReport(report, tpl) {
-  if (report._provider_activity_key) return report._provider_activity_key;
-  const fromTpl = String(tpl.form_type || "").trim();
-  if (ACTIVITY_KEYS.includes(fromTpl)) return fromTpl;
-  const mod = String(report.activity_module || "").trim();
-  if (ACTIVITY_KEYS.includes(mod)) return mod;
-  const cat = String(tpl.engagement_category || "").toLowerCase();
-  if (cat.includes("re-accredit") || cat.includes("reaccredit")) return "reaccreditation";
-  if (cat.includes("quality") || cat.includes("qa")) return "qa-inspections";
-  if (cat.includes("medical") || cat.includes("audit")) return "medical-audits";
-  if (cat.includes("accredit")) return "accreditation";
-  return "accreditation";
-}
+function buildListWhere(user, query) {
+  const where = {};
+  const zonal = query.zonal_code || query.zone_id;
+  const state = query.state_code || query.state_id;
+  if (zonal) where.zonal_code = zonal;
+  if (state) where.state_code = state;
 
-function programmeOf(tpl) {
-  if (tpl.related_programme) return String(tpl.related_programme);
-  if (Array.isArray(tpl.programs_supported) && tpl.programs_supported[0]) {
-    return String(tpl.programs_supported[0]);
-  }
-  return "Unspecified";
-}
-
-async function loadScopedReports(user, query) {
-  const where = await buildStateOfficeListWhere(user, {
-    zone_id: query.zone_id,
-    state_id: query.state_id,
-    year: query.year,
-    month: query.month && query.month !== "all" ? query.month : undefined,
-  });
   const { year, month, quarter, period } = resolvePeriod(query);
   if (year) where.reporting_year = year;
   if (month) {
@@ -124,30 +62,30 @@ async function loadScopedReports(user, query) {
     const endMonth = ytdYear === now.getFullYear() ? now.getMonth() + 1 : 12;
     where.reporting_year = ytdYear;
     where.reporting_month = { [Op.in]: Array.from({ length: endMonth }, (_, i) => i + 1) };
+  } else if (query.year) {
+    where.reporting_year = Number(query.year);
   }
 
-  const batches = await Promise.all(
-    PROVIDER_SOURCES.map(async ({ key, Report, Line }) => {
-      const rows = await Report.findAll({
-        where,
-        include: [
-          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
-          { model: StateOffice, as: "state", attributes: ["id", "description"] },
-          { model: Line, as: "lines" },
-        ],
-        order: [["reporting_year", "DESC"], ["reporting_month", "DESC"]],
-      });
-      return rows.map((r) => {
-        const json = r.toJSON();
-        json.activity_module = key;
-        json._provider_activity_key = key;
-        return json;
-      });
-    }),
-  );
-  return batches.flat().sort((a, b) => {
-    if (b.reporting_year !== a.reporting_year) return b.reporting_year - a.reporting_year;
-    return b.reporting_month - a.reporting_month;
+  // Role geo defaults (same pattern as providerPack.listReports)
+  if (!zonal && user?.zonal_code && !["sdo", "dg-ceo", "hq-department", "admin"].includes(user.role)) {
+    where.zonal_code = user.zonal_code;
+  }
+  if (!state && user?.state_code && String(user.role || "").includes("state")) {
+    where.state_code = user.state_code;
+  }
+
+  return where;
+}
+
+async function loadScopedReports(user, query) {
+  const where = buildListWhere(user, query);
+  return ProviderManagementReport.findAll({
+    where,
+    include: [
+      { model: ZonalOffice, as: "zone", attributes: ["zonal_code", "description"] },
+      { model: StateOffice, as: "state", attributes: ["code", "description"] },
+    ],
+    order: [["reporting_year", "DESC"], ["reporting_month", "DESC"]],
   });
 }
 
@@ -164,71 +102,53 @@ function flattenActivities(reports, filters = {}) {
 
   const rows = [];
   for (const report of reports) {
-    for (const line of report.lines || []) {
-      const tpl = parseTpl(line.activity_template);
-      const activity = activityKeyFromReport(report, tpl);
-      const programme = programmeOf(tpl);
-      const activityStatus = tpl.activity_status || "Unknown";
-      if (programmeFilter && programme !== programmeFilter) continue;
-      if (activityFilter && activity !== activityFilter) continue;
-      if (statusFilter && activityStatus !== statusFilter) continue;
+    const json = typeof report.toJSON === "function" ? report.toJSON() : report;
+    const activity = ACTIVITY_KEYS.includes(json.form_type) ? json.form_type : "accreditation";
+    const programme = json.related_programme ? String(json.related_programme) : "Unspecified";
+    const activityStatus = json.activity_status || "Unknown";
+    if (programmeFilter && programme !== programmeFilter) continue;
+    if (activityFilter && activity !== activityFilter) continue;
+    if (statusFilter && activityStatus !== statusFilter) continue;
 
-      const planned = num(tpl.facilities_planned ?? tpl.planned_target_stakeholders ?? line.secondary_count);
-      const covered = num(tpl.facilities_covered ?? tpl.stakeholders_engaged ?? line.primary_count);
-      const totalState = num(tpl.total_facilities_in_state);
-      const awaitingAcc = num(
-        tpl.metrics?.["Number of Facilities Awaiting Accreditation"]
-        ?? tpl.metrics?.["Number of PHCs Awaiting Accreditation"]
-        ?? 0,
-      );
-      const awaitingRe = num(
-        tpl.metrics?.["Number of Facilities Awaiting Re-accreditation"]
-        ?? tpl.metrics?.["Number of PHCs Awaiting Re-accreditation"]
-        ?? 0,
-      );
-      // Do not treat "covered/visited" as accredited — keep pipelines separate (PPT rule).
-      const accredited = activity === "accreditation"
-        ? num(tpl.facilities_accredited ?? tpl.phcs_accredited)
-        : 0;
-      const reaccredited = activity === "reaccreditation"
-        ? num(tpl.facilities_reaccredited ?? tpl.phcs_reaccredited)
-        : 0;
-      const isBhcpf = programme === "BHCPF";
-      const bhcpfAwaitAcc = isBhcpf
-        ? num(tpl.metrics?.["Number of PHCs Awaiting Accreditation"] ?? awaitingAcc)
-        : 0;
-      const bhcpfAwaitRe = isBhcpf
-        ? num(tpl.metrics?.["Number of PHCs Awaiting Re-accreditation"] ?? awaitingRe)
-        : 0;
+    const planned = num(json.facilities_planned);
+    const covered = num(json.facilities_covered);
+    const totalState = num(json.total_facilities_in_state);
+    const awaitingAcc = num(json.awaiting_accreditation ?? json.phcs_awaiting_accreditation);
+    const awaitingRe = num(json.awaiting_reaccreditation ?? json.phcs_awaiting_reaccreditation);
+    // Flat pack stores delivered volume in facilities_covered for the activity type.
+    const accredited = activity === "accreditation" ? covered : 0;
+    const reaccredited = activity === "reaccreditation" ? covered : 0;
+    const isBhcpf = programme === "BHCPF";
+    const bhcpfAwaitAcc = isBhcpf ? num(json.phcs_awaiting_accreditation ?? awaitingAcc) : 0;
+    const bhcpfAwaitRe = isBhcpf ? num(json.phcs_awaiting_reaccreditation ?? awaitingRe) : 0;
 
-      rows.push({
-        report_id: report.id,
-        reference_id: report.reference_id,
-        report_status: report.status,
-        zone_id: report.zone_id,
-        state_id: report.state_id,
-        zone: report.zone?.description || `Zone ${report.zone_id}`,
-        state: report.state?.description || `State ${report.state_id}`,
-        year: report.reporting_year,
-        month: report.reporting_month,
-        activity,
-        activity_label: ACTIVITY_LABELS[activity] || activity,
-        programme,
-        activity_status: activityStatus,
-        planned,
-        covered,
-        total_state: totalState,
-        awaiting_accreditation: activity === "accreditation" ? awaitingAcc : 0,
-        awaiting_reaccreditation: activity === "reaccreditation" ? awaitingRe : 0,
-        accredited,
-        reaccredited,
-        bhcpf_phcs_accredited: isBhcpf && activity === "accreditation" ? num(tpl.phcs_accredited ?? accredited) : 0,
-        bhcpf_phcs_reaccredited: isBhcpf && activity === "reaccreditation" ? num(tpl.phcs_reaccredited ?? reaccredited) : 0,
-        bhcpf_awaiting_accreditation: activity === "accreditation" ? bhcpfAwaitAcc : 0,
-        bhcpf_awaiting_reaccreditation: activity === "reaccreditation" ? bhcpfAwaitRe : 0,
-        completed: COMPLETED_STATUSES.has(activityStatus),
-      });
-    }
+    rows.push({
+      report_id: json.reference_id,
+      reference_id: json.reference_id,
+      report_status: json.status,
+      zone_id: json.zonal_code,
+      state_id: json.state_code,
+      zone: json.zone?.description || `Zone ${json.zonal_code || "—"}`,
+      state: json.state?.description || `State ${json.state_code || "—"}`,
+      year: json.reporting_year,
+      month: json.reporting_month,
+      activity,
+      activity_label: ACTIVITY_LABELS[activity] || activity,
+      programme,
+      activity_status: activityStatus,
+      planned,
+      covered,
+      total_state: totalState,
+      awaiting_accreditation: activity === "accreditation" ? awaitingAcc : 0,
+      awaiting_reaccreditation: activity === "reaccreditation" ? awaitingRe : 0,
+      accredited,
+      reaccredited,
+      bhcpf_phcs_accredited: isBhcpf && activity === "accreditation" ? covered : 0,
+      bhcpf_phcs_reaccredited: isBhcpf && activity === "reaccreditation" ? covered : 0,
+      bhcpf_awaiting_accreditation: activity === "accreditation" ? bhcpfAwaitAcc : 0,
+      bhcpf_awaiting_reaccreditation: activity === "reaccreditation" ? bhcpfAwaitRe : 0,
+      completed: COMPLETED_STATUSES.has(activityStatus),
+    });
   }
   return rows;
 }
@@ -273,7 +193,6 @@ function previousPeriodQuery(query) {
     next.month = "all";
     next.period = undefined;
   } else if (period === "ytd") {
-    // Same YTD window in the previous calendar year
     next.year = String(year - 1);
     next.period = "ytd";
     next.month = "all";
@@ -556,7 +475,6 @@ function buildPayload(rows, level) {
     if (r.completed) g.completed_records += 1;
   }
 
-  // Pad Jan–Dec for the selected year so the monthly trend always has a continuous series
   const yearsInRows = [...new Set([...monthMap.values()].map((g) => g.year))];
   const padYear = yearsInRows.length === 1
     ? yearsInRows[0]
@@ -594,7 +512,6 @@ function buildPayload(rows, level) {
       bhcpf_phcs_accredited: g.bhcpf_phcs_accredited,
       planned_records: g.planned_records,
       completed_records: g.completed_records,
-      // Monthly activity trend uses activity-record counts (not facility sums)
       completed: g.completed_records,
     }));
 

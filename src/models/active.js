@@ -188,6 +188,457 @@ const FORM_MODEL_LOADERS = {
     return [ServicomSatisfactionSurvey, ServicomSatisfactionSurveyResponse];
   },
 
+  enrolment: () => {
+    const EnrolmentReport = require("./enrolment/EnrolmentReport");
+
+    ZonalOffice.hasMany(EnrolmentReport, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "enrolment_reports",
+    });
+    EnrolmentReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(EnrolmentReport, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "enrolment_reports",
+    });
+    EnrolmentReport.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+    Department.hasMany(EnrolmentReport, {
+      foreignKey: "department_code",
+      sourceKey: "department_code",
+      as: "enrolment_reports",
+    });
+    EnrolmentReport.belongsTo(Department, {
+      foreignKey: "department_code",
+      targetKey: "department_code",
+      as: "department",
+    });
+    Unit.hasMany(EnrolmentReport, {
+      foreignKey: "unit_code",
+      sourceKey: "unit_code",
+      as: "enrolment_reports",
+    });
+    EnrolmentReport.belongsTo(Unit, {
+      foreignKey: "unit_code",
+      targetKey: "unit_code",
+      as: "unit",
+    });
+    User.hasMany(EnrolmentReport, {
+      foreignKey: "created_by_user_id",
+      as: "enrolment_reports",
+    });
+    EnrolmentReport.belongsTo(User, {
+      foreignKey: "created_by_user_id",
+      as: "created_by_user",
+    });
+
+    return [EnrolmentReport];
+  },
+
+  "enrolment-drives": () => {
+    const EnrolmentDriveReport = require("./enrolment/EnrolmentDriveReport");
+
+    ZonalOffice.hasMany(EnrolmentDriveReport, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "enrolment_drive_reports",
+    });
+    EnrolmentDriveReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(EnrolmentDriveReport, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "enrolment_drive_reports",
+    });
+    EnrolmentDriveReport.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+    Department.hasMany(EnrolmentDriveReport, {
+      foreignKey: "department_code",
+      sourceKey: "department_code",
+      as: "enrolment_drive_reports",
+    });
+    EnrolmentDriveReport.belongsTo(Department, {
+      foreignKey: "department_code",
+      targetKey: "department_code",
+      as: "department",
+    });
+    Unit.hasMany(EnrolmentDriveReport, {
+      foreignKey: "unit_code",
+      sourceKey: "unit_code",
+      as: "enrolment_drive_reports",
+    });
+    EnrolmentDriveReport.belongsTo(Unit, {
+      foreignKey: "unit_code",
+      targetKey: "unit_code",
+      as: "unit",
+    });
+    User.hasMany(EnrolmentDriveReport, {
+      foreignKey: "created_by_user_id",
+      as: "enrolment_drive_reports",
+    });
+    EnrolmentDriveReport.belongsTo(User, {
+      foreignKey: "created_by_user_id",
+      as: "created_by_user",
+    });
+
+    return [EnrolmentDriveReport];
+  },
+
+  "beneficiary-management": () => {
+    const BeneficiaryManagementReport = require("./beneficiary/BeneficiaryManagementReport");
+    const FormDocument = require("./shared/FormDocument");
+    const EnrolmentReport = require("./enrolment/EnrolmentReport");
+
+    ZonalOffice.hasMany(BeneficiaryManagementReport, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "beneficiary_management_reports",
+    });
+    BeneficiaryManagementReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(BeneficiaryManagementReport, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "beneficiary_management_reports",
+    });
+    BeneficiaryManagementReport.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+    Department.hasMany(BeneficiaryManagementReport, {
+      foreignKey: "department_code",
+      sourceKey: "department_code",
+      as: "beneficiary_management_reports",
+    });
+    BeneficiaryManagementReport.belongsTo(Department, {
+      foreignKey: "department_code",
+      targetKey: "department_code",
+      as: "department",
+    });
+    Unit.hasMany(BeneficiaryManagementReport, {
+      foreignKey: "unit_code",
+      sourceKey: "unit_code",
+      as: "beneficiary_management_reports",
+    });
+    BeneficiaryManagementReport.belongsTo(Unit, {
+      foreignKey: "unit_code",
+      targetKey: "unit_code",
+      as: "unit",
+    });
+    User.hasMany(BeneficiaryManagementReport, {
+      foreignKey: "created_by_user_id",
+      as: "beneficiary_management_reports",
+    });
+    BeneficiaryManagementReport.belongsTo(User, {
+      foreignKey: "created_by_user_id",
+      as: "created_by_user",
+    });
+    EnrolmentReport.hasMany(BeneficiaryManagementReport, {
+      foreignKey: "enrolment_reference_id",
+      sourceKey: "reference_id",
+      as: "beneficiary_management_reports",
+    });
+    BeneficiaryManagementReport.belongsTo(EnrolmentReport, {
+      foreignKey: "enrolment_reference_id",
+      targetKey: "reference_id",
+      as: "enrolment",
+    });
+
+    return [BeneficiaryManagementReport, FormDocument];
+  },
+
+  "stakeholder-management": () => {
+    const StakeholderReport = require("./stakeholder/StakeholderReport");
+    const StakeholderOutcome = require("./stakeholder/StakeholderOutcome");
+    const FormDocument = require("./shared/FormDocument");
+
+    ZonalOffice.hasMany(StakeholderReport, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "stakeholder_reports",
+    });
+    StakeholderReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(StakeholderReport, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "stakeholder_reports",
+    });
+    StakeholderReport.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+    Department.hasMany(StakeholderReport, {
+      foreignKey: "department_code",
+      sourceKey: "department_code",
+      as: "stakeholder_reports",
+    });
+    StakeholderReport.belongsTo(Department, {
+      foreignKey: "department_code",
+      targetKey: "department_code",
+      as: "department",
+    });
+    Unit.hasMany(StakeholderReport, {
+      foreignKey: "unit_code",
+      sourceKey: "unit_code",
+      as: "stakeholder_reports",
+    });
+    StakeholderReport.belongsTo(Unit, {
+      foreignKey: "unit_code",
+      targetKey: "unit_code",
+      as: "unit",
+    });
+    User.hasMany(StakeholderReport, {
+      foreignKey: "created_by_user_id",
+      as: "stakeholder_reports",
+    });
+    StakeholderReport.belongsTo(User, {
+      foreignKey: "created_by_user_id",
+      as: "created_by_user",
+    });
+    StakeholderReport.hasMany(StakeholderOutcome, {
+      foreignKey: "report_reference_id",
+      sourceKey: "reference_id",
+      as: "outcomes",
+      onDelete: "CASCADE",
+    });
+    StakeholderOutcome.belongsTo(StakeholderReport, {
+      foreignKey: "report_reference_id",
+      targetKey: "reference_id",
+      as: "report",
+    });
+
+    return [StakeholderReport, StakeholderOutcome, FormDocument];
+  },
+
+  "provider-management": () => {
+    const ProviderManagementReport = require("./provider/ProviderManagementReport");
+    const FormDocument = require("./shared/FormDocument");
+
+    ZonalOffice.hasMany(ProviderManagementReport, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "provider_management_reports",
+    });
+    ProviderManagementReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(ProviderManagementReport, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "provider_management_reports",
+    });
+    ProviderManagementReport.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+    Department.hasMany(ProviderManagementReport, {
+      foreignKey: "department_code",
+      sourceKey: "department_code",
+      as: "provider_management_reports",
+    });
+    ProviderManagementReport.belongsTo(Department, {
+      foreignKey: "department_code",
+      targetKey: "department_code",
+      as: "department",
+    });
+    Unit.hasMany(ProviderManagementReport, {
+      foreignKey: "unit_code",
+      sourceKey: "unit_code",
+      as: "provider_management_reports",
+    });
+    ProviderManagementReport.belongsTo(Unit, {
+      foreignKey: "unit_code",
+      targetKey: "unit_code",
+      as: "unit",
+    });
+    User.hasMany(ProviderManagementReport, {
+      foreignKey: "created_by_user_id",
+      as: "provider_management_reports",
+    });
+    ProviderManagementReport.belongsTo(User, {
+      foreignKey: "created_by_user_id",
+      as: "created_by_user",
+    });
+
+    return [ProviderManagementReport, FormDocument];
+  },
+
+  "weekly-compliance": () => {
+    const WeeklyComplianceReport = require("./weeklyCompliance/WeeklyComplianceReport");
+    const WeeklyComplianceIndicator = require("./weeklyCompliance/WeeklyComplianceIndicator");
+
+    ZonalOffice.hasMany(WeeklyComplianceReport, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "weekly_compliance_reports",
+    });
+    WeeklyComplianceReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(WeeklyComplianceReport, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "weekly_compliance_reports",
+    });
+    WeeklyComplianceReport.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+    Department.hasMany(WeeklyComplianceReport, {
+      foreignKey: "department_code",
+      sourceKey: "department_code",
+      as: "weekly_compliance_reports",
+    });
+    WeeklyComplianceReport.belongsTo(Department, {
+      foreignKey: "department_code",
+      targetKey: "department_code",
+      as: "department",
+    });
+    Unit.hasMany(WeeklyComplianceReport, {
+      foreignKey: "unit_code",
+      sourceKey: "unit_code",
+      as: "weekly_compliance_reports",
+    });
+    WeeklyComplianceReport.belongsTo(Unit, {
+      foreignKey: "unit_code",
+      targetKey: "unit_code",
+      as: "unit",
+    });
+    User.hasMany(WeeklyComplianceReport, {
+      foreignKey: "created_by_user_id",
+      as: "weekly_compliance_reports",
+    });
+    WeeklyComplianceReport.belongsTo(User, {
+      foreignKey: "created_by_user_id",
+      as: "created_by_user",
+    });
+    WeeklyComplianceReport.hasMany(WeeklyComplianceIndicator, {
+      foreignKey: "report_reference_id",
+      sourceKey: "reference_id",
+      as: "indicators",
+      onDelete: "CASCADE",
+    });
+    WeeklyComplianceIndicator.belongsTo(WeeklyComplianceReport, {
+      foreignKey: "report_reference_id",
+      targetKey: "reference_id",
+      as: "report",
+    });
+
+    return [WeeklyComplianceReport, WeeklyComplianceIndicator];
+  },
+
+  "hmo-indebtedness": () => {
+    const HmoIndebtednessReport = require("./hmoIndebtedness/HmoIndebtednessReport");
+    const HmoIndebtednessLine = require("./hmoIndebtedness/HmoIndebtednessLine");
+    const HmoReconReport = require("./hmoIndebtedness/HmoReconReport");
+    const HmoReconLine = require("./hmoIndebtedness/HmoReconLine");
+
+    ZonalOffice.hasMany(HmoIndebtednessReport, {
+      foreignKey: "zonal_code", sourceKey: "zonal_code", as: "hmo_indebtedness_reports",
+    });
+    HmoIndebtednessReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code", targetKey: "zonal_code", as: "zone",
+    });
+    StateOffice.hasMany(HmoIndebtednessReport, {
+      foreignKey: "state_code", sourceKey: "code", as: "hmo_indebtedness_reports",
+    });
+    HmoIndebtednessReport.belongsTo(StateOffice, {
+      foreignKey: "state_code", targetKey: "code", as: "state",
+    });
+    Department.hasMany(HmoIndebtednessReport, {
+      foreignKey: "department_code", sourceKey: "department_code", as: "hmo_indebtedness_reports",
+    });
+    HmoIndebtednessReport.belongsTo(Department, {
+      foreignKey: "department_code", targetKey: "department_code", as: "department",
+    });
+    Unit.hasMany(HmoIndebtednessReport, {
+      foreignKey: "unit_code", sourceKey: "unit_code", as: "hmo_indebtedness_reports",
+    });
+    HmoIndebtednessReport.belongsTo(Unit, {
+      foreignKey: "unit_code", targetKey: "unit_code", as: "unit",
+    });
+    User.hasMany(HmoIndebtednessReport, {
+      foreignKey: "created_by_user_id", as: "hmo_indebtedness_reports",
+    });
+    HmoIndebtednessReport.belongsTo(User, {
+      foreignKey: "created_by_user_id", as: "created_by_user",
+    });
+    HmoIndebtednessReport.hasMany(HmoIndebtednessLine, {
+      foreignKey: "report_reference_id", sourceKey: "reference_id", as: "lines", onDelete: "CASCADE",
+    });
+    HmoIndebtednessLine.belongsTo(HmoIndebtednessReport, {
+      foreignKey: "report_reference_id", targetKey: "reference_id", as: "report",
+    });
+
+    ZonalOffice.hasMany(HmoReconReport, {
+      foreignKey: "zonal_code", sourceKey: "zonal_code", as: "hmo_recon_reports",
+    });
+    HmoReconReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code", targetKey: "zonal_code", as: "zone",
+    });
+    StateOffice.hasMany(HmoReconReport, {
+      foreignKey: "state_code", sourceKey: "code", as: "hmo_recon_reports",
+    });
+    HmoReconReport.belongsTo(StateOffice, {
+      foreignKey: "state_code", targetKey: "code", as: "state",
+    });
+    Department.hasMany(HmoReconReport, {
+      foreignKey: "department_code", sourceKey: "department_code", as: "hmo_recon_reports",
+    });
+    HmoReconReport.belongsTo(Department, {
+      foreignKey: "department_code", targetKey: "department_code", as: "department",
+    });
+    Unit.hasMany(HmoReconReport, {
+      foreignKey: "unit_code", sourceKey: "unit_code", as: "hmo_recon_reports",
+    });
+    HmoReconReport.belongsTo(Unit, {
+      foreignKey: "unit_code", targetKey: "unit_code", as: "unit",
+    });
+    User.hasMany(HmoReconReport, {
+      foreignKey: "created_by_user_id", as: "hmo_recon_reports",
+    });
+    HmoReconReport.belongsTo(User, {
+      foreignKey: "created_by_user_id", as: "created_by_user",
+    });
+    HmoReconReport.hasMany(HmoReconLine, {
+      foreignKey: "report_reference_id", sourceKey: "reference_id", as: "lines", onDelete: "CASCADE",
+    });
+    HmoReconLine.belongsTo(HmoReconReport, {
+      foreignKey: "report_reference_id", targetKey: "reference_id", as: "report",
+    });
+
+    return [HmoIndebtednessReport, HmoIndebtednessLine, HmoReconReport, HmoReconLine];
+  },
+
   "store-management": () => {
     const StoreInventoryItem = require("./store/StoreInventoryItem");
     const StockMovement = require("./store/StockMovement");
@@ -376,9 +827,19 @@ function allActiveModels() {
 }
 
 async function syncActiveSchema({ alter = true } = {}) {
+  const sequelize = require("../config/database");
+  const seen = new Set();
   for (const model of allActiveModels()) {
+    const name = model.tableName;
+    if (seen.has(name)) continue;
+    seen.add(name);
     await model.sync({ alter });
-    console.log(`  synced ${model.tableName}`);
+    console.log(`  synced ${name}`);
+  }
+  if (APPROVED_FORMS["hmo-indebtedness"]) {
+    const { ensureHmoIndebtednessViews } = require("../utils/hmoIndebtednessViews");
+    await ensureHmoIndebtednessViews(sequelize);
+    console.log("  synced views hmo_indebtedness_facts_v, hmo_indebtedness_master_v");
   }
 }
 
@@ -405,6 +866,32 @@ const PhysicalAssetVerification =
   approvedFormModels.find((m) => m.tableName === "physical_asset_verifications") || null;
 const PhysicalAssetVerificationItem =
   approvedFormModels.find((m) => m.tableName === "physical_asset_verification_items") || null;
+const EnrolmentReport =
+  approvedFormModels.find((m) => m.tableName === "enrolment_reports") || null;
+const EnrolmentDriveReport =
+  approvedFormModels.find((m) => m.tableName === "enrolment_drive_reports") || null;
+const BeneficiaryManagementReport =
+  approvedFormModels.find((m) => m.tableName === "beneficiary_management_reports") || null;
+const StakeholderReport =
+  approvedFormModels.find((m) => m.tableName === "stakeholder_reports") || null;
+const StakeholderOutcome =
+  approvedFormModels.find((m) => m.tableName === "stakeholder_outcomes") || null;
+const ProviderManagementReport =
+  approvedFormModels.find((m) => m.tableName === "provider_management_reports") || null;
+const WeeklyComplianceReport =
+  approvedFormModels.find((m) => m.tableName === "weekly_compliance_reports") || null;
+const WeeklyComplianceIndicator =
+  approvedFormModels.find((m) => m.tableName === "weekly_compliance_indicators") || null;
+const HmoIndebtednessReport =
+  approvedFormModels.find((m) => m.tableName === "hmo_indebtedness_reports") || null;
+const HmoIndebtednessLine =
+  approvedFormModels.find((m) => m.tableName === "hmo_indebtedness_lines") || null;
+const HmoReconReport =
+  approvedFormModels.find((m) => m.tableName === "hmo_recon_reports") || null;
+const HmoReconLine =
+  approvedFormModels.find((m) => m.tableName === "hmo_recon_lines") || null;
+const FormDocument =
+  approvedFormModels.find((m) => m.tableName === "form_documents") || null;
 
 module.exports = {
   CORE_TABLES,
@@ -439,4 +926,17 @@ module.exports = {
   StoreAsset,
   PhysicalAssetVerification,
   PhysicalAssetVerificationItem,
+  EnrolmentReport,
+  EnrolmentDriveReport,
+  BeneficiaryManagementReport,
+  StakeholderReport,
+  StakeholderOutcome,
+  ProviderManagementReport,
+  WeeklyComplianceReport,
+  WeeklyComplianceIndicator,
+  HmoIndebtednessReport,
+  HmoIndebtednessLine,
+  HmoReconReport,
+  HmoReconLine,
+  FormDocument,
 };

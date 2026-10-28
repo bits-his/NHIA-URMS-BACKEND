@@ -1,6 +1,6 @@
 /**
- * Seed sample Weekly Compliance Reports (Enforcement) for every state.
- * Idempotent: skips facility + week combinations that already exist.
+ * Seed Weekly Compliance reports + indicator child rows.
+ * Drops legacy state_office_weekly_compliance when present.
  *
  *   npm run db:seed-weekly-compliance
  *   node src/scripts/seedWeeklyCompliance.js --weeks 6 --per-state 3
@@ -8,9 +8,12 @@
 require("dotenv").config();
 const { Op } = require("sequelize");
 const sequelize = require("../config/database");
+const { syncActiveSchema } = require("../models/active");
 const {
-  StateOffice, User, NhiaAccreditedProvider, StateOfficeWeeklyCompliance,
+  StateOffice, User, NhiaAccreditedProvider,
+  WeeklyComplianceReport, WeeklyComplianceIndicator,
 } = require("../models");
+const { INDICATORS: CATALOG } = require("../utils/weeklyComplianceTypes");
 
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -19,19 +22,11 @@ const arg = (name, fallback) => {
 const WEEKS = arg("weeks", 5);
 const PER_STATE = arg("per-state", 2);
 
-const INDICATORS = [
-  { key: "services_without_denial" },
-  { key: "illegal_copayments", yesIsBreach: true },
-  { key: "benefit_package_adhered" },
-  { key: "emergency_without_authorization" },
-  { key: "referral_protocols_followed" },
-  { key: "prescribed_medicines_available" },
-  { key: "nhia_medicines_list_used" },
-  { key: "stockout_alternative" },
-  { key: "timely_claims_submission" },
-  { key: "prompt_payment_receipt" },
-  { key: "hmo_disputes", yesIsBreach: true },
-];
+const INDICATORS = CATALOG.map((i) => ({
+  key: i.indicator_key,
+  section_key: i.section_key,
+  yesIsBreach: ["illegal_copayments", "hmo_disputes"].includes(i.indicator_key),
+}));
 
 const BREACH_REMARKS = {
   services_without_denial: "Enrolees reported waiting over 3 hours before being attended to.",
@@ -61,7 +56,6 @@ const OK_REMARKS = {
   hmo_disputes: "No disputes recorded this week.",
 };
 
-/** Small deterministic PRNG so re-runs produce the same answers. */
 function rng(seed) {
   let s = seed >>> 0;
   return () => {
@@ -95,15 +89,27 @@ function facilityType(raw, rand) {
   return ["Public", "Private", "Private", "Faith-Based"][Math.floor(rand() * 4)];
 }
 
-function buildIndicators(rand, quality) {
-  const out = {};
-  for (const ind of INDICATORS) {
+function buildIndicatorRows(rand, quality) {
+  return INDICATORS.map((ind, i) => {
     const breach = rand() > quality;
     const answer = ind.yesIsBreach ? (breach ? "yes" : "no") : (breach ? "no" : "yes");
-    const remarks = breach ? BREACH_REMARKS[ind.key] : (rand() < 0.35 ? OK_REMARKS[ind.key] : "");
-    out[ind.key] = { answer, remarks };
-  }
-  return out;
+    const remarks = breach ? BREACH_REMARKS[ind.key] : (rand() < 0.35 ? OK_REMARKS[ind.key] : null);
+    return {
+      sn: i + 1,
+      section_key: ind.section_key,
+      indicator_key: ind.key,
+      answer,
+      remarks: remarks || null,
+    };
+  });
+}
+
+async function dropLegacy() {
+  const qi = sequelize.getQueryInterface();
+  try {
+    await qi.dropTable("state_office_weekly_compliance");
+    console.log("Dropped state_office_weekly_compliance");
+  } catch (_) { /* */ }
 }
 
 async function providersForState(state, limit) {
@@ -114,40 +120,50 @@ async function providersForState(state, limit) {
   });
   if (byAddress.length >= limit) return byAddress;
   const extra = await NhiaAccreditedProvider.findAll({
-    where: { provider_type: "hcp", id: { [Op.notIn]: byAddress.map((p) => p.id).concat(0) } },
+    where: {
+      provider_type: "hcp",
+      id: { [Op.notIn]: byAddress.map((p) => p.id).concat(0) },
+    },
     limit: limit - byAddress.length,
-    offset: state.id * 7,
     order: [["id", "ASC"]],
   });
   return [...byAddress, ...extra];
 }
 
 async function officerForState(state) {
+  if (!state.code) return null;
   const users = await User.findAll({
-    where: { state_id: state.id },
+    where: { state_code: state.code },
     attributes: ["name", "staff_id", "role"],
     order: [["id", "ASC"]],
   });
   return users.find((u) => /^enf-reporting-officer$/i.test(u.role || ""))
     || users.find((u) => /^(enf|enforcement)-/i.test(u.role || ""))
     || users.find((u) => /reporting-officer/i.test(u.role || ""))
-    || users[0] || null;
+    || users[0]
+    || null;
 }
 
 async function nextRefSeq() {
   const year = new Date().getFullYear();
-  const last = await StateOfficeWeeklyCompliance.findOne({
+  const last = await WeeklyComplianceReport.findOne({
     where: { reference_id: { [Op.like]: `WCR-${year}-%` } },
     order: [["reference_id", "DESC"]],
   });
-  return { year, seq: last ? Number(last.reference_id.split("-")[2]) : 0 };
+  return { year, seq: last ? Number(String(last.reference_id).split("-")[2]) : 0 };
 }
 
 (async () => {
   await sequelize.authenticate();
-  await StateOfficeWeeklyCompliance.sync();
+  await dropLegacy();
+  console.log("Syncing active schema…");
+  await syncActiveSchema({ alter: true });
 
-  const states = await StateOffice.findAll({ order: [["id", "ASC"]] });
+  if (!WeeklyComplianceReport || !WeeklyComplianceIndicator) {
+    throw new Error("Weekly compliance models not loaded — ensure APPROVED_FORMS['weekly-compliance'] is set");
+  }
+
+  const states = await StateOffice.findAll({ order: [["code", "ASC"]] });
   const weeks = Array.from({ length: WEEKS }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - 7 * i);
@@ -159,54 +175,70 @@ async function nextRefSeq() {
   let skipped = 0;
 
   for (const state of states) {
-    if (!state.zonal_id) continue;
+    const zonal = state.zonal_code;
+    if (!zonal) continue;
     const providers = await providersForState(state, PER_STATE);
     const officer = await officerForState(state);
     const officerName = officer?.name || `${state.description} Compliance Officer`;
-    const staffId = officer ? ["Compliance Officer", officer.staff_id].filter(Boolean).join(" / ") : "Compliance Officer";
+    const staffId = officer
+      ? ["Compliance Officer", officer.staff_id].filter(Boolean).join(" / ")
+      : "Compliance Officer";
 
     for (const provider of providers) {
       for (const week of weeks) {
-        const exists = await StateOfficeWeeklyCompliance.findOne({
-          where: { state_id: state.id, facility_id: String(provider.id), reporting_week: week },
+        const nhia = provider.provider_code || null;
+        const exists = await WeeklyComplianceReport.findOne({
+          where: nhia
+            ? { state_code: state.code, reporting_week: week, nhia_code: nhia }
+            : { state_code: state.code, reporting_week: week, facility_id: String(provider.id) },
         });
         if (exists) { skipped += 1; continue; }
 
-        const rand = rng(state.id * 100003 + provider.id * 31 + Number(week.slice(-2)));
+        const seedBase = (state.code || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+        const rand = rng(seedBase * 100003 + provider.id * 31 + Number(week.slice(-2)));
         const quality = 0.6 + rand() * 0.38;
         const monday = weekMonday(week);
         const submission = new Date(monday);
         submission.setUTCDate(monday.getUTCDate() + 4 + Math.floor(rand() * 3));
+        const month = monday.getUTCMonth() + 1;
 
         seq += 1;
-        await StateOfficeWeeklyCompliance.create({
-          reference_id: `WCR-${year}-${String(seq).padStart(5, "0")}`,
-          zone_id: state.zonal_id,
-          state_id: state.id,
+        const reference_id = `WCR-${year}-${String(seq).padStart(5, "0")}`;
+        await WeeklyComplianceReport.create({
+          reference_id,
+          zonal_code: zonal,
+          state_code: state.code,
           reporting_year: monday.getUTCFullYear(),
-          reporting_month: monday.getUTCMonth() + 1,
+          reporting_month: month,
+          quarter: Math.ceil(month / 3),
           reporting_week: week,
           facility_id: String(provider.id),
           facility_name: provider.name,
-          nhia_code: provider.provider_code,
+          nhia_code: nhia,
           facility_type: facilityType(provider.facility_type, rand),
           facility_address: provider.address,
           compliance_officer: officerName,
           designation_staff_id: staffId,
           submission_date: submission.toISOString().slice(0, 10),
-          indicators: buildIndicators(rand, quality),
           submitted_by: officerName,
           status: "submitted",
         });
+
+        for (const row of buildIndicatorRows(rand, quality)) {
+          await WeeklyComplianceIndicator.create({
+            report_reference_id: reference_id,
+            ...row,
+          });
+        }
         created += 1;
       }
     }
   }
 
-  console.log(`✅  Weekly compliance reports — created ${created}, skipped ${skipped} existing`);
-  console.log(`    Weeks: ${weeks.join(", ")} · ${PER_STATE} facilities per state`);
+  console.log(`Weekly compliance — created ${created}, skipped ${skipped} existing`);
+  console.log(`Weeks: ${weeks.join(", ")} · ${PER_STATE} facilities per state`);
   process.exit(0);
 })().catch((err) => {
-  console.error("❌  Seed failed:", err);
+  console.error("Seed failed:", err);
   process.exit(1);
 });

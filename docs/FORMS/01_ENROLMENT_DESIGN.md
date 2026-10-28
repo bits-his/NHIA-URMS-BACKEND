@@ -1,21 +1,22 @@
-# Form 1 — Enrolment (AWAITING YOUR APPROVAL)
+# Form 1 — Enrolment Activity Reporting (APPROVED)
 
-Status: **proposed — do not implement until approved**
+Status: **approved — single table, business-key PK (no auto-increment `id`, no lines table)**
 
 ## Purpose
 
-Monthly state-office enrolment activity register. One header per state per month; many activity lines.
+State-office enrolment activity register. **One row = one activity report** (period + activity fields together).
 
-## Tables
+## Table
 
-### `enrolment_reports` (header)
+### `enrolment_reports`
 
 | Column | Type | Notes |
 |--------|------|--------|
-| `id` | INT UNSIGNED PK AI | |
-| `reference_id` | VARCHAR(30) UNIQUE | e.g. `ENR-2026-00001` |
-| `zone_id` | INT UNSIGNED FK → `zonal_offices.id` | NOT NULL |
-| `state_id` | INT UNSIGNED FK → `state_offices.id` | NOT NULL |
+| `reference_id` | VARCHAR(30) **PK** | e.g. `ENR-2026-00001` |
+| `zonal_code` | VARCHAR(20) FK → `zonal_offices.zonal_code` | NOT NULL, ON DELETE RESTRICT |
+| `state_code` | VARCHAR(20) FK → `state_offices.code` | NOT NULL, ON DELETE RESTRICT |
+| `department_code` | VARCHAR(20) FK → `departments.department_code` | nullable, ON DELETE SET NULL |
+| `unit_code` | VARCHAR(20) FK → `units.unit_code` | nullable, ON DELETE SET NULL |
 | `reporting_year` | SMALLINT UNSIGNED | NOT NULL |
 | `reporting_month` | TINYINT UNSIGNED | 1–12 NOT NULL |
 | `submission_date` | DATE | nullable |
@@ -24,20 +25,10 @@ Monthly state-office enrolment activity register. One header per state per month
 | `coordinator_review_note` | TEXT | nullable |
 | `coordinator_reviewed_by` | VARCHAR(100) | nullable |
 | `coordinator_reviewed_at` | DATETIME | nullable |
-| `created_at` / `updated_at` | DATETIME | |
-
-**UNIQUE** `(zone_id, state_id, reporting_year, reporting_month)` — one pack per state/month.
-
-### `enrolment_report_lines` (lines)
-
-| Column | Type | Notes |
-|--------|------|--------|
-| `id` | INT UNSIGNED PK AI | |
-| `report_id` | INT UNSIGNED FK → `enrolment_reports.id` ON DELETE CASCADE | |
-| `category` | VARCHAR(100) | required |
+| `category` | VARCHAR(100) | required activity type |
 | `activity_code` | VARCHAR(20) | |
 | `activity_date` | DATE | |
-| `enrolment_channel` | VARCHAR(50) | prefer `lookup_values` later |
+| `enrolment_channel` | VARCHAR(50) | FE constants for now |
 | `enrolment_type` | VARCHAR(40) | |
 | `program_code` | VARCHAR(20) | |
 | `program_name` | VARCHAR(100) | |
@@ -55,25 +46,27 @@ Monthly state-office enrolment activity register. One header per state per month
 | `remarks` | TEXT | |
 | `program_details` | JSON | flexible extras |
 | `quarter` | TINYINT UNSIGNED | derived from month |
+| `created_by_user_id` | INT UNSIGNED FK → `users.id` | nullable, ON DELETE SET NULL |
+| `created_at` / `updated_at` | DATETIME | |
+
+Index on `(zonal_code, state_code, reporting_year, reporting_month)` for listing (not unique — multiple activities per period allowed).
 
 ## Relationships
 
 ```
 zonal_offices 1──* enrolment_reports
 state_offices 1──* enrolment_reports
-enrolment_reports 1──* enrolment_report_lines
+departments 1──* enrolment_reports (optional)
+units 1──* enrolment_reports (optional)
+users 1──* enrolment_reports (created_by)
 ```
 
-## API (after approval)
+**Discarded:** `enrolment_report_lines` (activity fields live on the header row).
+
+## API
 
 ```
 /api/state-office/enrolment/reports
 ```
 
-## Approve?
-
-Reply with one of:
-
-- **Approve Enrolment as proposed**
-- **Approve with changes:** …
-- **Skip — do Provider Accreditation first instead**
+Controllers expose `id` as an alias of `reference_id`. For frontend compatibility, responses also include a synthetic `lines: [activity…]` array built from the same row.
