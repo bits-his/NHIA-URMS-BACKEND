@@ -12,11 +12,9 @@ const {
   StateOffice,
   StoreAsset,
   PrepaymentAnalysis,
-  ServicomCommentCard,
   ServicomSatisfactionSurvey,
   ServicomComplaint,
 } = require("../models");
-
 const COMMENT_QS = ["Q01", "Q02", "Q03", "Q04", "Q05"];
 const SURVEY_QS = Array.from({ length: 17 }, (_, i) => `Q${String(i + 1).padStart(2, "0")}`);
 
@@ -328,7 +326,7 @@ const CARD_PROFILES = [
 
 const CARD_DATES = ["2026-01-20", "2026-04-14", "2026-07-09", "2026-09-18"];
 
-async function seedCommentCards(states) {
+async function seedCommentCards(states, zonesById) {
   const byName = Object.fromEntries(states.map((s) => [s.description, s]));
   let n = 0;
   for (const [stateName, organisation, sets] of CARD_PROFILES) {
@@ -338,20 +336,23 @@ async function seedCommentCards(states) {
       const scores = sets[i];
       const reference_id = `CCC-VIS-${state.code}-${pad(i + 1, 2)}`;
       const total = scores.reduce((s, v) => s + v, 0);
+      const zone = zonesById?.[state.zonal_id];
       const values = {
         zone_id: state.zonal_id,
+        zone_name: zone?.description ?? null,
         state_id: state.id,
+        state_name: state.description,
         organisation,
         respondent_name: "Front desk respondent",
         card_date: CARD_DATES[i % CARD_DATES.length],
-        responses: commentResponses(scores),
         total_score: total,
         average_score: Math.round((total / scores.length) * 100) / 100,
         created_by: "seed-dashboard-visual",
       };
-      const existing = await ServicomCommentCard.findOne({ where: { reference_id } });
-      if (existing) await existing.update(values);
-      else await ServicomCommentCard.create({ reference_id, ...values });
+      let row = await CitizenCommentCard.findOne({ where: { reference_id } });
+      if (row) await row.update(values);
+      else row = await CitizenCommentCard.create({ reference_id, ...values });
+      await replaceCommentCardAnswers(row.id, commentResponses(scores));
       n += 1;
     }
   }
@@ -556,14 +557,16 @@ async function seedComplaints(states) {
       console.error("No state offices found. Seed zones and states first.");
       process.exit(1);
     }
+    const zones = await ZonalOffice.findAll({ attributes: ["id", "description"] });
+    const zonesById = Object.fromEntries(zones.map((z) => [z.id, z]));
     const assets = await seedAssets(states);
     const prepay = await seedPrepayments(states);
-    const cards = await seedCommentCards(states);
+    // Comment cards live in nhia_db3 and stay empty on fresh start
     const surveys = await seedSurveys(states);
     const complaints = await seedComplaints(states);
     console.log(`Assets: ${assets.created} created, ${assets.updated} updated`);
     console.log(`Prepayments: ${prepay}`);
-    console.log(`Comment cards: ${cards}`);
+    console.log(`Comment cards: skipped (nhia_db3 — start empty)`);
     console.log(`Satisfaction surveys: ${surveys}`);
     console.log(`Complaints: ${complaints}`);
     process.exit(0);

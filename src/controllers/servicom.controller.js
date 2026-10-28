@@ -2,13 +2,21 @@ const path = require("path");
 const fs = require("fs");
 const { Op } = require("sequelize");
 const sequelize = require("../config/database");
+const sequelizeCommentCards = require("../config/databaseCommentCards");
 const {
   MonitoringVisit, ServicomAssessmentIndicator, ServicomAssessmentScore,
-  ServicomKpiRecord, ServicomComplaint, ServicomComplaintComment, ServicomSatisfactionSurvey, ServicomCommentCard,
+  ServicomKpiRecord, ServicomComplaint, ServicomComplaintComment, ServicomSatisfactionSurvey,
   ServicomFinding, ServicomRecommendation,
   ServicomEvidence, ServicomAuditLog, ServicomFacility,
   ZonalOffice, StateOffice, User, Department, Unit,
 } = require("../models");
+const {
+  CitizenCommentCard,
+  ANSWER_INCLUDE,
+  serializeCommentCard,
+  replaceCommentCardAnswers,
+  COMMENT_CARD_QUESTION_SEED,
+} = require("../models/commentCards");
 const { buildServicomListWhere, applyComplaintExtraFilters } = require("../utils/servicomScope");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
 const { computeComplaintMetrics, pickComplaintFields, enrichComplaintCodes, buildAssigneeWhere, buildCreatedOrAssignedWhere, buildDepartmentEscalationWhere, buildZonalEscalationWhere, isStateCoordinatorRole, isZonalCoordinatorRole, isReportingOfficerRole, isComplaintOfficerRole, canAccessZonalOfficeInbox, isZonalOfficeEscalation, isNationalComplaintAdmin, userIsAssignedInvestigator } = require("../utils/complaintRegister");
@@ -379,13 +387,33 @@ const SATISFACTION_QUESTIONS = [
   { id: "Q17", category: "STAFF ATTITUDE" },
 ];
 
-const COMMENT_CARD_QUESTIONS = [
-  { id: "Q01", section: "Reception" },
-  { id: "Q02", section: "Front Desk Staff" },
-  { id: "Q03", section: "Front Desk Staff" },
-  { id: "Q04", section: "Front Desk Staff" },
-  { id: "Q05", section: "Overall" },
-];
+const COMMENT_CARD_QUESTIONS = COMMENT_CARD_QUESTION_SEED.map((q) => ({
+  id: q.question_id,
+  section: q.section,
+  question: q.question,
+}));
+
+async function resolveCommentCardGeo(state_id, zone_id) {
+  let zone_name = null;
+  let state_name = null;
+  let resolvedZoneId = zone_id ?? null;
+  if (state_id) {
+    const state = await StateOffice.findByPk(state_id, {
+      attributes: ["id", "description", "zonal_id"],
+      include: [{ model: ZonalOffice, as: "zone", attributes: ["id", "description"] }],
+    });
+    if (state) {
+      state_name = state.description;
+      if (!resolvedZoneId) resolvedZoneId = state.zonal_id ?? state.zone?.id ?? null;
+      zone_name = state.zone?.description ?? null;
+    }
+  }
+  if (resolvedZoneId && !zone_name) {
+    const zone = await ZonalOffice.findByPk(resolvedZoneId, { attributes: ["id", "description"] });
+    zone_name = zone?.description ?? null;
+  }
+  return { state_id: state_id ?? null, zone_id: resolvedZoneId, state_name, zone_name };
+}
 
 module.exports = {
   listIndicators: async (_req, res, next) => {
@@ -1189,11 +1217,12 @@ module.exports = {
 
       const complaintWhere = applyComplaintExtraFilters({ ...geoWhere }, req.query);
 
-      const [satisfactionSurveys, commentCards, complaints] = await Promise.all([
+      const [satisfactionSurveys, commentCardRows, complaints] = await Promise.all([
         ServicomSatisfactionSurvey.findAll({ where: geoWhere }),
-        ServicomCommentCard.findAll({ where: geoWhere }),
+        CitizenCommentCard.findAll({ where: geoWhere, include: ANSWER_INCLUDE }),
         ServicomComplaint.findAll({ where: complaintWhere }),
       ]);
+      const commentCards = commentCardRows.map(serializeCommentCard);
 
       const surveyPctScores = satisfactionSurveys
         .map((s) => Number(s.percentage_score))
@@ -1498,33 +1527,25 @@ module.exports = {
         state_id: req.query.state_id,
         zone_id: req.query.zone_id,
       });
-      const rows = await ServicomCommentCard.findAll({
+      const rows = await CitizenCommentCard.findAll({
         where,
-        include: [
-          { model: StateOffice, as: "state", attributes: ["id", "description"] },
-          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
-        ],
+        include: ANSWER_INCLUDE,
         order: [["card_date", "DESC"], ["created_at", "DESC"]],
       });
-      res.json({ success: true, data: rows });
+      res.json({ success: true, data: rows.map(serializeCommentCard) });
     } catch (err) { next(err); }
   },
 
   getCommentCard: async (req, res, next) => {
     try {
-      const row = await ServicomCommentCard.findByPk(req.params.id, {
-        include: [
-          { model: StateOffice, as: "state", attributes: ["id", "description"] },
-          { model: ZonalOffice, as: "zone", attributes: ["id", "description"] },
-        ],
-      });
+      const row = await CitizenCommentCard.findByPk(req.params.id, { include: ANSWER_INCLUDE });
       if (!row) return res.status(404).json({ success: false, message: "Comment card not found" });
-      res.json({ success: true, data: row });
+      res.json({ success: true, data: serializeCommentCard(row) });
     } catch (err) { next(err); }
   },
 
   createCommentCard: async (req, res, next) => {
-    const t = await sequelize.transaction();
+    const t = await sequelizeCommentCards.transaction();
     try {
       const responses = normalizeCommentResponses(req.body.responses, COMMENT_CARD_QUESTIONS);
       if (missingCommentResponses(responses).length) {
@@ -1534,64 +1555,77 @@ module.exports = {
       const metrics = computeCommentCardMetrics(responses);
       let reference_id = String(req.body.reference_id || "").trim();
       if (reference_id) {
-        const existing = await ServicomCommentCard.findOne({ where: { reference_id }, transaction: t });
+        const existing = await CitizenCommentCard.findOne({ where: { reference_id }, transaction: t });
         if (existing) {
           await t.rollback();
           return res.status(400).json({ success: false, message: "Response ID already exists" });
         }
       } else {
-        reference_id = await genRefId(ServicomCommentCard, "CCC", t);
+        reference_id = await genRefId(CitizenCommentCard, "CCC", t);
       }
       const state_id = req.body.state_id ?? req.user?.state_id ?? null;
-      let zone_id = req.body.zone_id ?? req.user?.zone_id ?? null;
-      if (state_id && !zone_id) {
-        const state = await StateOffice.findByPk(state_id, { transaction: t });
-        zone_id = state?.zone_id ?? null;
-      }
-      const row = await ServicomCommentCard.create({
+      const zone_id = req.body.zone_id ?? req.user?.zone_id ?? null;
+      const geo = await resolveCommentCardGeo(state_id, zone_id);
+      const row = await CitizenCommentCard.create({
         reference_id,
-        zone_id,
-        state_id,
+        zone_id: geo.zone_id,
+        zone_name: geo.zone_name,
+        state_id: geo.state_id,
+        state_name: geo.state_name,
         respondent_name: req.body.respondent_name ?? null,
         organisation: req.body.organisation ?? null,
         card_date: req.body.card_date,
-        responses,
         ...metrics,
         created_by: req.user?.name || null,
       }, { transaction: t });
-      await logAudit("servicom_comment_card", row.id, "created", req.user?.name, null, t);
+      await replaceCommentCardAnswers(row.id, responses, t);
       await t.commit();
-      res.status(201).json({ success: true, data: row });
+      await logAudit("servicom_comment_card", row.id, "created", req.user?.name, null);
+      const full = await CitizenCommentCard.findByPk(row.id, { include: ANSWER_INCLUDE });
+      res.status(201).json({ success: true, data: serializeCommentCard(full) });
     } catch (err) { await t.rollback(); next(err); }
   },
 
   updateCommentCard: async (req, res, next) => {
+    const t = await sequelizeCommentCards.transaction();
     try {
-      const row = await ServicomCommentCard.findByPk(req.params.id);
-      if (!row) return res.status(404).json({ success: false, message: "Comment card not found" });
-      const responses = normalizeCommentResponses(req.body.responses ?? row.responses, COMMENT_CARD_QUESTIONS);
+      const row = await CitizenCommentCard.findByPk(req.params.id, {
+        include: ANSWER_INCLUDE,
+        transaction: t,
+      });
+      if (!row) {
+        await t.rollback();
+        return res.status(404).json({ success: false, message: "Comment card not found" });
+      }
+      const existingResponses = serializeCommentCard(row).responses;
+      const responses = normalizeCommentResponses(
+        req.body.responses ?? existingResponses,
+        COMMENT_CARD_QUESTIONS,
+      );
       if (missingCommentResponses(responses).length) {
+        await t.rollback();
         return res.status(400).json({ success: false, message: "All questions are required" });
       }
       const metrics = computeCommentCardMetrics(responses);
       const state_id = req.body.state_id ?? row.state_id;
-      let zone_id = req.body.zone_id ?? row.zone_id;
-      if (req.body.state_id && !req.body.zone_id) {
-        const state = await StateOffice.findByPk(state_id);
-        zone_id = state?.zone_id ?? zone_id;
-      }
+      const zone_id = req.body.zone_id ?? row.zone_id;
+      const geo = await resolveCommentCardGeo(state_id, zone_id);
       await row.update({
-        zone_id,
-        state_id,
+        zone_id: geo.zone_id,
+        zone_name: geo.zone_name,
+        state_id: geo.state_id,
+        state_name: geo.state_name,
         respondent_name: req.body.respondent_name ?? row.respondent_name,
         organisation: req.body.organisation ?? row.organisation,
         card_date: req.body.card_date ?? row.card_date,
-        responses,
         ...metrics,
-      });
+      }, { transaction: t });
+      await replaceCommentCardAnswers(row.id, responses, t);
+      await t.commit();
       await logAudit("servicom_comment_card", row.id, "updated", req.user?.name, req.body);
-      res.json({ success: true, data: row });
-    } catch (err) { next(err); }
+      const full = await CitizenCommentCard.findByPk(row.id, { include: ANSWER_INCLUDE });
+      res.json({ success: true, data: serializeCommentCard(full) });
+    } catch (err) { await t.rollback(); next(err); }
   },
 
   dashboardDrill: async (req, res, next) => {
@@ -1610,7 +1644,7 @@ module.exports = {
         delete q.record_segment;
         const where = await buildServicomListWhere(req.user, q);
         if (rs === "surveys") return ServicomSatisfactionSurvey.count({ where });
-        if (rs === "comment_cards") return ServicomCommentCard.count({ where });
+        if (rs === "comment_cards") return CitizenCommentCard.count({ where });
         if (rs === "visits") return MonitoringVisit.count({ where });
         if (query.status) where.status = query.status;
         if (query.category) where.complaint_category = query.category;
@@ -1684,21 +1718,24 @@ module.exports = {
 
       if (segment === "comment_cards") {
         const where = await buildServicomListWhere(req.user, req.query);
-        const rows = await ServicomCommentCard.findAll({
+        const rows = await CitizenCommentCard.findAll({
           where,
-          include: geoInclude,
+          include: ANSWER_INCLUDE,
           order: [["card_date", "DESC"]],
           limit: 200,
         });
         return res.json({
           success: true,
-          data: rows.map((r) => mapRow(r, {
-            reference: (x) => x.reference_id,
-            title: (x) => x.respondent_name || x.organisation || "Citizens' Comment Card",
-            subtitle: (x) => x.organisation,
-            status: (x) => (x.average_score != null ? `Score ${x.average_score}` : null),
-            date: (x) => x.card_date,
-          })),
+          data: rows.map((r) => {
+            const card = serializeCommentCard(r);
+            return mapRow(card, {
+              reference: (x) => x.reference_id,
+              title: (x) => x.respondent_name || x.organisation || "Citizens' Comment Card",
+              subtitle: (x) => x.organisation,
+              status: (x) => (x.average_score != null ? `Score ${x.average_score}` : null),
+              date: (x) => x.card_date,
+            });
+          }),
         });
       }
 
@@ -1728,7 +1765,7 @@ module.exports = {
         const q = { ...req.query, state_id: stateId };
         const [surveys, cards, complaints] = await Promise.all([
           ServicomSatisfactionSurvey.count({ where: await buildServicomListWhere(req.user, q) }),
-          ServicomCommentCard.count({ where: await buildServicomListWhere(req.user, q) }),
+          CitizenCommentCard.count({ where: await buildServicomListWhere(req.user, q) }),
           ServicomComplaint.count({ where: applyComplaintExtraFilters(await buildServicomListWhere(req.user, q), q) }),
         ]);
         const state = await StateOffice.findByPk(stateId, {

@@ -26,6 +26,11 @@ const ServicomEvidence            = require("./ServicomEvidence");
 const ServicomAuditLog            = require("./ServicomAuditLog");
 const ServicomSatisfactionSurvey  = require("./ServicomSatisfactionSurvey");
 const ServicomCommentCard         = require("./ServicomCommentCard");
+const {
+  CitizenCommentCard,
+  CitizenCommentCardQuestion,
+  CitizenCommentCardAnswer,
+} = require("./commentCards");
 const EnrolmentReport             = require("./EnrolmentReport");
 const EnrolmentReportLine         = require("./EnrolmentReportLine");
 const MigrationReport             = require("./MigrationReport");
@@ -351,6 +356,7 @@ module.exports = {
   ServicomAssessmentScore, ServicomKpiRecord, ServicomComplaint, ServicomComplaintComment, ComplaintSlaRule,
   ServicomFinding, ServicomRecommendation, ServicomEvidence, ServicomAuditLog,
   ServicomSatisfactionSurvey, ServicomCommentCard,
+  CitizenCommentCard, CitizenCommentCardQuestion, CitizenCommentCardAnswer,
   EnrolmentReport, EnrolmentReportLine, MigrationReport, MigrationReportLine,
   CemoncReport, CemoncReportLine,
   ComplaintsComplianceReport, AccreditationReport, AccreditationReportLine,

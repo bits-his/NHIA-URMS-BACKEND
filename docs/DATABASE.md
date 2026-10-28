@@ -14,6 +14,27 @@ npm run db:setup
 
 That is it. It creates all tables and loads everything you need to use the app.
 
+### Citizens' Comment Cards (`nhia_db3`)
+
+Comment cards live in a **separate** database (`DB3_NAME`, default `nhia_db3`). Create it once:
+
+```bash
+npm run db:setup-comment-cards
+```
+
+Uses the same `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` as the main app DB.
+
+### Fresh start (org/auth + comment cards only)
+
+Wipe all non-org data (keeps users, roles, departments, units, zones, states) and empty comment cards:
+
+```bash
+npm run db:reset-fresh-start
+npm run db:seed-all
+```
+
+`db:seed-all` is lean: zones/states, departments/units, roles/users, and `nhia_db3` comment-card schema — no SERVICOM/store demo seeds.
+
 ---
 
 ## Commands (only 4)

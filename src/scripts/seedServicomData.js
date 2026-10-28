@@ -14,8 +14,12 @@ const {
   ServicomFinding, ServicomRecommendation,
   ServicomComplaint,
   ServicomSatisfactionSurvey,
-  ServicomCommentCard,
 } = require("../models");
+const {
+  CitizenCommentCard,
+  replaceCommentCardAnswers,
+  COMMENT_CARD_QUESTION_SEED,
+} = require("../models/commentCards");
 const { computeAssessmentScores, computeKpiMetrics } = require("../utils/servicomScoring");
 
 /** Seed state codes → DB description (works when DB uses SO-XX codes instead of LAG/KAN) */
@@ -614,19 +618,40 @@ async function seedCommentCard(row) {
     console.warn(`  ⚠  Skipping comment card ${row.reference_id}: ${err.message}`);
     return false;
   }
-  const [, created] = await ServicomCommentCard.findOrCreate({
+  const state = await StateOffice.findByPk(geo.state_id, {
+    attributes: ["id", "description"],
+    include: [{ model: ZonalOffice, as: "zone", attributes: ["id", "description"] }],
+  });
+  const responses = Array.isArray(row.responses) && row.responses.length
+    ? row.responses
+    : COMMENT_CARD_QUESTION_SEED.map((q) => {
+        const avg = Number(row.average_score) || 3;
+        const score = Math.min(Number(q.scale), Math.max(1, Math.round(avg)));
+        return {
+          question_id: q.question_id,
+          section: q.section,
+          question: q.question,
+          response: String(score),
+          score,
+        };
+      });
+  const [card, created] = await CitizenCommentCard.findOrCreate({
     where: { reference_id: row.reference_id },
     defaults: {
       zone_id: geo.zone_id,
+      zone_name: state?.zone?.description ?? null,
       state_id: geo.state_id,
+      state_name: state?.description ?? null,
       organisation: row.organisation ?? null,
       card_date: row.card_date,
-      responses: row.responses ?? [],
       total_score: row.total_score,
       average_score: row.average_score,
       created_by: "seed@nhia.gov.ng",
     },
   });
+  if (created || !row.responses) {
+    await replaceCommentCardAnswers(card.id, responses);
+  }
   return created;
 }
 
@@ -671,11 +696,7 @@ async function seedCommentCard(row) {
     }
     console.log(`✅  Satisfaction surveys seeded (${surveysCreated} new)`);
 
-    let cardsCreated = 0;
-    for (const c of COMMENT_CARDS) {
-      if (await seedCommentCard(c)) cardsCreated++;
-    }
-    console.log(`✅  Comment cards seeded (${cardsCreated} new)`);
+    console.log("ℹ️   Comment cards skipped (live in nhia_db3; start empty — use the UI or db:setup-comment-cards)");
 
     process.exit(0);
   } catch (err) {
