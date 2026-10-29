@@ -311,12 +311,34 @@ function buildActivityAnalysis(rows) {
       name: s.label,
       planned: s.planned,
       covered: s.covered,
+      accredited: s.accredited,
+      reaccredited: s.reaccredited,
       plan_achievement: pct(s.covered, s.planned),
     }));
-    const byMonth = groupSum(subset, (r) => `${r.year}-${String(r.month).padStart(2, "0")}`, ["planned", "covered"]).map((m) => ({
+    const byProgramme = groupSum(
+      subset,
+      (r) => r.programme || "Unspecified",
+      ["planned", "covered", "accredited", "reaccredited", "bhcpf_phcs_accredited", "bhcpf_phcs_reaccredited"],
+    ).map((p) => ({
+      name: p.label,
+      planned: p.planned,
+      covered: p.covered,
+      accredited: p.accredited,
+      reaccredited: p.reaccredited,
+      bhcpf_phcs_accredited: p.bhcpf_phcs_accredited,
+      bhcpf_phcs_reaccredited: p.bhcpf_phcs_reaccredited,
+      plan_achievement: pct(p.covered, p.planned),
+    }));
+    const byMonth = groupSum(
+      subset,
+      (r) => `${r.year}-${String(r.month).padStart(2, "0")}`,
+      ["planned", "covered", "accredited", "reaccredited"],
+    ).map((m) => ({
       period: m.label,
       planned: m.planned,
       covered: m.covered,
+      accredited: m.accredited,
+      reaccredited: m.reaccredited,
     })).sort((a, b) => a.period.localeCompare(b.period));
     const statusCounts = {};
     for (const r of subset) statusCounts[r.activity_status] = (statusCounts[r.activity_status] || 0) + 1;
@@ -326,7 +348,8 @@ function buildActivityAnalysis(rows) {
       title: d.title,
       bullets: d.bullets(g),
       plan_achievement: d.rate(g),
-      by_state: byState.slice(0, 8),
+      by_state: byState.slice(0, 12),
+      by_programme: byProgramme,
       by_month: byMonth,
       by_status: byStatus,
       ...g,

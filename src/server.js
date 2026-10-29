@@ -134,6 +134,13 @@ if (APPROVED_FORMS["weekly-compliance"]) {
 if (APPROVED_FORMS["hmo-indebtedness"]) {
   require("./routes/hmoIndebtednessPack.routes").mountHmoIndebtednessPack(app);
 }
+// Operational home for state coordinators — approved packs only (must precede catch-all)
+{
+  const { authenticate } = require("./middleware/auth");
+  const opsDash = require("./controllers/stateOfficeOperationalDashboard.controller");
+  app.get("/api/state-office/dashboard", authenticate, opsDash.dashboard);
+  app.get("/api/state-office/dashboard/drill", authenticate, opsDash.dashboardDrill);
+}
 app.use("/api/state-office", notRebuilt("State office forms"));
 app.use("/api/sqa", notRebuilt("SQA compliance"));
 if (APPROVED_FORMS["store-management"]) {

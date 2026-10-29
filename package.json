@@ -38,6 +38,7 @@
     "db:seed-beneficiary-pack": "node src/scripts/seedBeneficiaryDemo.js",
     "db:seed-stakeholder-pack": "node src/scripts/seedStakeholderDemo.js",
     "db:seed-provider-pack": "node src/scripts/seedProviderManagementDemo.js",
+    "db:seed-provider-jigawa": "node src/scripts/seedProviderManagementJigawa.js",
     "db:seed-hmo-indebtedness-pack": "node src/scripts/seedHmoIndebtednessDemo.js",
     "db:sync:store": "node -e \"require('dotenv').config(); require('./src/models/active').syncActiveSchema({alter:true}).then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})\"",
     "db:sync-enrollee-register": "node src/scripts/legacy/addMonthlyEnrolleeRegister.js",
