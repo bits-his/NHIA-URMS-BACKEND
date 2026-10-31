@@ -8,8 +8,23 @@
 require("dotenv").config();
 const path = require("path");
 const fs = require("fs");
-const { jsPDF } = require("../../../frontend/node_modules/jspdf");
-const autoTable = require("../../../frontend/node_modules/jspdf-autotable");
+let jsPDF;
+let autoTable;
+try {
+  const jspdfModule = require("jspdf");
+  jsPDF = jspdfModule.jsPDF || jspdfModule.default || jspdfModule;
+  const autotableModule = require("jspdf-autotable");
+  autoTable = autotableModule.default || autotableModule;
+} catch (_e1) {
+  try {
+    const jspdfModule = require("../../../frontend/node_modules/jspdf");
+    jsPDF = jspdfModule.jsPDF || jspdfModule.default || jspdfModule;
+    const autotableModule = require("../../../frontend/node_modules/jspdf-autotable");
+    autoTable = autotableModule.default || autotableModule;
+  } catch (_e2) {
+    throw new Error("jsPDF or jspdf-autotable is not installed. Please run 'npm install jspdf jspdf-autotable' in backend.");
+  }
+}
 
 const ARTIFACTS_DIR = "/Users/admin/.gemini/antigravity/brain/f7ebd5d6-da8f-4ed1-a038-abe6b9140fc3";
 const STORAGE_DIR = path.resolve(__dirname, "../../storage/credentials");
@@ -335,12 +350,15 @@ function generateUsersPdf(outputPath) {
 
 if (require.main === module) {
   const dest1 = path.join(STORAGE_DIR, "NHIA_Production_User_Credentials.pdf");
-  const dest2 = path.join(ARTIFACTS_DIR, "NHIA_Production_User_Credentials.pdf");
-
   generateUsersPdf(dest1);
-  generateUsersPdf(dest2);
 
-  console.log(`✅ Production User Credentials PDF generated at:\n  1. ${dest1}\n  2. ${dest2}`);
+  if (fs.existsSync(ARTIFACTS_DIR)) {
+    const dest2 = path.join(ARTIFACTS_DIR, "NHIA_Production_User_Credentials.pdf");
+    generateUsersPdf(dest2);
+    console.log(`✅ Production User Credentials PDF generated at:\n  1. ${dest1}\n  2. ${dest2}`);
+  } else {
+    console.log(`✅ Production User Credentials PDF generated at:\n  1. ${dest1}`);
+  }
 }
 
 module.exports = { generateUsersPdf, PRODUCTION_ACCOUNTS };

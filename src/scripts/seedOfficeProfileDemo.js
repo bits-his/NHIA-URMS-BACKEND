@@ -296,6 +296,19 @@ const DEMO_STATES = [
 async function seedOfficeProfiles() {
   console.log("🚀 Starting Office Profile demo seeds (Forms 1, 2, 3, 4)...");
 
+  // Ensure all 4 Office Profile tables exist before querying
+  try {
+    await sequelize.query("SET FOREIGN_KEY_CHECKS = 0;");
+    await StateZonalOfficeProfile.sync();
+    await OfficeAccommodation.sync();
+    await UtilityServiceReport.sync();
+    await StateZonalFocalPerson.sync();
+  } finally {
+    try {
+      await sequelize.query("SET FOREIGN_KEY_CHECKS = 1;");
+    } catch (_) {}
+  }
+
   for (const item of DEMO_STATES) {
     const state = await StateOffice.findOne({ where: { code: item.state_code } });
     if (!state) {

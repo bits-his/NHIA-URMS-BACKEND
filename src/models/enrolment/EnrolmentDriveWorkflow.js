@@ -8,7 +8,13 @@ const geo = () => ({
   zonal_code: { type: D.STRING(20), allowNull: false, references: { model: "zonal_offices", key: "zonal_code" } },
 });
 const period = () => ({ reporting_year: { type: D.SMALLINT.UNSIGNED, allowNull: false }, reporting_month: { type: D.TINYINT.UNSIGNED, allowNull: false } });
-const define = (name, tableName, fields, indexes = []) => sequelize.define(name, fields, { tableName, indexes });
+const define = (name, tableName, fields, indexes = []) =>
+  sequelize.define(name, fields, {
+    tableName,
+    indexes,
+    charset: "utf8mb4",
+    collate: "utf8mb4_general_ci",
+  });
 
 const EnrolmentDriveBatch = define("EnrolmentDriveBatch", "enrolment_drive_batches", {
   reference_id: pk(), ...geo(), ...period(),

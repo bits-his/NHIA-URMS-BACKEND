@@ -21,6 +21,7 @@ const { DEFAULT_ROLES } = require("../utils/roleService");
 const { DOCUMENT_USER_PROFILES } = require("../utils/documentUserProfiles");
 const { generateUsersPdf, PRODUCTION_ACCOUNTS } = require("./generateUsersPdf");
 const path = require("path");
+const fs = require("fs");
 
 const publicAttributes = [
   "id",
@@ -196,10 +197,13 @@ async function resetProductionUsers({ confirm = false } = {}) {
 
   // 3. Generate updated credentials PDF
   const storagePdf = path.resolve(__dirname, "../../storage/credentials/NHIA_Production_User_Credentials.pdf");
-  const artifactPdf = path.resolve("/Users/admin/.gemini/antigravity/brain/f7ebd5d6-da8f-4ed1-a038-abe6b9140fc3/NHIA_Production_User_Credentials.pdf");
-
   generateUsersPdf(storagePdf);
-  generateUsersPdf(artifactPdf);
+
+  const artifactDir = "/Users/admin/.gemini/antigravity/brain/f7ebd5d6-da8f-4ed1-a038-abe6b9140fc3";
+  if (fs.existsSync(artifactDir)) {
+    const artifactPdf = path.join(artifactDir, "NHIA_Production_User_Credentials.pdf");
+    generateUsersPdf(artifactPdf);
+  }
 
   console.log("\n================================================================================");
   console.log("🎉 PRODUCTION USER RESET COMPLETED SUCCESSFULLY!");

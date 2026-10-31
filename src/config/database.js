@@ -12,6 +12,8 @@ const sequelize = new Sequelize({
   define: {
     timestamps: true,
     underscored: true,
+    charset: "utf8mb4",
+    collate: "utf8mb4_general_ci",
   },
 });
 

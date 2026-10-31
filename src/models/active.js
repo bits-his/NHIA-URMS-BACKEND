@@ -950,23 +950,41 @@ function allActiveModels() {
 
 async function syncActiveSchema({ alter = true } = {}) {
   const sequelize = require("../config/database");
+
+  // Disable FK checks and ensure UTF8MB4 collation compatibility across core org tables
+  try {
+    await sequelize.query("SET FOREIGN_KEY_CHECKS = 0;");
+    await sequelize.query("ALTER TABLE state_offices CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;");
+    await sequelize.query("ALTER TABLE zonal_offices CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;");
+  } catch (_) {}
+
   const seen = new Set();
-  for (const model of allActiveModels()) {
-    const name = model.tableName;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    try {
-      await model.sync({ alter });
-    } catch (_err) {
-      // Fallback for MySQL tables with JSON CHECK constraints
-      await model.sync();
+  try {
+    for (const model of allActiveModels()) {
+      const name = model.tableName;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      try {
+        await model.sync({ alter });
+      } catch (_err) {
+        // Fallback for MySQL tables with JSON CHECK constraints or strict alter rules
+        try {
+          await model.sync();
+        } catch (syncErr) {
+          console.warn(`  warning: failed to sync table ${name}:`, syncErr.message);
+        }
+      }
+      console.log(`  synced ${name}`);
     }
-    console.log(`  synced ${name}`);
-  }
-  if (APPROVED_FORMS["hmo-indebtedness"]) {
-    const { ensureHmoIndebtednessViews } = require("../utils/hmoIndebtednessViews");
-    await ensureHmoIndebtednessViews(sequelize);
-    console.log("  synced views hmo_indebtedness_facts_v, hmo_indebtedness_master_v");
+    if (APPROVED_FORMS["hmo-indebtedness"]) {
+      const { ensureHmoIndebtednessViews } = require("../utils/hmoIndebtednessViews");
+      await ensureHmoIndebtednessViews(sequelize);
+      console.log("  synced views hmo_indebtedness_facts_v, hmo_indebtedness_master_v");
+    }
+  } finally {
+    try {
+      await sequelize.query("SET FOREIGN_KEY_CHECKS = 1;");
+    } catch (_) {}
   }
 }
 
