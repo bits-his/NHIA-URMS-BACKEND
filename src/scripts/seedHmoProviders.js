@@ -138,11 +138,11 @@ async function seed() {
   }
   rows = [...byCode.values()];
 
-  console.log(`\n🗑   Clearing existing hmo_providers…`);
-  await HmoProvider.destroy({ where: {}, truncate: true });
-
-  console.log(`💾  Inserting ${rows.length} HMO rows…`);
-  await HmoProvider.bulkCreate(rows, { validate: true });
+  console.log(`\n💾  Upserting ${rows.length} HMO rows…`);
+  await HmoProvider.bulkCreate(rows, {
+    updateOnDuplicate: ["name", "category", "accreditation_number", "contact_person", "phone", "email", "address", "state_coverage"],
+    validate: true,
+  });
   console.log(`✅  hmo_providers seeded: ${rows.length}`);
 
   console.log(`\n🔗  Syncing into nhia_accredited_providers (hmo)…`);

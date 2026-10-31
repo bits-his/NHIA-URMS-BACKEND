@@ -10,6 +10,12 @@ const DOMAINS = [
   "actu",
   "servicom",
   "complaint_officer",
+  "ict_officer",
+  "accounts_finance",
+  "store_admin",
+  "legal_officer",
+  "human_resources",
+  "general_services",
 ];
 
 const DESIGNATIONS = [
@@ -24,6 +30,8 @@ const DESIGNATIONS = [
   "officer_ii",
   "principal_confidential_secretary",
   "senior_confidential_secretary",
+  "confidential_secretary",
+  "clerical_officer",
 ];
 
 const StateZonalFocalPerson = sequelize.define(
@@ -31,26 +39,53 @@ const StateZonalFocalPerson = sequelize.define(
   {
     id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
     reporting_year: { type: DataTypes.SMALLINT.UNSIGNED, allowNull: false },
-    zone_id: {
-      type: DataTypes.INTEGER.UNSIGNED,
+    zonal_code: {
+      type: DataTypes.STRING(20),
       allowNull: false,
-      references: { model: "zonal_offices", key: "id" },
+      references: { model: "zonal_offices", key: "zonal_code" },
+      onUpdate: "CASCADE",
       onDelete: "RESTRICT",
+    },
+    state_code: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      references: { model: "state_offices", key: "code" },
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
+    },
+    zone_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    state_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    domain: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+    },
+    officer_name: {
+      type: DataTypes.STRING(150),
+      allowNull: false,
+    },
+    designation: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+    },
+    email: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+    },
+    phone: {
+      type: DataTypes.STRING(40),
+      allowNull: true,
+    },
+    created_by: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    created_by_user_id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: { model: "users", key: "id" },
+      onDelete: "SET NULL",
       onUpdate: "CASCADE",
     },
-    state_id: {
-      type: DataTypes.INTEGER.UNSIGNED,
-      allowNull: false,
-      references: { model: "state_offices", key: "id" },
-      onDelete: "RESTRICT",
-      onUpdate: "CASCADE",
-    },
-    domain: { type: DataTypes.ENUM(...DOMAINS), allowNull: false },
-    officer_name: { type: DataTypes.STRING(150), allowNull: false },
-    designation: { type: DataTypes.ENUM(...DESIGNATIONS), allowNull: false },
-    email: { type: DataTypes.STRING(150), allowNull: true },
-    phone: { type: DataTypes.STRING(40), allowNull: true },
-    created_by: { type: DataTypes.STRING(100), allowNull: true },
   },
   {
     tableName: "state_zonal_focal_persons",
@@ -59,7 +94,11 @@ const StateZonalFocalPerson = sequelize.define(
       {
         unique: true,
         name: "uniq_focal_person_state_year_domain",
-        fields: ["state_id", "reporting_year", "domain"],
+        fields: ["state_code", "reporting_year", "domain"],
+      },
+      {
+        name: "idx_focal_person_zone_year",
+        fields: ["zonal_code", "reporting_year"],
       },
     ],
   },

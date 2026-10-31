@@ -1,18 +1,24 @@
 const { Op } = require("sequelize");
-const { ZonalOffice, StateOffice, StateZonalOfficeProfile } = require("../models");
 const {
-  buildStateOfficeListWhere, assertRecordAccess, applyScopeToBody,
+  ZonalOffice,
+  StateOffice,
+  StateZonalOfficeProfile,
+  OfficeAccommodation,
+  UtilityServiceReport,
+  StateZonalFocalPerson,
+} = require("../models/active");
+const {
+  buildStateOfficeListWhere,
+  assertRecordAccess,
+  applyScopeToBody,
 } = require("../utils/stateOfficeScope");
 const { removeAopFile } = require("../middleware/officeProfileUpload");
+const { resolveOfficeGeo } = require("../utils/officeProfileGeo");
 
 const includeGeo = [
-  { model: ZonalOffice, as: "zone", attributes: ["id", "description", "zonal_code"] },
-  { model: StateOffice, as: "state", attributes: ["id", "description", "code", "zonal_id"] },
+  { model: ZonalOffice, as: "zone", attributes: ["zonal_code", "description"] },
+  { model: StateOffice, as: "state", attributes: ["code", "description", "zonal_code"] },
 ];
-
-function padId(n, width) {
-  return String(n).padStart(width, "0");
-}
 
 function asJsonArray(v) {
   if (v == null || v === "") return null;
@@ -32,11 +38,14 @@ function serialize(row) {
   const j = row.toJSON ? row.toJSON() : row;
   return {
     ...j,
+    state_id: j.state_id || j.state_code,
+    zone_id: j.zone_id || j.zonal_code,
+    state_display_id: j.state_code ? `ST-${j.state_code}` : `ST-${j.state_id || ""}`,
+    zone_display_id: j.zonal_code ? `ZN-${j.zonal_code}` : `ZN-${j.zone_id || ""}`,
     staff_members: asJsonArray(j.staff_members),
     accommodation_entries: asJsonArray(j.accommodation_entries),
-    state_display_id: `ST-${padId(j.state_id, 3)}`,
-    zone_display_id: `ZN-${padId(j.zone_id, 2)}`,
     annual_budget: j.annual_budget == null ? null : Number(j.annual_budget),
+    enrolment_target: j.enrolment_target == null ? null : Number(j.enrolment_target),
   };
 }
 
@@ -128,15 +137,16 @@ function normalizeAccommodation(v) {
   }
   const rows = raw
     .map((row) => {
-      const ownershipStatus = strOrNull(row?.ownershipStatus, 80);
+      const ownershipStatus = strOrNull(row?.ownershipStatus || row?.ownership_status, 80) || "Rented";
       const owned = isOwnedStatus(ownershipStatus);
       return {
         ownershipStatus,
         rentAmount: owned || row?.rentAmount === "" || row?.rentAmount == null
           ? null
-          : toMoney(row.rentAmount),
-        rentExpiryDate: owned ? null : strOrNull(row?.rentExpiryDate, 20),
-        currentCondition: strOrNull(row?.currentCondition, 80),
+          : toMoney(row.rentAmount ?? row.rent_amount),
+        rentExpiryDate: owned ? null : strOrNull(row?.rentExpiryDate ?? row?.rent_expiry_date, 20),
+        currentCondition: strOrNull(row?.currentCondition ?? row?.current_condition, 80) || "Good",
+        issueDescription: strOrNull(row?.issueDescription ?? row?.issue_description, 2000),
         remarks: strOrNull(row?.remarks, 2000),
       };
     })
@@ -146,27 +156,33 @@ function normalizeAccommodation(v) {
   return rows.length ? rows : null;
 }
 
-async function resolveOfficeCodes(zone_id, state_id) {
-  const [zone, state] = await Promise.all([
-    ZonalOffice.findByPk(zone_id),
-    StateOffice.findByPk(state_id),
-  ]);
-  if (!zone) {
-    const err = new Error("Zone not found");
-    err.status = 400;
-    throw err;
+async function syncAccommodationTable(profile, accommodationEntries, user) {
+  if (!accommodationEntries || !Array.isArray(accommodationEntries)) return;
+  try {
+    // Delete existing accommodations linked to this profile
+    await OfficeAccommodation.destroy({ where: { profile_id: profile.id } });
+    for (const item of accommodationEntries) {
+      await OfficeAccommodation.create({
+        profile_id: profile.id,
+        zonal_code: profile.zonal_code,
+        state_code: profile.state_code,
+        zone_id: profile.zone_id,
+        state_id: profile.state_id,
+        reporting_year: profile.reporting_year,
+        ownership_status: item.ownershipStatus || "Rented",
+        rent_amount: item.rentAmount,
+        rent_expiry_date: item.rentExpiryDate,
+        current_condition: item.currentCondition || "Good",
+        issue_description: item.issueDescription || null,
+        remarks: item.remarks || null,
+        status: profile.status === "approved" ? "approved" : "submitted",
+        created_by: user?.name || user?.staff_id || null,
+        created_by_user_id: user?.id || null,
+      });
+    }
+  } catch (e) {
+    console.error("[syncAccommodationTable] Error syncing to dedicated table:", e);
   }
-  if (!state) {
-    const err = new Error("State not found");
-    err.status = 400;
-    throw err;
-  }
-  if (Number(state.zonal_id) !== Number(zone_id)) {
-    const err = new Error("Selected state does not belong to the selected zone");
-    err.status = 400;
-    throw err;
-  }
-  return { zone, state };
 }
 
 function aopFields(file) {
@@ -180,16 +196,25 @@ function aopFields(file) {
 }
 
 function uniqueConflict(err) {
-  return err?.name === "SequelizeUniqueConstraintError"
-    || String(err?.original?.code || "") === "ER_DUP_ENTRY";
+  return (
+    err?.name === "SequelizeUniqueConstraintError" ||
+    String(err?.original?.code || "") === "ER_DUP_ENTRY"
+  );
 }
 
 const listProfiles = async (req, res, next) => {
   try {
-    const where = await buildStateOfficeListWhere(req.user, req.query);
-    delete where.status;
-    delete where.reporting_month;
-    delete where.against_type;
+    const geo = await resolveOfficeGeo(req.user, req.query);
+    const where = {};
+    if (geo.state_code) where.state_code = geo.state_code;
+    else if (geo.zonal_code) where.zonal_code = geo.zonal_code;
+
+    if (req.query.year || req.query.reporting_year) {
+      where.reporting_year = Number(req.query.year || req.query.reporting_year);
+    }
+    if (req.query.status) {
+      where.status = req.query.status;
+    }
     if (req.query.q) {
       const q = `%${String(req.query.q).trim()}%`;
       where[Op.or] = [
@@ -199,61 +224,110 @@ const listProfiles = async (req, res, next) => {
         { office_address: { [Op.like]: q } },
       ];
     }
+
     const rows = await StateZonalOfficeProfile.findAll({
       where,
       include: includeGeo,
       order: [["reporting_year", "DESC"], ["id", "ASC"]],
     });
     res.json({ success: true, data: rows.map(serialize) });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 };
 
 const getProfile = async (req, res, next) => {
   try {
-    const row = await StateZonalOfficeProfile.findByPk(req.params.id, { include: includeGeo });
-    const access = await assertRecordAccess(req.user, row);
-    if (!access.ok) {
-      return res.status(access.status).json({ success: false, message: access.message });
+    const isNum = /^\d+$/.test(req.params.id);
+    let row = null;
+    if (isNum) {
+      row = await StateZonalOfficeProfile.findByPk(req.params.id, {
+        include: [
+          ...includeGeo,
+          { model: OfficeAccommodation, as: "accommodations" },
+          { model: UtilityServiceReport, as: "utility_reports" },
+        ],
+      });
+    } else {
+      // Could be state_code or lookup
+      row = await StateZonalOfficeProfile.findOne({
+        where: { state_code: req.params.id },
+        include: [
+          ...includeGeo,
+          { model: OfficeAccommodation, as: "accommodations" },
+          { model: UtilityServiceReport, as: "utility_reports" },
+        ],
+        order: [["reporting_year", "DESC"]],
+      });
     }
-    res.json({ success: true, data: serialize(row) });
-  } catch (err) { next(err); }
+
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Profile not found" });
+    }
+
+    // Attach focal persons for the state & year
+    const focalPersons = await StateZonalFocalPerson.findAll({
+      where: { state_code: row.state_code, reporting_year: row.reporting_year },
+    });
+
+    const data = serialize(row);
+    data.focal_persons = focalPersons;
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
 };
 
 const createProfile = async (req, res, next) => {
   try {
-    const scoped = await applyScopeToBody(req.user, req.body);
-    const reporting_year = toInt(scoped.reporting_year, { allowNull: false });
-    const zone_id = toInt(scoped.zone_id, { allowNull: false });
-    const state_id = toInt(scoped.state_id, { allowNull: false });
-    if (!reporting_year || !zone_id || !state_id) {
-      const err = new Error("Year, zone, and state are required");
-      err.status = 400;
-      throw err;
+    const geo = await resolveOfficeGeo(req.user, req.body);
+    if (!geo.state_code || !geo.zonal_code) {
+      return res.status(400).json({ success: false, message: "Zone and State are required" });
     }
-    await resolveOfficeCodes(zone_id, state_id);
+    const reporting_year = toInt(req.body.reporting_year, { allowNull: false });
+    if (!reporting_year) {
+      return res.status(400).json({ success: false, message: "Reporting year is required" });
+    }
 
-    const staff_members = normalizeStaffMembers(scoped.staff_members);
-    const accommodation_entries = normalizeAccommodation(scoped.accommodation_entries);
+    const staff_members = normalizeStaffMembers(req.body.staff_members);
+    const accommodation_entries = normalizeAccommodation(req.body.accommodation_entries);
     const payload = {
       reporting_year,
-      zone_id,
-      state_id,
-      staff_strength: staff_members?.length ?? toInt(scoped.staff_strength),
-      coordinator_name: strOrNull(scoped.coordinator_name, 150),
-      coordinator_phone: strOrNull(scoped.coordinator_phone, 40),
-      coordinator_email: emailOrNull(scoped.coordinator_email),
+      zonal_code: geo.zonal_code,
+      state_code: geo.state_code,
+      zone_id: geo.zone_id,
+      state_id: geo.state_id,
+      staff_strength: staff_members?.length ?? toInt(req.body.staff_strength),
+      coordinator_name: strOrNull(req.body.coordinator_name, 150),
+      coordinator_phone: strOrNull(req.body.coordinator_phone, 40),
+      coordinator_email: emailOrNull(req.body.coordinator_email),
       staff_members,
-      office_address: strOrNull(scoped.office_address, 500),
-      office_email: emailOrNull(scoped.office_email),
-      enrolment_target: toInt(scoped.enrolment_target),
-      annual_budget: toMoney(scoped.annual_budget),
+      office_address: strOrNull(req.body.office_address, 500),
+      office_email: emailOrNull(req.body.office_email),
+      enrolment_target: toInt(req.body.enrolment_target),
+      annual_budget: toMoney(req.body.annual_budget),
       accommodation_entries,
+      status: req.body.status || "draft",
+      submission_date: req.body.status === "submitted" ? new Date().toISOString().slice(0, 10) : null,
+      submitted_by: req.body.status === "submitted" ? req.user?.name || req.user?.staff_id : null,
       created_by: req.user?.name || req.user?.staff_id || null,
+      created_by_user_id: req.user?.id || null,
       ...aopFields(req.file),
     };
 
     const row = await StateZonalOfficeProfile.create(payload);
-    const full = await StateZonalOfficeProfile.findByPk(row.id, { include: includeGeo });
+
+    // Sync accommodations table
+    if (accommodation_entries) {
+      await syncAccommodationTable(row, accommodation_entries, req.user);
+    }
+
+    const full = await StateZonalOfficeProfile.findByPk(row.id, {
+      include: [
+        ...includeGeo,
+        { model: OfficeAccommodation, as: "accommodations" },
+      ],
+    });
     res.status(201).json({ success: true, data: serialize(full) });
   } catch (err) {
     if (req.file) removeAopFile(`/uploads/office-profiles/${req.file.filename}`);
@@ -270,51 +344,61 @@ const createProfile = async (req, res, next) => {
 const updateProfile = async (req, res, next) => {
   try {
     const row = await StateZonalOfficeProfile.findByPk(req.params.id);
-    const access = await assertRecordAccess(req.user, row);
-    if (!access.ok) {
-      return res.status(access.status).json({ success: false, message: access.message });
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Profile not found" });
     }
-    const scoped = await applyScopeToBody(req.user, req.body);
-    const reporting_year = toInt(scoped.reporting_year ?? row.reporting_year, { allowNull: false });
-    const zone_id = toInt(scoped.zone_id ?? row.zone_id, { allowNull: false });
-    const state_id = toInt(scoped.state_id ?? row.state_id, { allowNull: false });
-    await resolveOfficeCodes(zone_id, state_id);
 
-    const staff_members = scoped.staff_members !== undefined
-      ? normalizeStaffMembers(scoped.staff_members)
+    const staff_members = req.body.staff_members !== undefined
+      ? normalizeStaffMembers(req.body.staff_members)
       : row.staff_members;
-    const accommodation_entries = scoped.accommodation_entries !== undefined
-      ? normalizeAccommodation(scoped.accommodation_entries)
+    const accommodation_entries = req.body.accommodation_entries !== undefined
+      ? normalizeAccommodation(req.body.accommodation_entries)
       : row.accommodation_entries;
-    const next = {
-      reporting_year,
-      zone_id,
-      state_id,
-      staff_strength: Array.isArray(staff_members) ? staff_members.length : toInt(scoped.staff_strength),
-      coordinator_name: strOrNull(scoped.coordinator_name, 150),
-      coordinator_phone: strOrNull(scoped.coordinator_phone, 40),
-      coordinator_email: emailOrNull(scoped.coordinator_email),
+
+    const updates = {
+      staff_strength: Array.isArray(staff_members) ? staff_members.length : toInt(req.body.staff_strength),
+      coordinator_name: strOrNull(req.body.coordinator_name, 150),
+      coordinator_phone: strOrNull(req.body.coordinator_phone, 40),
+      coordinator_email: emailOrNull(req.body.coordinator_email),
       staff_members,
-      office_address: strOrNull(scoped.office_address, 500),
-      office_email: emailOrNull(scoped.office_email),
-      enrolment_target: toInt(scoped.enrolment_target),
-      annual_budget: toMoney(scoped.annual_budget),
+      office_address: strOrNull(req.body.office_address, 500),
+      office_email: emailOrNull(req.body.office_email),
+      enrolment_target: toInt(req.body.enrolment_target),
+      annual_budget: toMoney(req.body.annual_budget),
       accommodation_entries,
     };
 
-    if (req.file) {
-      removeAopFile(row.aop_file_path);
-      Object.assign(next, aopFields(req.file));
-    } else if (String(scoped.remove_aop) === "true" || String(scoped.remove_aop) === "1") {
-      removeAopFile(row.aop_file_path);
-      next.aop_original_name = null;
-      next.aop_file_name = null;
-      next.aop_file_path = null;
-      next.aop_mime = null;
+    if (req.body.status) {
+      updates.status = req.body.status;
+      if (req.body.status === "submitted" && !row.submission_date) {
+        updates.submission_date = new Date().toISOString().slice(0, 10);
+        updates.submitted_by = req.user?.name || req.user?.staff_id;
+      }
     }
 
-    await row.update(next);
-    const full = await StateZonalOfficeProfile.findByPk(row.id, { include: includeGeo });
+    if (req.file) {
+      removeAopFile(row.aop_file_path);
+      Object.assign(updates, aopFields(req.file));
+    } else if (String(req.body.remove_aop) === "true" || String(req.body.remove_aop) === "1") {
+      removeAopFile(row.aop_file_path);
+      updates.aop_original_name = null;
+      updates.aop_file_name = null;
+      updates.aop_file_path = null;
+      updates.aop_mime = null;
+    }
+
+    await row.update(updates);
+
+    if (accommodation_entries) {
+      await syncAccommodationTable(row, accommodation_entries, req.user);
+    }
+
+    const full = await StateZonalOfficeProfile.findByPk(row.id, {
+      include: [
+        ...includeGeo,
+        { model: OfficeAccommodation, as: "accommodations" },
+      ],
+    });
     res.json({ success: true, data: serialize(full) });
   } catch (err) {
     if (req.file) removeAopFile(`/uploads/office-profiles/${req.file.filename}`);
@@ -328,17 +412,51 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
+const updateStatus = async (req, res, next) => {
+  try {
+    const row = await StateZonalOfficeProfile.findByPk(req.params.id);
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Profile not found" });
+    }
+    const { status, coordinator_review_note } = req.body;
+    const updates = { status };
+    if (status === "submitted") {
+      updates.submission_date = new Date().toISOString().slice(0, 10);
+      updates.submitted_by = req.user?.name || req.user?.staff_id;
+    } else if (status === "endorsed" || status === "approved" || status === "returned") {
+      updates.coordinator_reviewed_by = req.user?.name || req.user?.staff_id;
+      updates.coordinator_reviewed_at = new Date();
+      if (coordinator_review_note !== undefined) {
+        updates.coordinator_review_note = coordinator_review_note;
+      }
+    }
+    await row.update(updates);
+    const full = await StateZonalOfficeProfile.findByPk(row.id, { include: includeGeo });
+    res.json({ success: true, data: serialize(full) });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const deleteProfile = async (req, res, next) => {
   try {
     const row = await StateZonalOfficeProfile.findByPk(req.params.id);
-    const access = await assertRecordAccess(req.user, row);
-    if (!access.ok) {
-      return res.status(access.status).json({ success: false, message: access.message });
+    if (!row) {
+      return res.status(404).json({ success: false, message: "Profile not found" });
     }
     removeAopFile(row.aop_file_path);
     await row.destroy();
     res.json({ success: true, message: "Profile deleted" });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 };
 
-module.exports = { listProfiles, getProfile, createProfile, updateProfile, deleteProfile };
+module.exports = {
+  listProfiles,
+  getProfile,
+  createProfile,
+  updateProfile,
+  updateStatus,
+  deleteProfile,
+};

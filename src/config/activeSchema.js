@@ -108,6 +108,16 @@ const APPROVED_FORMS = {
     ],
     routeSegment: "hmo-indebtedness",
   },
+  "office-profile": {
+    title: "Office Profile Hub",
+    tables: [
+      "state_zonal_office_profiles",
+      "office_accommodations",
+      "utility_service_reports",
+      "state_zonal_focal_persons",
+    ],
+    routeSegment: "office-profile",
+  },
 };
 
 function approvedFormTables() {

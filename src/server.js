@@ -135,6 +135,9 @@ if (APPROVED_FORMS["weekly-compliance"]) {
 if (APPROVED_FORMS["hmo-indebtedness"]) {
   require("./routes/hmoIndebtednessPack.routes").mountHmoIndebtednessPack(app);
 }
+if (APPROVED_FORMS["office-profile"]) {
+  require("./routes/officeProfilePack.routes").mountOfficeProfilePack(app);
+}
 // Operational home for state coordinators — approved packs only (must precede catch-all)
 {
   const { authenticate } = require("./middleware/auth");

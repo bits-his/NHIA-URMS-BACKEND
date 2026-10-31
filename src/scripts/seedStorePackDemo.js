@@ -32,9 +32,11 @@ async function main() {
       [Op.or]: [
         { movement_code: { [Op.like]: "PAR-DEMO-%" } },
         { movement_code: { [Op.like]: "SIV-DEMO-%" } },
+        { item_code: { [Op.like]: "ITEM-DEMO-%" } },
       ],
     },
   });
+  await PhysicalAssetVerificationItem.destroy({ where: { asset_code: { [Op.like]: "AST-DEMO-%" } } });
   await StoreAsset.destroy({ where: { asset_code: { [Op.like]: "AST-DEMO-%" } } });
   await StoreInventoryItem.destroy({ where: { item_code: { [Op.like]: "ITEM-DEMO-%" } } });
 

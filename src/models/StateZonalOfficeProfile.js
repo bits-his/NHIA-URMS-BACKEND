@@ -18,7 +18,6 @@ function parseJsonArray(v) {
 function stringifyJsonArray(v) {
   if (v == null) return null;
   if (typeof v === "string") {
-    // Already serialized — keep as-is if valid array JSON, else wrap parse attempt
     try {
       const parsed = JSON.parse(v);
       return Array.isArray(parsed) ? JSON.stringify(parsed) : null;
@@ -30,26 +29,29 @@ function stringifyJsonArray(v) {
   return JSON.stringify(v);
 }
 
-/** One profile row per state office and reporting year. */
+/** One profile row per state office and reporting year (Form 1: General Information). */
 const StateZonalOfficeProfile = sequelize.define(
   "StateZonalOfficeProfile",
   {
     id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
     reporting_year: { type: DataTypes.SMALLINT.UNSIGNED, allowNull: false },
-    zone_id: {
-      type: DataTypes.INTEGER.UNSIGNED,
+    zonal_code: {
+      type: DataTypes.STRING(20),
       allowNull: false,
-      references: { model: "zonal_offices", key: "id" },
-      onDelete: "RESTRICT",
+      references: { model: "zonal_offices", key: "zonal_code" },
       onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
     },
-    state_id: {
-      type: DataTypes.INTEGER.UNSIGNED,
+    state_code: {
+      type: DataTypes.STRING(20),
       allowNull: false,
-      references: { model: "state_offices", key: "id" },
-      onDelete: "RESTRICT",
+      references: { model: "state_offices", key: "code" },
       onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
     },
+    zone_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    state_id: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+
     staff_strength: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     coordinator_name: { type: DataTypes.STRING(150), allowNull: true },
     coordinator_phone: { type: DataTypes.STRING(40), allowNull: true },
@@ -82,7 +84,34 @@ const StateZonalOfficeProfile = sequelize.define(
     aop_file_name: { type: DataTypes.STRING(255), allowNull: true },
     aop_file_path: { type: DataTypes.STRING(500), allowNull: true },
     aop_mime: { type: DataTypes.STRING(120), allowNull: true },
+
+    // Multi-tier workflow status
+    status: {
+      type: DataTypes.ENUM("draft", "submitted", "endorsed", "approved"),
+      allowNull: false,
+      defaultValue: "draft",
+    },
+    submission_date: { type: DataTypes.DATEONLY, allowNull: true },
+    submitted_by: { type: DataTypes.STRING(100), allowNull: true },
+    submitted_by_user_id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: { model: "users", key: "id" },
+      onDelete: "SET NULL",
+      onUpdate: "CASCADE",
+    },
+    coordinator_review_note: { type: DataTypes.TEXT, allowNull: true },
+    coordinator_reviewed_by: { type: DataTypes.STRING(100), allowNull: true },
+    coordinator_reviewed_at: { type: DataTypes.DATE, allowNull: true },
+
     created_by: { type: DataTypes.STRING(100), allowNull: true },
+    created_by_user_id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: { model: "users", key: "id" },
+      onDelete: "SET NULL",
+      onUpdate: "CASCADE",
+    },
   },
   {
     tableName: "state_zonal_office_profiles",
@@ -91,7 +120,11 @@ const StateZonalOfficeProfile = sequelize.define(
       {
         unique: true,
         name: "uniq_office_profile_state_year",
-        fields: ["state_id", "reporting_year"],
+        fields: ["state_code", "reporting_year"],
+      },
+      {
+        name: "idx_office_profile_zone_year",
+        fields: ["zonal_code", "reporting_year"],
       },
     ],
   },

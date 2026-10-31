@@ -804,6 +804,126 @@ const FORM_MODEL_LOADERS = {
 
     return [ServicomComplaint, ServicomComplaintComment];
   },
+
+  "office-profile": () => {
+    const StateZonalOfficeProfile = require("./StateZonalOfficeProfile");
+    const OfficeAccommodation = require("./OfficeAccommodation");
+    const UtilityServiceReport = require("./UtilityServiceReport");
+    const StateZonalFocalPerson = require("./StateZonalFocalPerson");
+
+    // StateZonalOfficeProfile associations
+    ZonalOffice.hasMany(StateZonalOfficeProfile, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "office_profiles",
+    });
+    StateZonalOfficeProfile.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(StateZonalOfficeProfile, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "office_profiles",
+    });
+    StateZonalOfficeProfile.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+
+    // OfficeAccommodation associations
+    StateZonalOfficeProfile.hasMany(OfficeAccommodation, {
+      foreignKey: "profile_id",
+      as: "accommodations",
+      onDelete: "CASCADE",
+    });
+    OfficeAccommodation.belongsTo(StateZonalOfficeProfile, {
+      foreignKey: "profile_id",
+      as: "profile",
+    });
+    ZonalOffice.hasMany(OfficeAccommodation, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "accommodations",
+    });
+    OfficeAccommodation.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(OfficeAccommodation, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "accommodations",
+    });
+    OfficeAccommodation.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+
+    // UtilityServiceReport associations
+    StateZonalOfficeProfile.hasMany(UtilityServiceReport, {
+      foreignKey: "profile_id",
+      as: "utility_reports",
+      onDelete: "SET NULL",
+    });
+    UtilityServiceReport.belongsTo(StateZonalOfficeProfile, {
+      foreignKey: "profile_id",
+      as: "profile",
+    });
+    ZonalOffice.hasMany(UtilityServiceReport, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "utility_reports",
+    });
+    UtilityServiceReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(UtilityServiceReport, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "utility_reports",
+    });
+    UtilityServiceReport.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+
+    // StateZonalFocalPerson associations
+    ZonalOffice.hasMany(StateZonalFocalPerson, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "focal_persons",
+    });
+    StateZonalFocalPerson.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(StateZonalFocalPerson, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "focal_persons",
+    });
+    StateZonalFocalPerson.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+
+    return [
+      StateZonalOfficeProfile,
+      OfficeAccommodation,
+      UtilityServiceReport,
+      StateZonalFocalPerson,
+    ];
+  },
 };
 
 let _approvedFormModelsCache = null;
@@ -835,7 +955,12 @@ async function syncActiveSchema({ alter = true } = {}) {
     const name = model.tableName;
     if (seen.has(name)) continue;
     seen.add(name);
-    await model.sync({ alter });
+    try {
+      await model.sync({ alter });
+    } catch (_err) {
+      // Fallback for MySQL tables with JSON CHECK constraints
+      await model.sync();
+    }
     console.log(`  synced ${name}`);
   }
   if (APPROVED_FORMS["hmo-indebtedness"]) {
@@ -894,6 +1019,14 @@ const HmoReconLine =
   approvedFormModels.find((m) => m.tableName === "hmo_recon_lines") || null;
 const FormDocument =
   approvedFormModels.find((m) => m.tableName === "form_documents") || null;
+const StateZonalOfficeProfile =
+  approvedFormModels.find((m) => m.tableName === "state_zonal_office_profiles") || null;
+const OfficeAccommodation =
+  approvedFormModels.find((m) => m.tableName === "office_accommodations") || null;
+const UtilityServiceReport =
+  approvedFormModels.find((m) => m.tableName === "utility_service_reports") || null;
+const StateZonalFocalPerson =
+  approvedFormModels.find((m) => m.tableName === "state_zonal_focal_persons") || null;
 
 module.exports = {
   CORE_TABLES,
@@ -941,4 +1074,8 @@ module.exports = {
   HmoReconReport,
   HmoReconLine,
   FormDocument,
+  StateZonalOfficeProfile,
+  OfficeAccommodation,
+  UtilityServiceReport,
+  StateZonalFocalPerson,
 };
