@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
-const { User } = require("../models");
+const { User, Role } = require("../models");
+const { canWriteDocumentRequest } = require("../utils/documentUserProfiles");
 const {
   canReviewMonthlyReport,
   canSubmitForms,
@@ -24,6 +25,10 @@ const authenticate = async (req, res, next) => {
     if (!user || !user.is_active) {
       return res.status(401).json({ success: false, message: "User not found or inactive" });
     }
+    const role = await Role.findOne({ where: { key: user.role, is_active: true }, attributes: ["report_scope", "can_create_monthly", "can_review_monthly"] });
+    if (!role) return res.status(403).json({ success: false, message: "Your role is inactive or unavailable" });
+    user.role_config = role.toJSON();
+    if (!canWriteDocumentRequest(user, req.method, req.originalUrl)) return res.status(403).json({ success: false, message: "Your account has read-only access to this resource" });
     req.user = user;
     next();
   } catch {

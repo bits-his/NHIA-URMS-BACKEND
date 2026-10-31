@@ -75,7 +75,7 @@ const APPROVED_FORMS = {
   },
   "enrolment-drives": {
     title: "Enrolment Drives",
-    tables: ["enrolment_drive_reports"],
+    tables: ["enrolment_drive_batches", "enrolment_drive_reports", "enrolment_drive_programmes", "enrolment_drive_audiences", "enrolment_drive_reviews", "enrolment_drive_actions", "enrolment_drive_evidence"],
     routeSegment: "enrolment-drives",
   },
   "beneficiary-management": {

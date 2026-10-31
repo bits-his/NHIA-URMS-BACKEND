@@ -99,10 +99,7 @@ async function canReviewMonthlyReport(roleKey) {
 async function canSubmitForms(roleKey) {
   if (!roleKey) return false;
   if (roleKey === "admin") return true;
-  const canCreate = await canCreateMonthlyReport(roleKey);
-  const canReview = await canReviewMonthlyReport(roleKey);
-  if (canReview && !canCreate) return false;
-  return true;
+  return canCreateMonthlyReport(roleKey);
 }
 
 module.exports = {

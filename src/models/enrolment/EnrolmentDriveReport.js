@@ -79,6 +79,12 @@ const EnrolmentDriveReport = sequelize.define(
     coordinator_reviewed_by: { type: DataTypes.STRING(100), allowNull: true },
     coordinator_reviewed_at: { type: DataTypes.DATE, allowNull: true },
     planned_activities: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    batch_reference_id: { type: DataTypes.STRING(30), allowNull: true, references: { model: "enrolment_drive_batches", key: "reference_id" }, onDelete: "RESTRICT" },
+    exact_location: { type: DataTypes.STRING(500), allowNull: true },
+    evidence_type: { type: DataTypes.STRING(80), allowNull: true },
+    status_reason: { type: DataTypes.TEXT, allowNull: true },
+    other_audience: { type: DataTypes.STRING(255), allowNull: true },
+    revision: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, defaultValue: 1 },
 
     drive_code: { type: DataTypes.STRING(20), allowNull: true },
     activity_date: { type: DataTypes.DATEONLY, allowNull: true },

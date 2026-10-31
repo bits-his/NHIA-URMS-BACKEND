@@ -1,4 +1,5 @@
 const { DEPARTMENTS, accessForDepartment, accessForUnit } = require("./orgCatalog");
+const { DOCUMENT_USER_PROFILES } = require("./documentUserProfiles");
 
 const TIER = {
   officer: {
@@ -64,6 +65,8 @@ function withProviderManagementDashboard(access) {
 }
 
 function getDefaultAccess(roleKey, unitCode) {
+  const documented = DOCUMENT_USER_PROFILES.find((item) => item.role === roleKey);
+  if (documented && !unitCode) return structuredClone(documented.access);
   const row = DEPARTMENT_ROLES.find((r) => r.key === roleKey);
   if (!row) return null;
   if (unitCode) return accessForUnit(unitCode);

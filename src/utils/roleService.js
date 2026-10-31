@@ -1,5 +1,6 @@
 const { Role, User } = require("../models");
 const { DEPARTMENT_ROLES } = require("./departmentRoleAccess");
+const { documentRoleOverrides } = require("./documentUserProfiles");
 
 const CORE_ROLES = [
   { key: "admin",               label: "Admin",               staff_id_prefix: "ADMIN", report_scope: "national", can_create_monthly: true,  can_review_monthly: true,  is_system: true },
@@ -17,7 +18,7 @@ const CORE_ROLES = [
 const DEFAULT_ROLES = [
   ...CORE_ROLES,
   ...DEPARTMENT_ROLES.map(({ department_code, ...role }) => role),
-];
+].map(documentRoleOverrides);
 
 const KEY_RE = /^[a-z][a-z0-9-]*$/;
 

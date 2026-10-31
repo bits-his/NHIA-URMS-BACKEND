@@ -44,7 +44,7 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: "2mb" }));
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+app.use("/uploads", require("./middleware/enrolmentDriveEvidenceGuard"), express.static(path.join(__dirname, "../uploads")));
 app.use(morgan("dev"));
 
 app.get("/health", (req, res) =>
@@ -117,6 +117,7 @@ if (APPROVED_FORMS.enrolment) {
   app.use("/api/state-office/enrolment", require("./routes/enrolmentPack.routes"));
 }
 if (APPROVED_FORMS["enrolment-drives"]) {
+  app.use("/api/state-office/enrolment-drives", require("./routes/enrolmentDriveWorkflow.routes"));
   require("./routes/enrolmentDrivePack.routes").mountEnrolmentDrivePack(app);
 }
 if (APPROVED_FORMS["beneficiary-management"]) {

@@ -5,6 +5,7 @@
  * Shape matches the FE StateCoordinatorDashboard expectations.
  */
 const { Op } = require("sequelize");
+const { EnrolmentDriveBatch } = require("../models/enrolment/EnrolmentDriveWorkflow");
 const {
   EnrolmentReport,
   EnrolmentDriveReport,
@@ -102,6 +103,11 @@ function isConducted(status) {
 async function loadSourceRows(Model, where, attributes) {
   if (!Model) return [];
   try {
+    if (Model === EnrolmentDriveReport) {
+      const batches = await EnrolmentDriveBatch.findAll({ where, raw: true });
+      const drives = await EnrolmentDriveReport.findAll({ where, attributes: ["batch_reference_id", "activity_status"], raw: true });
+      return batches.map((batch) => ({ ...batch, status: batch.status === "submitted" ? "approved" : batch.status === "returned" ? "draft" : batch.status, conducted_total: drives.filter((drive) => drive.batch_reference_id === batch.reference_id && drive.activity_status === "Completed").length }));
+    }
     return await Model.findAll({ where, attributes, raw: true });
   } catch {
     return [];
@@ -163,10 +169,12 @@ async function aggregateSources(geo, year, month) {
     prevDrafts += prevRows.filter((r) => isDraft(r.status)).length;
 
     for (const r of curRows) {
-      if (src.planField === "planned_activities") planned += Math.max(1, num(r[src.planField]));
+      if (src.key === "enrolment_drive") planned += num(r.planned_activities);
+      else if (src.planField === "planned_activities") planned += Math.max(1, num(r[src.planField]));
       else planned += 1;
 
-      if (src.conductedField && isConducted(r[src.conductedField])) conducted += 1;
+      if (src.key === "enrolment_drive") conducted += num(r.conducted_total);
+      else if (src.conductedField && isConducted(r[src.conductedField])) conducted += 1;
       else if (isApproved(r.status) || isSubmitted(r.status)) conducted += 1;
     }
 
@@ -279,11 +287,13 @@ async function buildComparative(geo, year, month) {
       if (isApproved(r.status)) bucket.approved += 1;
       if (isDraft(r.status)) bucket.drafts += 1;
 
-      if (src.planField === "planned_activities") bucket.planned += Math.max(1, num(r[src.planField]));
+      if (src.key === "enrolment_drive") bucket.planned += num(r.planned_activities);
+      else if (src.planField === "planned_activities") bucket.planned += Math.max(1, num(r[src.planField]));
       else if (src.planField === "facilities_planned") bucket.planned += Math.max(1, num(r[src.planField]));
       else bucket.planned += 1;
 
-      if (src.conductedField && isConducted(r[src.conductedField])) bucket.conducted += 1;
+      if (src.key === "enrolment_drive") bucket.conducted += num(r.conducted_total);
+      else if (src.conductedField && isConducted(r[src.conductedField])) bucket.conducted += 1;
       else if (isApproved(r.status) || isSubmitted(r.status)) bucket.conducted += 1;
     }
   }

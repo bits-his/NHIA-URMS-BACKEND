@@ -1,4 +1,6 @@
 node_modules/
 .env
 src/.DS_Store
+/storage/enrolment-drives/
+/storage/provisioning/
 .DS_Store

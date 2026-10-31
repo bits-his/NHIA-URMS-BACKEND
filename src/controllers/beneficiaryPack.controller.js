@@ -205,6 +205,9 @@ function syntheticLine(p, docs = []) {
   const at = p.activity_type;
 
   if (at === "additional_dependant" || at === "extra_dependant") {
+    const dependent = ["principal", "dependent_1", "dependent_2", "dependent_3"].includes(p.dependant_entity)
+      ? p.dependant_entity
+      : null;
     const program = p.program_name
       ? `${p.program_name}|${p.request_kind || (at === "additional_dependant" ? "additional" : "extra")}`
       : null;
@@ -214,8 +217,9 @@ function syntheticLine(p, docs = []) {
       enrollee_name: p.enrollee_name,
       principle_nhia_number: p.nhia_number,
       nhia_number: p.nhia_number,
-      relationship: p.dependant_entity,
+      relationship: dependent ? p.relationship_kind : p.dependant_entity,
       relationship_kind: p.relationship_kind,
+      dependent,
       program,
       program_name: p.program_name,
       request_kind: p.request_kind,

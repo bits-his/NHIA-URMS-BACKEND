@@ -54,6 +54,8 @@ const EnrolmentReport = sequelize.define(
     coordinator_reviewed_by: { type: DataTypes.STRING(100), allowNull: true },
     coordinator_reviewed_at: { type: DataTypes.DATE, allowNull: true },
 
+    drive_reference_id: { type: DataTypes.STRING(30), allowNull: true, references: { model: "enrolment_drive_reports", key: "reference_id" }, onDelete: "RESTRICT" },
+    drive_enrolment_mode: { type: DataTypes.STRING(40), allowNull: true },
     category: { type: DataTypes.STRING(100), allowNull: false },
     activity_code: { type: DataTypes.STRING(20), allowNull: true },
     activity_date: { type: DataTypes.DATEONLY, allowNull: true },

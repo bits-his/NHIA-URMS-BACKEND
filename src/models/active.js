@@ -295,7 +295,8 @@ const FORM_MODEL_LOADERS = {
       as: "created_by_user",
     });
 
-    return [EnrolmentDriveReport];
+    const workflow = require("./enrolment/EnrolmentDriveWorkflow");
+    return [workflow.EnrolmentDriveBatch, EnrolmentDriveReport, workflow.EnrolmentDriveProgramme, workflow.EnrolmentDriveAudience, workflow.EnrolmentDriveReview, workflow.EnrolmentDriveAction, workflow.EnrolmentDriveEvidence];
   },
 
   "beneficiary-management": () => {
@@ -823,7 +824,8 @@ function loadApprovedFormModels() {
 }
 
 function allActiveModels() {
-  return [...CORE_MODELS, ...loadApprovedFormModels()];
+  const order = { enrolment_drive_batches: 1, enrolment_drive_reports: 2, enrolment_reports: 3 };
+  return [...CORE_MODELS, ...loadApprovedFormModels().slice().sort((a, b) => (order[a.tableName] || 4) - (order[b.tableName] || 4))];
 }
 
 async function syncActiveSchema({ alter = true } = {}) {

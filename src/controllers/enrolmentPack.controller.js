@@ -3,6 +3,26 @@
  * Accepts legacy body keys zone_id / state_id and optional lines[0] from FE.
  */
 const { Op } = require("sequelize");
+const sequelize = require("../config/database");
+const driveRules = require("../utils/enrolmentDriveWorkflow");
+
+async function driveContext(body, activity, user, transaction, existing) {
+  const requested = body.drive_reference_id || existing?.drive_reference_id;
+  if (!requested) return {};
+  if (!driveRules.hasDriveAccess(user)) throw driveRules.fail("Enrolment Drives access is required", 403);
+  if (existing && existing.drive_reference_id !== requested) throw driveRules.fail("An enrolment's originating drive cannot be changed");
+  const workflow = require("./enrolmentDriveWorkflow.controller");
+  const { drive, batch } = await workflow.batchForDrive(requested, user, transaction);
+  await workflow.requireEditor(user, batch);
+  if (!activity || activity.category !== "enrolment") throw driveRules.fail("Only enrolment records can be linked to a drive");
+  const geo = geoFromBody(user, body);
+  if (String(geo.state_code) !== String(drive.state_code) || String(geo.zonal_code) !== String(drive.zonal_code)) throw driveRules.fail("The enrolment state must match its originating activity");
+  if (!activity.program_name) throw driveRules.fail("Select an enrolment programme");
+  const count = driveRules.integer(activity.enrolment_count, "Number enrolled", true);
+  if (!count) throw driveRules.fail("Number enrolled must be at least one for a drive-linked enrolment");
+  if (activity.enrolment_channel !== "SSHIA") activity.enrolment_category = "Field Registration";
+  return { drive_reference_id: requested, drive_enrolment_mode: "Field Registration" };
+}
 const {
   EnrolmentReport,
   ZonalOffice,
@@ -147,6 +167,7 @@ const listReports = async (req, res, next) => {
       where.state_code = req.user.state_code;
     }
 
+    Object.assign(where, driveRules.scopeWhere(req.user));
     const rows = await EnrolmentReport.findAll({
       where,
       include: reportIncludes,
@@ -160,6 +181,7 @@ const getReport = async (req, res, next) => {
   try {
     const row = await findReport(req.params.id);
     if (!row) return res.status(404).json({ success: false, message: "Report not found" });
+    driveRules.assertScope(req.user, row);
     res.json({ success: true, data: mapReport(row) });
   } catch (err) { next(err); }
 };
@@ -190,18 +212,17 @@ const createReport = async (req, res, next) => {
       });
     }
 
-    const reference_id = await nextReferenceId();
-    const report = await EnrolmentReport.create({
-      reference_id,
-      ...geo,
-      reporting_year,
-      reporting_month,
-      submission_date: body.submission_date || null,
-      submitted_by: body.submitted_by || req.user?.name || null,
-      status,
-      ...activity,
-      quarter: quarterFromMonth(reporting_month),
-      created_by_user_id: req.user?.id || null,
+    let report;
+    await sequelize.transaction(async (transaction) => {
+      const context = await driveContext(body, activity, req.user, transaction);
+      const reference_id = context.drive_reference_id ? driveRules.reference("ENR") : await nextReferenceId();
+      report = await EnrolmentReport.create({
+        reference_id, ...geo, reporting_year, reporting_month,
+        submission_date: body.submission_date || null,
+        submitted_by: body.submitted_by || req.user?.name || null,
+        status, ...activity, ...context,
+        quarter: quarterFromMonth(reporting_month), created_by_user_id: req.user?.id || null,
+      }, { transaction });
     });
 
     const full = await findReport(report.reference_id);
@@ -213,6 +234,7 @@ const updateReport = async (req, res, next) => {
   try {
     const report = await EnrolmentReport.findByPk(req.params.id);
     if (!report) return res.status(404).json({ success: false, message: "Report not found" });
+    driveRules.assertScope(req.user, report);
 
     const body = req.body || {};
     const geo = geoFromBody(req.user, body);
@@ -227,20 +249,19 @@ const updateReport = async (req, res, next) => {
       return res.status(422).json({ success: false, message: "Activity category is required" });
     }
 
-    await report.update({
-      zonal_code: geo.zonal_code || report.zonal_code,
-      state_code: geo.state_code || report.state_code,
-      department_code: geo.department_code ?? report.department_code,
-      unit_code: geo.unit_code ?? report.unit_code,
-      reporting_year,
-      reporting_month,
-      submission_date: body.submission_date !== undefined
-        ? body.submission_date : report.submission_date,
-      submitted_by: body.submitted_by !== undefined
-        ? body.submitted_by : report.submitted_by,
-      status: body.status || report.status,
-      quarter: quarterFromMonth(reporting_month),
-      ...(activity || {}),
+    await sequelize.transaction(async (transaction) => {
+      const context = await driveContext(body, activity || report.toJSON(), req.user, transaction, report);
+      await report.update({
+        zonal_code: geo.zonal_code || report.zonal_code,
+        state_code: geo.state_code || report.state_code,
+        department_code: geo.department_code ?? report.department_code,
+        unit_code: geo.unit_code ?? report.unit_code,
+        reporting_year, reporting_month,
+        submission_date: body.submission_date !== undefined ? body.submission_date : report.submission_date,
+        submitted_by: body.submitted_by !== undefined ? body.submitted_by : report.submitted_by,
+        status: body.status || report.status,
+        quarter: quarterFromMonth(reporting_month), ...(activity || {}), ...context,
+      }, { transaction });
     });
 
     const full = await findReport(report.reference_id);
@@ -252,6 +273,7 @@ const updateStatus = async (req, res, next) => {
   try {
     const report = await EnrolmentReport.findByPk(req.params.id);
     if (!report) return res.status(404).json({ success: false, message: "Report not found" });
+    driveRules.assertScope(req.user, report);
     const { status, review_note, action } = req.body || {};
     if (!status) {
       return res.status(422).json({ success: false, message: "status is required" });
