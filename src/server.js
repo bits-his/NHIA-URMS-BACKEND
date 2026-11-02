@@ -138,6 +138,11 @@ if (APPROVED_FORMS["hmo-indebtedness"]) {
 if (APPROVED_FORMS["office-profile"]) {
   require("./routes/officeProfilePack.routes").mountOfficeProfilePack(app);
 }
+if (APPROVED_FORMS["adhoc-assignment"]) {
+  const adhocRoutes = require("./routes/adhocAssignmentPack.routes");
+  app.use("/api/state-office/adhoc-special-assignment", adhocRoutes);
+  app.use("/api/state-office/adhoc-assignment", adhocRoutes);
+}
 // Operational home for state coordinators — approved packs only (must precede catch-all)
 {
   const { authenticate } = require("./middleware/auth");

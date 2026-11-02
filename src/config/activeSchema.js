@@ -118,6 +118,15 @@ const APPROVED_FORMS = {
     ],
     routeSegment: "office-profile",
   },
+  "adhoc-assignment": {
+    title: "Ad-hoc / Special Assignment Management",
+    tables: [
+      "adhoc_master_assignments",
+      "adhoc_state_assignments",
+      "adhoc_state_reports",
+    ],
+    routeSegment: "adhoc-assignment",
+  },
 };
 
 function approvedFormTables() {
