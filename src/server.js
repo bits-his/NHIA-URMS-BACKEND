@@ -135,6 +135,9 @@ if (APPROVED_FORMS["weekly-compliance"]) {
 if (APPROVED_FORMS["hmo-indebtedness"]) {
   require("./routes/hmoIndebtednessPack.routes").mountHmoIndebtednessPack(app);
 }
+if (APPROVED_FORMS["challenges-support"]) {
+  app.use("/api/state-office/challenges", require("./routes/challengesPack.routes"));
+}
 if (APPROVED_FORMS["office-profile"]) {
   require("./routes/officeProfilePack.routes").mountOfficeProfilePack(app);
 }
@@ -142,6 +145,13 @@ if (APPROVED_FORMS["adhoc-assignment"]) {
   const adhocRoutes = require("./routes/adhocAssignmentPack.routes");
   app.use("/api/state-office/adhoc-special-assignment", adhocRoutes);
   app.use("/api/state-office/adhoc-assignment", adhocRoutes);
+}
+if (
+  APPROVED_FORMS.igr
+  || APPROVED_FORMS["sshia-financial"]
+  || APPROVED_FORMS["expenditure-profile"]
+) {
+  require("./routes/financePack.routes").mountFinancePack(app);
 }
 // Operational home for state coordinators — approved packs only (must precede catch-all)
 {

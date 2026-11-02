@@ -108,6 +108,18 @@ mount("stakeholder", stakeholder);
 Object.entries(enrolmentDrives).forEach(([segment, ctrl]) => mount(segment, ctrl));
 mount("hmo-selection", hmoSelection);
 mount("challenges", challenges);
+// Challenges & Support — dedicated business records (CH- / SUP-)
+const challengesSupport = require("../controllers/challengesSupport.controller");
+router.get("/challenges/catalogue", challengesSupport.catalogue);
+router.get("/challenges/records", challengesSupport.listChallenges);
+router.post("/challenges/records", challengesSupport.createChallenge);
+router.get("/challenges/records/:id", challengesSupport.getChallenge);
+router.put("/challenges/records/:id", challengesSupport.updateChallenge);
+router.post("/challenges/records/:id/activity", challengesSupport.addChallengeActivity);
+router.get("/challenges/support-requests", challengesSupport.listSupport);
+router.post("/challenges/support-requests", challengesSupport.createSupport);
+router.get("/challenges/support-requests/:id", challengesSupport.getSupport);
+router.post("/challenges/support-requests/:id/activity", challengesSupport.addSupportActivity);
 mount("igr", igr);
 mount("sshia-financial", sshiaFinancial);
 mount("expenditure-profile", expenditureProfile);

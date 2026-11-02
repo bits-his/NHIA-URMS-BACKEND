@@ -108,6 +108,11 @@ const APPROVED_FORMS = {
     ],
     routeSegment: "hmo-indebtedness",
   },
+  "challenges-support": {
+    title: "Challenges & Support",
+    tables: ["challenges", "support_requests", "challenge_support_history", "form_documents"],
+    routeSegment: "challenges",
+  },
   "office-profile": {
     title: "Office Profile Hub",
     tables: [
@@ -126,6 +131,21 @@ const APPROVED_FORMS = {
       "adhoc_state_reports",
     ],
     routeSegment: "adhoc-assignment",
+  },
+  igr: {
+    title: "IGR",
+    tables: ["finance_igr_reports"],
+    routeSegment: "igr",
+  },
+  "sshia-financial": {
+    title: "SSHIA Financial Report",
+    tables: ["finance_sshia_reports"],
+    routeSegment: "sshia-financial",
+  },
+  "expenditure-profile": {
+    title: "Expenditure Profile",
+    tables: ["finance_expenditure_profiles"],
+    routeSegment: "expenditure-profile",
   },
 };
 
