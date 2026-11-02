@@ -53,6 +53,7 @@
     "db:seed-weekly-compliance": "node src/scripts/seedWeeklyCompliance.js",
     "db:seed-office-profile": "node src/scripts/seedOfficeProfileDemo.js",
     "db:seed:rebuilt": "node src/scripts/seedRebuiltPacks.js",
+    "db:reset-passwords": "node src/scripts/resetAllPasswords.js",
     "db:reset-prod-users": "node src/scripts/resetProductionUsers.js",
     "db:generate-users-pdf": "node src/scripts/generateUsersPdf.js",
     "db:redesign:sync": "node src/scripts/redesign/syncRedesignSchema.js",

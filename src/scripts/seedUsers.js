@@ -15,7 +15,7 @@
  * Run:
  *   node src/scripts/seedUsers.js
  *
- * Default password for all seeded users: Nhia@2025
+ * Default password for all seeded users: 123456
  */
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
@@ -192,12 +192,24 @@ async function removeLegacyPilotUsers() {
 }
 
 async function upsertUser(spec) {
+  const hashed = await bcrypt.hash(spec.password || DEMO_PASSWORD, 12);
   const existing = await User.findOne({ where: { staff_id: spec.staff_id } });
   if (existing) {
-    return { user: existing, created: false, skipped: true };
+    await existing.update({
+      password: hashed,
+      name: spec.name,
+      email: spec.email,
+      role: spec.role,
+      zonal_code: spec.zonal_code ?? null,
+      state_code: spec.state_code ?? null,
+      department_code: spec.department_code ?? null,
+      unit_code: spec.unit_code ?? null,
+      is_active: true,
+      functionalities: spec.functionalities,
+    });
+    return { user: existing, created: false, skipped: false, updated: true };
   }
 
-  const hashed = await bcrypt.hash(spec.password || DEMO_PASSWORD, 12);
   const user = await User.create({
     staff_id: spec.staff_id,
     name: spec.name,
@@ -420,11 +432,7 @@ async function buildUserSpecs(deptMap, unitMap) {
 
     console.log("\n" + "=".repeat(90));
     logPartial("Demo users", created, skipped);
-    if (created > 0) {
-      console.log(`🔑  Password for newly created users: ${DEMO_PASSWORD}`);
-    } else {
-      console.log("🔑  Existing users kept unchanged (password not reset)");
-    }
+    console.log(`🔑  Password for all demo/seed users: ${DEMO_PASSWORD}`);
     console.log("\nHow to use:");
     console.log("  • DO-FIN-*     → Finance & Admin monthly report only");
     console.log("  • DO-PROG-*    → Programmes (enrolment + outreach) monthly only");

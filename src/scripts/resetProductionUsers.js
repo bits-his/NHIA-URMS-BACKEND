@@ -81,7 +81,7 @@ async function resetProductionUsers({ confirm = false } = {}) {
         role: p.role,
         scope: p.report_scope,
         dept: p.department_code,
-        initial_password: cred?.password || "Nhia@2026!" + p.staff_id.replace("-", ""),
+        initial_password: cred?.password || "123456",
       };
     })
   );
@@ -133,7 +133,7 @@ async function resetProductionUsers({ confirm = false } = {}) {
     // C. Create official canonical accounts
     for (const spec of DOCUMENT_USER_PROFILES) {
       const cred = PRODUCTION_ACCOUNTS.find((a) => a.staff_id === spec.staff_id);
-      const rawPassword = cred?.password || `Nhia@2026!${spec.staff_id.replace(/[^a-zA-Z0-9]/g, "")}`;
+      const rawPassword = cred?.password || "123456";
       const hashedPassword = await bcrypt.hash(rawPassword, 12);
 
       const stateCode = spec.report_scope === "state" ? "KAN" : null;

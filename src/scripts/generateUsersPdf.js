@@ -39,7 +39,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "ICT",
     scope: "National (HQ)",
     email: "admin@nhia.gov.ng",
-    password: "Password123!",
+    password: "123456",
   },
   {
     sn: 2,
@@ -49,7 +49,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "SDO",
     scope: "National (HQ)",
     email: "sdo-0001@nhia.gov.ng",
-    password: "Nhia@2026!SDO0001",
+    password: "123456",
   },
   {
     sn: 3,
@@ -59,7 +59,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "SERVICOM (SVC)",
     scope: "National (HQ)",
     email: "svcsc-0001@nhia.gov.ng",
-    password: "Nhia@2026!SVCSC0001",
+    password: "123456",
   },
   {
     sn: 4,
@@ -69,7 +69,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "SERVICOM (SVC)",
     scope: "State Office (Kano / NW)",
     email: "svcro-0001@nhia.gov.ng",
-    password: "Nhia@2026!SVCRO0001",
+    password: "123456",
   },
   {
     sn: 5,
@@ -79,7 +79,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "Stock Verification (STK)",
     scope: "National (HQ)",
     email: "stksc-0001@nhia.gov.ng",
-    password: "Nhia@2026!STKSC0001",
+    password: "123456",
   },
   {
     sn: 6,
@@ -89,7 +89,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "Stock Verification (STK)",
     scope: "State Office (Kano / NW)",
     email: "stkro-0001@nhia.gov.ng",
-    password: "Nhia@2026!STKRO0001",
+    password: "123456",
   },
   {
     sn: 7,
@@ -99,7 +99,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "State Coordination (SOC)",
     scope: "National (HQ)",
     email: "socsc-0001@nhia.gov.ng",
-    password: "Nhia@2026!SOCSC0001",
+    password: "123456",
   },
   {
     sn: 8,
@@ -109,7 +109,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "State Coordination (SOC)",
     scope: "State Office (Kano / NW)",
     email: "socro-0001@nhia.gov.ng",
-    password: "Nhia@2026!SOCRO0001",
+    password: "123456",
   },
   {
     sn: 9,
@@ -119,7 +119,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "Special Projects (SPD)",
     scope: "National (HQ)",
     email: "spdsc-0001@nhia.gov.ng",
-    password: "Nhia@2026!SPDSC0001",
+    password: "123456",
   },
   {
     sn: 10,
@@ -129,7 +129,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "Special Projects (SPD)",
     scope: "State Office (Kano / NW)",
     email: "spdro-0001@nhia.gov.ng",
-    password: "Nhia@2026!SPDRO0001",
+    password: "123456",
   },
   {
     sn: 11,
@@ -139,7 +139,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "State Office Leadership",
     scope: "State Office (Kano / NW)",
     email: "sc-0001@nhia.gov.ng",
-    password: "Nhia@2026!SC0001",
+    password: "123456",
   },
   {
     sn: 12,
@@ -149,7 +149,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "State Coordination (SOC)",
     scope: "Zonal Office (North West)",
     email: "soczc-0001@nhia.gov.ng",
-    password: "Nhia@2026!SOCZC0001",
+    password: "123456",
   },
   {
     sn: 13,
@@ -159,7 +159,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "State Operations (SOC)",
     scope: "State Office (Kano / NW)",
     email: "soro-0001@nhia.gov.ng",
-    password: "Nhia@2026!SORO0001",
+    password: "123456",
   },
   {
     sn: 14,
@@ -169,7 +169,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "Enforcement (ENF)",
     scope: "National Directorate",
     email: "enfzc-0001@nhia.gov.ng",
-    password: "Nhia@2026!ENFZC0001",
+    password: "123456",
   },
   {
     sn: 15,
@@ -179,7 +179,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "Finance & Admin (FIN)",
     scope: "National Directorate",
     email: "finzc-0001@nhia.gov.ng",
-    password: "Nhia@2026!FINZC0001",
+    password: "123456",
   },
   {
     sn: 16,
@@ -189,7 +189,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "Formal Sector (FSD)",
     scope: "National Directorate",
     email: "fsdzc-0001@nhia.gov.ng",
-    password: "Nhia@2026!FSDZC0001",
+    password: "123456",
   },
   {
     sn: 17,
@@ -199,7 +199,7 @@ const PRODUCTION_ACCOUNTS = [
     dept: "Executive Office",
     scope: "National Leadership",
     email: "dg-0001@nhia.gov.ng",
-    password: "Nhia@2026!DG0001",
+    password: "123456",
   },
 ];
 
