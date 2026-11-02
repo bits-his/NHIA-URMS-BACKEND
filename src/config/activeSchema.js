@@ -123,6 +123,21 @@ const APPROVED_FORMS = {
     ],
     routeSegment: "office-profile",
   },
+  igr: {
+    title: "IGR",
+    tables: ["finance_igr_reports"],
+    routeSegment: "igr",
+  },
+  "sshia-financial": {
+    title: "SSHIA Financial Report",
+    tables: ["finance_sshia_reports"],
+    routeSegment: "sshia-financial",
+  },
+  "expenditure-profile": {
+    title: "Expenditure Profile",
+    tables: ["finance_expenditure_profiles"],
+    routeSegment: "expenditure-profile",
+  },
 };
 
 function approvedFormTables() {
