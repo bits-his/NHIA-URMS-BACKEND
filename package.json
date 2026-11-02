@@ -41,6 +41,7 @@
     "db:document-users:preview": "node src/scripts/replaceDocumentUsers.js",
     "db:seed-beneficiary-pack": "node src/scripts/seedBeneficiaryDemo.js",
     "db:seed-stakeholder-pack": "node src/scripts/seedStakeholderDemo.js",
+    "db:seed-finance-pack": "node src/scripts/seedFinanceDemo.js",
     "db:seed-provider-pack": "node src/scripts/seedProviderManagementDemo.js",
     "db:seed-provider-jigawa": "node src/scripts/seedProviderManagementJigawa.js",
     "db:seed-hmo-indebtedness-pack": "node src/scripts/seedHmoIndebtednessDemo.js",
