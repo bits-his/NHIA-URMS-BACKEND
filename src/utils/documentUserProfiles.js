@@ -43,7 +43,7 @@ function canWriteDocumentRequest(user, method, originalUrl = "") {
   if (!spec) return true;
   const pathname = originalUrl.split("?")[0];
   if (/^\/api\/notifications(?:\/|$)/.test(pathname)) return true;
-  if (spec.annualOnly) return /^\/api\/(?:annual-reports|reports)(?:\/|$)/.test(pathname);
+  if (spec.annualOnly) return /^\/api\/(?:annual-reports|reports|state-office\/challenges)(?:\/|$)/.test(pathname);
   const role = user.role_config || spec;
   return !!(role.can_create_monthly || role.can_review_monthly);
 }

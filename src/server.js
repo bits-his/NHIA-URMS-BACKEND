@@ -135,6 +135,9 @@ if (APPROVED_FORMS["weekly-compliance"]) {
 if (APPROVED_FORMS["hmo-indebtedness"]) {
   require("./routes/hmoIndebtednessPack.routes").mountHmoIndebtednessPack(app);
 }
+if (APPROVED_FORMS["challenges-support"]) {
+  app.use("/api/state-office/challenges", require("./routes/challengesPack.routes"));
+}
 if (APPROVED_FORMS["office-profile"]) {
   require("./routes/officeProfilePack.routes").mountOfficeProfilePack(app);
 }

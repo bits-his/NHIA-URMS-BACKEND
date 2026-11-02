@@ -108,6 +108,11 @@ const APPROVED_FORMS = {
     ],
     routeSegment: "hmo-indebtedness",
   },
+  "challenges-support": {
+    title: "Challenges & Support",
+    tables: ["challenges", "support_requests", "challenge_support_history", "form_documents"],
+    routeSegment: "challenges",
+  },
   "office-profile": {
     title: "Office Profile Hub",
     tables: [
