@@ -805,6 +805,19 @@ const FORM_MODEL_LOADERS = {
     return [ServicomComplaint, ServicomComplaintComment];
   },
 
+  "challenges-support": () => {
+    const { Challenge, SupportRequest, RecordHistory } = require("./ChallengesSupport");
+    StateOffice.hasMany(Challenge, { foreignKey: "state_code", sourceKey: "code", as: "challenges" });
+    Challenge.belongsTo(StateOffice, { foreignKey: "state_code", targetKey: "code", as: "state" });
+    ZonalOffice.hasMany(Challenge, { foreignKey: "zonal_code", sourceKey: "zonal_code", as: "challenges" });
+    Challenge.belongsTo(ZonalOffice, { foreignKey: "zonal_code", targetKey: "zonal_code", as: "zone" });
+    StateOffice.hasMany(SupportRequest, { foreignKey: "state_code", sourceKey: "code", as: "support_requests" });
+    SupportRequest.belongsTo(StateOffice, { foreignKey: "state_code", targetKey: "code", as: "state" });
+    ZonalOffice.hasMany(SupportRequest, { foreignKey: "zonal_code", sourceKey: "zonal_code", as: "support_requests" });
+    SupportRequest.belongsTo(ZonalOffice, { foreignKey: "zonal_code", targetKey: "zonal_code", as: "zone" });
+    return [Challenge, SupportRequest, RecordHistory];
+  },
+
   "office-profile": () => {
     const StateZonalOfficeProfile = require("./StateZonalOfficeProfile");
     const OfficeAccommodation = require("./OfficeAccommodation");
