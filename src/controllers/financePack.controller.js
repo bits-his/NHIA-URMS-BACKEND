@@ -172,10 +172,11 @@ function makeCrud({ Model, prefix, parseBody, mapExtra, uniquePeriod, mergeOnCon
       }
 
       const status = body.status || "draft";
-      if (status === "approved") {
+      const createAllowed = new Set(["draft", "awaiting_review", "returned"]);
+      if (!createAllowed.has(status)) {
         return res.status(422).json({
           success: false,
-          message: "Send the report for review. Final approval follows the state coordinator's endorsement.",
+          message: "Send the report for coordinator review first. Final submission follows endorsement.",
         });
       }
 
@@ -196,6 +197,13 @@ function makeCrud({ Model, prefix, parseBody, mapExtra, uniquePeriod, mergeOnCon
           // reject if that sub-head is already recorded for the quarter.
           if (mergeOnConflict) {
             assertScope(req.user, existing);
+            if (!["draft", "returned"].includes(existing.status)) {
+              return res.status(409).json({
+                success: false,
+                message: "A report already exists for this office and quarter. Open it to view or wait until it is returned for correction.",
+                data: { reference_id: existing.reference_id },
+              });
+            }
             const prefixLabels = {
               cap: "Capitation",
               ffs: "Fee-for-Service",
@@ -222,9 +230,7 @@ function makeCrud({ Model, prefix, parseBody, mapExtra, uniquePeriod, mergeOnCon
                 });
               }
             }
-            const nextStatus = existing.status === "approved"
-              ? existing.status
-              : (status || existing.status);
+            const nextStatus = status || existing.status;
             await existing.update({
               ...fields,
               submission_date: body.submission_date !== undefined
@@ -297,21 +303,49 @@ function makeCrud({ Model, prefix, parseBody, mapExtra, uniquePeriod, mergeOnCon
         reporting_quarter = quarterFromMonth(reporting_month);
       }
 
+      const nextStatus = body.status || report.status;
+      const current = report.status;
+      const editable = ["draft", "returned"].includes(current);
       const fields = parseBody(body);
-      await report.update({
-        zonal_code: geo.zonal_code || report.zonal_code,
-        state_code: geo.state_code || report.state_code,
-        department_code: geo.department_code ?? report.department_code,
-        unit_code: geo.unit_code ?? report.unit_code,
-        reporting_year,
-        reporting_month,
-        ...(Model.rawAttributes.reporting_quarter ? { reporting_quarter } : {}),
-        ...(Model.rawAttributes.quarter ? { quarter: quarterFromMonth(reporting_month) } : {}),
-        submission_date: body.submission_date !== undefined ? body.submission_date : report.submission_date,
-        submitted_by: body.submitted_by !== undefined ? body.submitted_by : report.submitted_by,
-        status: body.status || report.status,
-        ...fields,
-      });
+
+      if (!editable) {
+        // Final submit after endorsement (status-only)
+        if (current === "endorsed" && nextStatus === "submitted") {
+          await report.update({
+            status: "submitted",
+            submission_date: body.submission_date !== undefined ? body.submission_date : report.submission_date,
+            submitted_by: body.submitted_by !== undefined ? body.submitted_by : report.submitted_by,
+          });
+        } else {
+          return res.status(422).json({
+            success: false,
+            message: "This report is locked until the coordinator acts, or after final submission.",
+          });
+        }
+      } else {
+        if (nextStatus === "awaiting_review" || nextStatus === "draft" || nextStatus === "returned") {
+          // ok
+        } else if (nextStatus !== current) {
+          return res.status(422).json({
+            success: false,
+            message: "Send the report for coordinator review first.",
+          });
+        }
+        await report.update({
+          zonal_code: geo.zonal_code || report.zonal_code,
+          state_code: geo.state_code || report.state_code,
+          department_code: geo.department_code ?? report.department_code,
+          unit_code: geo.unit_code ?? report.unit_code,
+          reporting_year,
+          reporting_month,
+          ...(Model.rawAttributes.reporting_quarter ? { reporting_quarter } : {}),
+          ...(Model.rawAttributes.quarter ? { quarter: quarterFromMonth(reporting_month) } : {}),
+          submission_date: body.submission_date !== undefined ? body.submission_date : report.submission_date,
+          submitted_by: body.submitted_by !== undefined ? body.submitted_by : report.submitted_by,
+          status: nextStatus,
+          ...fields,
+        });
+      }
 
       const full = await findReport(report.reference_id);
       res.json({ success: true, data: mapExtra(mapBase(full)) });
@@ -326,19 +360,73 @@ function makeCrud({ Model, prefix, parseBody, mapExtra, uniquePeriod, mergeOnCon
       const report = await Model.findByPk(req.params.id);
       if (!report) return res.status(404).json({ success: false, message: "Report not found" });
       assertScope(req.user, report);
-      const { status, review_note, action } = req.body || {};
-      if (!status) {
-        return res.status(422).json({ success: false, message: "status is required" });
+
+      const { status, review_note: reviewNote } = req.body || {};
+      const allowed = ["draft", "awaiting_review", "returned", "endorsed", "submitted", "approved"];
+      if (!status || !allowed.includes(status)) {
+        return res.status(422).json({ success: false, message: "Invalid status" });
       }
-      const patch = { status };
-      if (action === "endorse" || status === "approved") {
-        patch.coordinator_reviewed_by = req.user?.name || req.user?.staff_id || null;
-        patch.coordinator_reviewed_at = new Date();
-        if (review_note) patch.coordinator_review_note = review_note;
-      } else if (review_note) {
-        patch.coordinator_review_note = review_note;
+
+      const role = String(req.user?.role || "");
+      const isCoordinator = /(^|-)(state|zonal)-coordinator$/.test(role) || role === "admin";
+      const reviewerName = req.user?.name || req.user?.staff_id || "Reviewer";
+      const note = reviewNote && String(reviewNote).trim() ? String(reviewNote).trim() : null;
+      const current = report.status;
+
+      if (isCoordinator) {
+        if (current === "awaiting_review") {
+          if (status !== "endorsed" && status !== "returned") {
+            return res.status(422).json({
+              success: false,
+              message: "Coordinators may endorse or return reports awaiting review",
+            });
+          }
+          if (!note) {
+            return res.status(422).json({
+              success: false,
+              message: "Remarks are required before endorsing or returning a report",
+            });
+          }
+        } else {
+          return res.status(422).json({
+            success: false,
+            message: "Only reports awaiting review can be actioned by a coordinator",
+          });
+        }
+        await report.update({
+          status,
+          coordinator_reviewed_by: reviewerName,
+          coordinator_reviewed_at: new Date(),
+          coordinator_review_note: note || (status === "endorsed" ? null : report.coordinator_review_note),
+        });
+      } else {
+        if (status === "awaiting_review" && !["draft", "returned"].includes(current)) {
+          return res.status(422).json({
+            success: false,
+            message: "Only draft or returned reports can be sent for review",
+          });
+        }
+        if (status === "submitted" && current !== "endorsed") {
+          return res.status(422).json({
+            success: false,
+            message: "Report must be endorsed by the State Coordinator before submission",
+          });
+        }
+        if (status === "draft" && !["draft", "returned"].includes(current)) {
+          return res.status(422).json({
+            success: false,
+            message: "Cannot move this report back to draft from the current status",
+          });
+        }
+        if (["endorsed", "returned", "approved"].includes(status)) {
+          return res.status(403).json({
+            success: false,
+            message: "Only a State Coordinator can endorse or return this report",
+          });
+        }
+        await report.update({ status });
       }
-      await report.update(patch);
+
       const full = await findReport(report.reference_id);
       res.json({ success: true, data: mapExtra(mapBase(full)) });
     } catch (err) { next(err); }

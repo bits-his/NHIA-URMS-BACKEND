@@ -48,9 +48,23 @@ test("dashboard-only accounts cannot mutate business resources and annual-only r
     for (const method of ["POST", "PUT", "PATCH", "DELETE"]) assert.equal(canWriteDocumentRequest(spec, method, "/api/state-office/enrolment/reports"), false);
   }
   for (const role of ["state-coordinator", "soc-zonal-coordinator"]) {
-    assert(canWriteDocumentRequest({ role }, "POST", "/api/annual-reports"));
-    assert.equal(canWriteDocumentRequest({ role }, "POST", "/api/state-office/enrolment/reports"), false);
-    assert.equal(canWriteDocumentRequest({ role }, "PUT", "/api/admin/users/1"), false);
+    const cfg = { role, role_config: { can_create_monthly: false, can_review_monthly: true } };
+    assert(canWriteDocumentRequest(cfg, "PATCH", `/api/state-office/stakeholder/reports/STK-2026-00001/status`));
+    assert(canWriteDocumentRequest(cfg, "POST", "/api/annual-reports"));
+    assert.equal(canWriteDocumentRequest(cfg, "POST", "/api/state-office/enrolment/reports"), false);
+    assert.equal(canWriteDocumentRequest(cfg, "PUT", "/api/admin/users/1"), false);
+  }
+  // Review-only coordinator can endorse but cannot create new reports
+  {
+    const sc = { role: "state-coordinator", role_config: { can_create_monthly: false, can_review_monthly: true } };
+    assert(canWriteDocumentRequest(sc, "PATCH", "/api/state-office/igr/reports/IGR-1/status"));
+    assert.equal(canWriteDocumentRequest(sc, "POST", "/api/state-office/igr/reports"), false);
+  }
+  // Review-only coordinator: endorse OK, create blocked
+  {
+    const sc = { role: "state-coordinator", role_config: { can_create_monthly: false, can_review_monthly: true } };
+    assert(canWriteDocumentRequest(sc, "PATCH", "/api/state-office/igr/reports/IGR-1/status"));
+    assert.equal(canWriteDocumentRequest(sc, "POST", "/api/state-office/igr/reports"), false);
   }
   assert(canWriteDocumentRequest({ role: "admin" }, "DELETE", "/api/admin/users/2"));
   assert(canWriteDocumentRequest({ role: "sdo" }, "POST", "/api/admin/users"));

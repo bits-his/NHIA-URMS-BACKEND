@@ -50,7 +50,7 @@ const FinanceExpenditureProfile = sequelize.define(
     submission_date: { type: DataTypes.DATEONLY, allowNull: true },
     submitted_by: { type: DataTypes.STRING(100), allowNull: true },
     status: {
-      type: DataTypes.ENUM("draft", "submitted", "approved"),
+      type: DataTypes.ENUM("draft", "awaiting_review", "returned", "endorsed", "submitted", "approved"),
       allowNull: false,
       defaultValue: "draft",
     },
