@@ -138,6 +138,14 @@ if (APPROVED_FORMS["hmo-indebtedness"]) {
 if (APPROVED_FORMS["challenges-support"]) {
   app.use("/api/state-office/challenges", require("./routes/challengesPack.routes"));
 }
+// Operational home dashboard must register BEFORE packs that mount at /api/state-office
+// (e.g. office-profile), otherwise their router middleware intercepts /dashboard.
+{
+  const { authenticate } = require("./middleware/auth");
+  const opsDash = require("./controllers/stateOfficeOperationalDashboard.controller");
+  app.get("/api/state-office/dashboard", authenticate, opsDash.dashboard);
+  app.get("/api/state-office/dashboard/drill", authenticate, opsDash.dashboardDrill);
+}
 if (APPROVED_FORMS["office-profile"]) {
   require("./routes/officeProfilePack.routes").mountOfficeProfilePack(app);
 }
@@ -152,13 +160,6 @@ if (
   || APPROVED_FORMS["expenditure-profile"]
 ) {
   require("./routes/financePack.routes").mountFinancePack(app);
-}
-// Operational home for state coordinators — approved packs only (must precede catch-all)
-{
-  const { authenticate } = require("./middleware/auth");
-  const opsDash = require("./controllers/stateOfficeOperationalDashboard.controller");
-  app.get("/api/state-office/dashboard", authenticate, opsDash.dashboard);
-  app.get("/api/state-office/dashboard/drill", authenticate, opsDash.dashboardDrill);
 }
 app.use("/api/state-office", notRebuilt("State office forms"));
 app.use("/api/sqa", notRebuilt("SQA compliance"));

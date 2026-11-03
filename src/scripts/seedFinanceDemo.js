@@ -1,6 +1,6 @@
 /**
  * Seed demo Finance pack rows for IGR, SSHIA, and Expenditure Profile.
- * Enough volume for list pages + Finance Dashboard (submitted/approved KPIs).
+ * Enough volume for list pages + Finance Dashboard (submitted KPIs).
  *
  *   node src/scripts/seedFinanceDemo.js
  *   npm run db:seed-finance-pack
@@ -25,13 +25,13 @@ const STATUSES = [
   "returned",
   "endorsed",
   "submitted",
-  "approved",
   "submitted",
-  "approved",
+  "draft",
+  "awaiting_review",
+  "endorsed",
   "submitted",
-  "approved",
+  "returned",
   "submitted",
-  "approved",
 ];
 
 const IGR_SERVICES = [
@@ -72,7 +72,7 @@ function monthForQuarter(q) {
 }
 
 function reviewFields(status, i) {
-  if (!["returned", "endorsed", "submitted", "approved"].includes(status)) {
+  if (!["returned", "endorsed", "submitted"].includes(status)) {
     return {
       coordinator_review_note: null,
       coordinator_reviewed_by: null,
@@ -247,7 +247,7 @@ async function main() {
   console.log(`   IGR receipts:              ${igrRows.length}`);
   console.log(`   SSHIA progress reports:    ${sshiaRows.length}`);
   console.log(`   Expenditure profiles:      ${expRows.length}`);
-  console.log(`   Submitted/approved rows feed the Finance Dashboard KPIs.`);
+  console.log(`   Submitted rows feed the Finance Dashboard KPIs.`);
   await sequelize.close();
 }
 

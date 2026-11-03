@@ -82,6 +82,9 @@ test("national directors override legacy zonal role names without requiring a fa
   assert.deepEqual(scopeWhere({ role: "soc-zonal-coordinator", zonal_code: "NW", role_config: { report_scope: "zonal" } }), { zonal_code: "NW" });
   assert.deepEqual(scopeWhere({ role: "state-officer", state_code: "KAN", role_config: { report_scope: "state" } }), { state_code: "KAN" });
   assert.throws(() => scopeWhere({ role: "state-officer", role_config: { report_scope: "state" } }), /No state/);
+  assert.deepEqual(scopeWhere({ role: "state-coordinator", state_code: "JIG", role_config: { report_scope: "state" } }), { state_code: "JIG" });
+  assert.deepEqual(scopeWhere({ role: "state-coordinator", state_code: "JIG", role_config: { report_scope: "national" } }), { state_code: "JIG" });
+  assert.deepEqual(scopeWhere({ role: "soc-state-coordinator", role_config: { report_scope: "national" } }), {});
   assert.deepEqual(idsFrom("199,2,158"), [2, 158, 199]);
 });
 

@@ -339,9 +339,31 @@ function requireStateOfficeRoute(req, res, next) {
   const parts = req.path.split("/").filter(Boolean);
   const segment = parts[0];
 
-  // Executive / national home dashboards call /dashboard(+ /drill)
-  if (segment === "dashboard" && NATIONAL_DASHBOARD_ROLES.has(req.user?.role)) {
-    return next();
+  // Home / operational dashboard (+ drill) — national roles, coordinators, or any dashboard privilege.
+  // Note: office-profile pack mounts at /api/state-office and must not block this path.
+  if (segment === "dashboard") {
+    if (req.user?.role === "admin" || NATIONAL_DASHBOARD_ROLES.has(req.user?.role)) return next();
+    const roleKey = String(req.user?.role || "").trim().toLowerCase().replace(/_/g, "-");
+    if (
+      roleKey === "state-coordinator"
+      || roleKey.endsWith("-state-coordinator")
+      || roleKey === "zonal-coordinator"
+      || roleKey === "zc"
+      || roleKey.endsWith("-zonal-coordinator")
+    ) {
+      return next();
+    }
+    const access = parseAccess(req.user?.functionalities);
+    if (grantForFunctionality(access, "SOC/Zones Dashboard")) return next();
+    const zonalEntry = findZonalEntry(access);
+    if (zonalEntry && hasFunctionality(zonalEntry, "State Office Dashboard")) return next();
+    const homeDash = access.find((e) => e?.access_to === "Dashboard");
+    if (homeDash && hasFunctionality(homeDash, "Dashboard")) return next();
+    return res.status(403).json({
+      success: false,
+      message: "Access denied",
+      required: "Dashboard",
+    });
   }
 
   // Provider Management Dashboard is a separate privilege from the activity register

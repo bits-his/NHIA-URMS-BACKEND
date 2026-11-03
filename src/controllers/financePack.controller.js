@@ -362,7 +362,7 @@ function makeCrud({ Model, prefix, parseBody, mapExtra, uniquePeriod, mergeOnCon
       assertScope(req.user, report);
 
       const { status, review_note: reviewNote } = req.body || {};
-      const allowed = ["draft", "awaiting_review", "returned", "endorsed", "submitted", "approved"];
+      const allowed = ["draft", "awaiting_review", "returned", "endorsed", "submitted"];
       if (!status || !allowed.includes(status)) {
         return res.status(422).json({ success: false, message: "Invalid status" });
       }
@@ -418,7 +418,7 @@ function makeCrud({ Model, prefix, parseBody, mapExtra, uniquePeriod, mergeOnCon
             message: "Cannot move this report back to draft from the current status",
           });
         }
-        if (["endorsed", "returned", "approved"].includes(status)) {
+        if (["endorsed", "returned"].includes(status)) {
           return res.status(403).json({
             success: false,
             message: "Only a State Coordinator can endorse or return this report",

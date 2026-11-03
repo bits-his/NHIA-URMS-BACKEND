@@ -287,7 +287,8 @@ const analytics = respond(async (req, res) => {
   if (req.query.state_code) {
     const selectedState = await StateOffice.findByPk(String(req.query.state_code), { attributes: ["code", "zonal_code"], raw: true });
     if (!selectedState) throw fail("Select a valid state");
-    assertScope(req.user, selectedState);
+    // StateOffice PK is `code`; assertScope expects `state_code` on scoped rows.
+    assertScope(req.user, { state_code: selectedState.code, zonal_code: selectedState.zonal_code });
     where.state_code = selectedState.code;
     where.zonal_code = selectedState.zonal_code;
   }

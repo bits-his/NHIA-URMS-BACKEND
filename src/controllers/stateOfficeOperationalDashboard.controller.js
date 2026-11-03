@@ -61,21 +61,80 @@ function resolvePeriod(query) {
   return { year, month };
 }
 
-function geoWhere(user, query) {
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase().replace(/_/g, "-").replace(/\s+/g, "-");
+}
+
+function isStateCoordinatorRole(role) {
+  const r = normalizeRole(role);
+  return r === "state-coordinator" || r.endsWith("-state-coordinator");
+}
+
+function isZonalCoordinatorRole(role) {
+  const r = normalizeRole(role);
+  return r === "zonal-coordinator" || r === "zc" || r.endsWith("-zonal-coordinator");
+}
+
+function isNationalRole(role) {
+  return ["sdo", "dg-ceo", "admin", "hq-department"].includes(normalizeRole(role));
+}
+
+function denyScope(message = "Access denied") {
+  throw Object.assign(new Error(message), { status: 403 });
+}
+
+/**
+ * Resolve geo filters. State coordinators with an assigned state are hard-locked —
+ * query params cannot widen them to national / another state.
+ */
+function geoWhere(user, query = {}) {
+  const role = user?.role || "";
+  const reportScope = user?.role_config?.report_scope;
+  const requestedState = query.state_code || query.state_id || null;
+  const requestedZone = query.zonal_code || query.zone_id || null;
+
+  // Real state coordinators (assigned state) — never national.
+  if (isStateCoordinatorRole(role) && user?.state_code) {
+    if (
+      requestedState
+      && requestedState !== "all"
+      && String(requestedState) !== String(user.state_code)
+    ) {
+      denyScope();
+    }
+    const where = { state_code: String(user.state_code) };
+    if (user.zonal_code) where.zonal_code = String(user.zonal_code);
+    return where;
+  }
+
+  // Zonal coordinators stay inside their zone.
+  if (isZonalCoordinatorRole(role) && user?.zonal_code) {
+    if (
+      requestedZone
+      && requestedZone !== "all"
+      && String(requestedZone) !== String(user.zonal_code)
+    ) {
+      denyScope();
+    }
+    const where = { zonal_code: String(user.zonal_code) };
+    if (requestedState && requestedState !== "all") where.state_code = String(requestedState);
+    return where;
+  }
+
+  // National HQ / SDO — honour optional filters only.
+  if (isNationalRole(role) || (reportScope === "national" && !user?.state_code)) {
+    const where = {};
+    if (requestedZone && requestedZone !== "all") where.zonal_code = String(requestedZone);
+    if (requestedState && requestedState !== "all") where.state_code = String(requestedState);
+    return where;
+  }
+
+  // Fallback: prefer request, else user assignment.
   const where = {};
-  const zonal = query.zonal_code || query.zone_id || user?.zonal_code || null;
-  const state = query.state_code || query.state_id || user?.state_code || null;
+  const zonal = requestedZone || user?.zonal_code || null;
+  const state = requestedState || user?.state_code || null;
   if (zonal && zonal !== "all") where.zonal_code = String(zonal);
   if (state && state !== "all") where.state_code = String(state);
-  const role = String(user?.role || "");
-  // Role defaults when FE omits locks
-  if (!where.state_code && user?.state_code && (role.includes("state-coordinator") || role.endsWith("-state-coordinator"))) {
-    where.state_code = user.state_code;
-  }
-  // Zonal coordinators must stay in their zone (never lock to a single state)
-  if (!where.zonal_code && user?.zonal_code && !["sdo", "dg-ceo", "admin", "hq-department"].includes(role)) {
-    where.zonal_code = user.zonal_code;
-  }
   return where;
 }
 

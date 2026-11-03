@@ -101,19 +101,24 @@ const ROLE_SCOPE_FALLBACK = {
 };
 
 function userGeo(user) {
-  if (!user) return { zone_id: null, state_id: null };
-  const zone_id = user.zone_id ?? user.zone?.id ?? user.get?.("zone_id") ?? null;
-  const state_id = user.state_id ?? user.state?.id ?? user.get?.("state_id") ?? null;
-  return { zone_id, state_id };
+  if (!user) return { zone_id: null, state_id: null, zonal_code: null, state_code: null };
+  const zonal_code = user.zonal_code ?? user.zone?.zonal_code ?? user.get?.("zonal_code") ?? null;
+  const state_code = user.state_code ?? user.state?.code ?? user.get?.("state_code") ?? null;
+  // Legacy numeric ids (when present) plus code-based PK used by rebuild schema.
+  const zone_id = user.zone_id ?? user.zone?.id ?? user.get?.("zone_id") ?? zonal_code ?? null;
+  const state_id = user.state_id ?? user.state?.id ?? user.get?.("state_id") ?? state_code ?? null;
+  return { zone_id, state_id, zonal_code, state_code };
 }
 
 /** Resolve zone from user row or their assigned state. */
 async function resolveUserZoneId(user) {
-  const { zone_id, state_id } = userGeo(user);
+  const { zone_id, state_id, zonal_code, state_code } = userGeo(user);
+  if (zonal_code) return zonal_code;
   if (zone_id) return zone_id;
-  if (!state_id) return null;
-  const state = await StateOffice.findByPk(state_id, { attributes: ["zonal_id"] });
-  return state?.zonal_id ?? null;
+  const code = state_code || state_id;
+  if (!code) return null;
+  const state = await StateOffice.findByPk(code, { attributes: ["zonal_code"] });
+  return state?.zonal_code ?? null;
 }
 
 async function resolveScope(user) {
@@ -127,13 +132,24 @@ async function resolveScope(user) {
   return ROLE_SCOPE_FALLBACK[roleKey] || "none";
 }
 
+/** Rebuild schema uses state_code / zonal_code as geo PKs. */
+function applyGeoKeys(where, { stateKey, zoneKey }) {
+  if (stateKey != null) where.state_code = stateKey;
+  if (zoneKey != null) where.zonal_code = zoneKey;
+  return where;
+}
+
 async function buildStateOfficeListWhere(user, query = {}, Model = null) {
   const where = {};
   const scope = await resolveScope(user);
-  const { zone_id: userZoneId, state_id: userStateId } = userGeo(user);
+  const { zone_id: userZoneId, state_id: userStateId, zonal_code: userZonalCode, state_code: userStateCode } = userGeo(user);
+  const userStateKey = userStateCode || userStateId;
+  const userZoneKey = userZonalCode || userZoneId;
 
-  if (query.zone_id) where.zone_id = query.zone_id;
-  if (query.state_id) where.state_id = query.state_id;
+  const queryState = query.state_code || query.state_id || null;
+  const queryZone = query.zonal_code || query.zone_id || null;
+  if (queryZone) applyGeoKeys(where, { zoneKey: queryZone });
+  if (queryState) applyGeoKeys(where, { stateKey: queryState });
   if (query.status) where.status = query.status;
   if (query.year) where.reporting_year = query.year;
   if (query.month) where.reporting_month = query.month;
@@ -142,26 +158,26 @@ async function buildStateOfficeListWhere(user, query = {}, Model = null) {
   if (scope === "national" || scope === "none") {
     // fall through — reporting officers still get own-creator filter below
   } else if (scope === "state") {
-    if (!userStateId) {
-      where.state_id = -1;
+    if (!userStateKey) {
+      applyGeoKeys(where, { stateKey: "__none__" });
       return where;
     }
-    where.state_id = userStateId;
-    const zoneId = userZoneId || await resolveUserZoneId(user);
-    if (zoneId) where.zone_id = zoneId;
+    applyGeoKeys(where, { stateKey: userStateKey });
+    const zoneId = userZoneKey || await resolveUserZoneId(user);
+    if (zoneId) applyGeoKeys(where, { zoneKey: zoneId });
   } else if (scope === "zonal") {
-    const zoneId = userZoneId || await resolveUserZoneId(user);
+    const zoneId = userZoneKey || await resolveUserZoneId(user);
     if (!zoneId) {
-      where.zone_id = -1;
+      applyGeoKeys(where, { zoneKey: "__none__" });
       return where;
     }
-    where.zone_id = zoneId;
-    if (query.state_id) {
+    applyGeoKeys(where, { zoneKey: zoneId });
+    if (queryState) {
       const inZone = await StateOffice.findOne({
-        where: { id: query.state_id, zonal_id: zoneId },
-        attributes: ["id"],
+        where: { code: queryState, zonal_code: zoneId },
+        attributes: ["code"],
       });
-      if (!inZone) where.state_id = -1;
+      if (!inZone) applyGeoKeys(where, { stateKey: "__none__" });
     }
   }
 
@@ -208,19 +224,23 @@ async function assertRecordAccess(user, record) {
 
 async function assertAreaAccess(user, record) {
   const scope = await resolveScope(user);
-  const { zone_id: userZoneId, state_id: userStateId } = userGeo(user);
+  const { zone_id: userZoneId, state_id: userStateId, zonal_code: userZonalCode, state_code: userStateCode } = userGeo(user);
+  const userStateKey = String(userStateCode || userStateId || "");
+  const userZoneKey = String(userZonalCode || userZoneId || "");
+  const recordState = String(record.state_code || record.state_id || "");
+  const recordZone = String(record.zonal_code || record.zone_id || "");
 
   if (scope === "national" || scope === "none") return { ok: true };
 
   if (scope === "state") {
-    if (!userStateId || Number(record.state_id) !== Number(userStateId)) {
+    if (!userStateKey || recordState !== userStateKey) {
       return { ok: false, status: 403, message: "Access denied for this state" };
     }
     return { ok: true };
   }
 
   if (scope === "zonal") {
-    if (!userZoneId || Number(record.zone_id) !== Number(userZoneId)) {
+    if (!userZoneKey || recordZone !== userZoneKey) {
       return { ok: false, status: 403, message: "Access denied for this zone" };
     }
     return { ok: true };
@@ -236,38 +256,48 @@ async function applyScopeToBody(user, body = {}) {
   const out = { ...body };
   // Record the real author (the UI sends a generic "State Office") so coordinators can see their team's work.
   if (user?.name) out.submitted_by = user.name;
-  const { zone_id: userZoneId, state_id: userStateId } = userGeo(user);
+  const { zone_id: userZoneId, state_id: userStateId, zonal_code: userZonalCode, state_code: userStateCode } = userGeo(user);
+  const userStateKey = userStateCode || userStateId;
+  const userZoneKey = userZonalCode || userZoneId;
 
   if (scope === "state") {
-    if (!userStateId) {
+    if (!userStateKey) {
       const err = new Error("Your account is not assigned to a state");
       err.status = 403;
       throw err;
     }
-    out.state_id = userStateId;
-    const zoneId = userZoneId || await resolveUserZoneId(user);
-    if (zoneId) out.zone_id = zoneId;
+    out.state_id = userStateKey;
+    out.state_code = userStateKey;
+    const zoneId = userZoneKey || await resolveUserZoneId(user);
+    if (zoneId) {
+      out.zone_id = zoneId;
+      out.zonal_code = zoneId;
+    }
     return out;
   }
 
   if (scope === "zonal") {
-    const zoneId = userZoneId || await resolveUserZoneId(user);
+    const zoneId = userZoneKey || await resolveUserZoneId(user);
     if (!zoneId) {
       const err = new Error("Your account is not assigned to a zone");
       err.status = 403;
       throw err;
     }
     out.zone_id = zoneId;
-    if (out.state_id) {
+    out.zonal_code = zoneId;
+    const bodyState = out.state_code || out.state_id;
+    if (bodyState) {
       const inZone = await StateOffice.findOne({
-        where: { id: out.state_id, zonal_id: zoneId },
-        attributes: ["id"],
+        where: { code: bodyState, zonal_code: zoneId },
+        attributes: ["code"],
       });
       if (!inZone) {
         const err = new Error("Selected state is outside your zone");
         err.status = 403;
         throw err;
       }
+      out.state_code = bodyState;
+      out.state_id = bodyState;
     }
     return out;
   }
@@ -281,30 +311,32 @@ async function buildZoneLookupWhere(user) {
   if (scope === "national" || scope === "none") return {};
 
   const zoneId = await resolveUserZoneId(user);
-  if (!zoneId) return { id: -1 };
-  return { id: zoneId };
+  if (!zoneId) return { zonal_code: "__none__" };
+  return { zonal_code: zoneId };
 }
 
 /** Scope state dropdown/list API. */
 async function buildStateLookupWhere(user, query = {}) {
   const scope = await resolveScope(user);
-  const { state_id: userStateId } = userGeo(user);
+  const { state_id: userStateId, state_code: userStateCode } = userGeo(user);
+  const userStateKey = userStateCode || userStateId;
   const zoneId = await resolveUserZoneId(user);
+  const queryZone = query.zonal_code || query.zone_id;
 
   if (scope === "national" || scope === "none") {
-    return query.zone_id ? { zonal_id: query.zone_id } : {};
+    return queryZone ? { zonal_code: queryZone } : {};
   }
 
   if (scope === "state") {
-    if (!userStateId) return { id: -1 };
-    return { id: userStateId };
+    if (!userStateKey) return { code: "__none__" };
+    return { code: userStateKey };
   }
 
   if (scope === "zonal") {
-    if (!zoneId) return { id: -1 };
-    const where = { zonal_id: zoneId };
-    if (query.zone_id && Number(query.zone_id) !== Number(zoneId)) {
-      return { id: -1 };
+    if (!zoneId) return { code: "__none__" };
+    const where = { zonal_code: zoneId };
+    if (queryZone && String(queryZone) !== String(zoneId)) {
+      return { code: "__none__" };
     }
     return where;
   }
