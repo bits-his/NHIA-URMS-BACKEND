@@ -128,6 +128,30 @@ const APPROVED_FORMS = {
     ],
     routeSegment: "office-profile",
   },
+  "adhoc-assignment": {
+    title: "Ad-hoc / Special Assignment Management",
+    tables: [
+      "adhoc_master_assignments",
+      "adhoc_state_assignments",
+      "adhoc_state_reports",
+    ],
+    routeSegment: "adhoc-assignment",
+  },
+  igr: {
+    title: "IGR",
+    tables: ["finance_igr_reports"],
+    routeSegment: "igr",
+  },
+  "sshia-financial": {
+    title: "SSHIA Financial Report",
+    tables: ["finance_sshia_reports"],
+    routeSegment: "sshia-financial",
+  },
+  "expenditure-profile": {
+    title: "Expenditure Profile",
+    tables: ["finance_expenditure_profiles"],
+    routeSegment: "expenditure-profile",
+  },
 };
 
 function approvedFormTables() {

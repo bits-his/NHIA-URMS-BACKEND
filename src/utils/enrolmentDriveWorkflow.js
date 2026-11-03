@@ -24,16 +24,32 @@ function hasDriveAccess(user) {
   return NATIONAL.has(user?.role) || grants.includes("enrolment drives") || grants.includes("enrolment-drive") || require("./enrolmentDriveTypes").ENROLMENT_DRIVE_TYPES.some((type) => grants.includes(type.title.toLowerCase()));
 }
 
+function isStateCoordinatorRole(role) {
+  const r = String(role || "").trim().toLowerCase().replace(/_/g, "-").replace(/\s+/g, "-");
+  return r === "state-coordinator" || r.endsWith("-state-coordinator");
+}
+
 function scopeWhere(user) {
-  if (NATIONAL.has(user?.role) || user?.role_config?.report_scope === "national") return {};
-  if (user?.role_config?.report_scope === "state") {
+  const role = user?.role || "";
+  const reportScope = user?.role_config?.report_scope;
+
+  if (NATIONAL.has(role)) return {};
+
+  // HQ division roles may be named *-state-coordinator with national scope and no state.
+  if (reportScope === "national" && !user?.state_code) return {};
+
+  // Real state coordinators / state-scoped officers stay locked to their assigned state.
+  if (reportScope === "state" || (isStateCoordinatorRole(role) && user?.state_code)) {
     if (!user?.state_code) throw fail("No state is assigned to your account", 403);
     return { state_code: user.state_code };
   }
-  if (user?.role_config?.report_scope === "zonal" || /zonal/.test(user?.role || "")) {
+
+  if (reportScope === "zonal" || /zonal/.test(role) || role === "zc") {
     if (!user?.zonal_code) throw fail("No zone is assigned to your account", 403);
     return { zonal_code: user.zonal_code };
   }
+
+  if (reportScope === "national") return {};
   if (user?.state_code) return { state_code: user.state_code };
   if (user?.zonal_code) return { zonal_code: user.zonal_code };
   throw fail("No state or zone is assigned to your account", 403);

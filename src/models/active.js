@@ -948,6 +948,171 @@ const FORM_MODEL_LOADERS = {
       StateZonalFocalPerson,
     ];
   },
+
+  "adhoc-assignment": () => {
+    const AdhocMasterAssignment = require("./adhoc/AdhocMasterAssignment");
+    const AdhocStateAssignment = require("./adhoc/AdhocStateAssignment");
+    const AdhocStateReport = require("./adhoc/AdhocStateReport");
+
+    AdhocMasterAssignment.hasMany(AdhocStateAssignment, {
+      foreignKey: "master_assignment_id",
+      sourceKey: "master_assignment_id",
+      as: "state_assignments",
+      onDelete: "CASCADE",
+    });
+    AdhocStateAssignment.belongsTo(AdhocMasterAssignment, {
+      foreignKey: "master_assignment_id",
+      targetKey: "master_assignment_id",
+      as: "master_assignment",
+    });
+
+    AdhocStateAssignment.hasMany(AdhocStateReport, {
+      foreignKey: "state_assignment_id",
+      sourceKey: "state_assignment_id",
+      as: "reports",
+      onDelete: "CASCADE",
+    });
+    AdhocStateReport.belongsTo(AdhocStateAssignment, {
+      foreignKey: "state_assignment_id",
+      targetKey: "state_assignment_id",
+      as: "state_assignment",
+    });
+
+    ZonalOffice.hasMany(AdhocStateAssignment, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "adhoc_state_assignments",
+    });
+    AdhocStateAssignment.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+
+    StateOffice.hasMany(AdhocStateAssignment, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "adhoc_state_assignments",
+    });
+    AdhocStateAssignment.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+
+    return [
+      AdhocMasterAssignment,
+      AdhocStateAssignment,
+      AdhocStateReport,
+    ];
+  },
+
+  igr: () => {
+    const FinanceIgrReport = require("./finance/FinanceIgrReport");
+
+    ZonalOffice.hasMany(FinanceIgrReport, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "finance_igr_reports",
+    });
+    FinanceIgrReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+
+    StateOffice.hasMany(FinanceIgrReport, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "finance_igr_reports",
+    });
+    FinanceIgrReport.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+
+    User.hasMany(FinanceIgrReport, {
+      foreignKey: "created_by_user_id",
+      as: "finance_igr_reports",
+    });
+    FinanceIgrReport.belongsTo(User, {
+      foreignKey: "created_by_user_id",
+      as: "created_by_user",
+    });
+
+    return [FinanceIgrReport];
+  },
+
+  "sshia-financial": () => {
+    const FinanceSshiaReport = require("./finance/FinanceSshiaReport");
+
+    ZonalOffice.hasMany(FinanceSshiaReport, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "finance_sshia_reports",
+    });
+    FinanceSshiaReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(FinanceSshiaReport, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "finance_sshia_reports",
+    });
+    FinanceSshiaReport.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+    User.hasMany(FinanceSshiaReport, {
+      foreignKey: "created_by_user_id",
+      as: "finance_sshia_reports",
+    });
+    FinanceSshiaReport.belongsTo(User, {
+      foreignKey: "created_by_user_id",
+      as: "created_by_user",
+    });
+
+    return [FinanceSshiaReport];
+  },
+
+  "expenditure-profile": () => {
+    const FinanceExpenditureProfile = require("./finance/FinanceExpenditureProfile");
+
+    ZonalOffice.hasMany(FinanceExpenditureProfile, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "finance_expenditure_profiles",
+    });
+    FinanceExpenditureProfile.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(FinanceExpenditureProfile, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "finance_expenditure_profiles",
+    });
+    FinanceExpenditureProfile.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+    User.hasMany(FinanceExpenditureProfile, {
+      foreignKey: "created_by_user_id",
+      as: "finance_expenditure_profiles",
+    });
+    FinanceExpenditureProfile.belongsTo(User, {
+      foreignKey: "created_by_user_id",
+      as: "created_by_user",
+    });
+
+    return [FinanceExpenditureProfile];
+  },
 };
 
 let _approvedFormModelsCache = null;
@@ -1069,6 +1234,18 @@ const UtilityServiceReport =
   approvedFormModels.find((m) => m.tableName === "utility_service_reports") || null;
 const StateZonalFocalPerson =
   approvedFormModels.find((m) => m.tableName === "state_zonal_focal_persons") || null;
+const AdhocMasterAssignment =
+  approvedFormModels.find((m) => m.tableName === "adhoc_master_assignments") || null;
+const AdhocStateAssignment =
+  approvedFormModels.find((m) => m.tableName === "adhoc_state_assignments") || null;
+const AdhocStateReport =
+  approvedFormModels.find((m) => m.tableName === "adhoc_state_reports") || null;
+const FinanceIgrReport =
+  approvedFormModels.find((m) => m.tableName === "finance_igr_reports") || null;
+const FinanceSshiaReport =
+  approvedFormModels.find((m) => m.tableName === "finance_sshia_reports") || null;
+const FinanceExpenditureProfile =
+  approvedFormModels.find((m) => m.tableName === "finance_expenditure_profiles") || null;
 
 module.exports = {
   CORE_TABLES,
@@ -1120,4 +1297,10 @@ module.exports = {
   OfficeAccommodation,
   UtilityServiceReport,
   StateZonalFocalPerson,
+  AdhocMasterAssignment,
+  AdhocStateAssignment,
+  AdhocStateReport,
+  FinanceIgrReport,
+  FinanceSshiaReport,
+  FinanceExpenditureProfile,
 };

@@ -141,15 +141,28 @@ if (APPROVED_FORMS["meetings-coordination"]) {
 if (APPROVED_FORMS["challenges-support"]) {
   app.use("/api/state-office/challenges", require("./routes/challengesPack.routes"));
 }
-if (APPROVED_FORMS["office-profile"]) {
-  require("./routes/officeProfilePack.routes").mountOfficeProfilePack(app);
-}
-// Operational home for state coordinators — approved packs only (must precede catch-all)
+// Operational home dashboard must register BEFORE packs that mount at /api/state-office
+// (e.g. office-profile), otherwise their router middleware intercepts /dashboard.
 {
   const { authenticate } = require("./middleware/auth");
   const opsDash = require("./controllers/stateOfficeOperationalDashboard.controller");
   app.get("/api/state-office/dashboard", authenticate, opsDash.dashboard);
   app.get("/api/state-office/dashboard/drill", authenticate, opsDash.dashboardDrill);
+}
+if (APPROVED_FORMS["office-profile"]) {
+  require("./routes/officeProfilePack.routes").mountOfficeProfilePack(app);
+}
+if (APPROVED_FORMS["adhoc-assignment"]) {
+  const adhocRoutes = require("./routes/adhocAssignmentPack.routes");
+  app.use("/api/state-office/adhoc-special-assignment", adhocRoutes);
+  app.use("/api/state-office/adhoc-assignment", adhocRoutes);
+}
+if (
+  APPROVED_FORMS.igr
+  || APPROVED_FORMS["sshia-financial"]
+  || APPROVED_FORMS["expenditure-profile"]
+) {
+  require("./routes/financePack.routes").mountFinancePack(app);
 }
 app.use("/api/state-office", notRebuilt("State office forms"));
 app.use("/api/sqa", notRebuilt("SQA compliance"));

@@ -2,9 +2,11 @@ const entry = (access_to, functionalities) => ({ access_to, functionalities });
 const SERVICOM_FORMS = ["Charter Performance", "Complaints Management", "HCF Customer Satisfaction Survey"];
 const STOCK_FORMS = ["Physical Asset Verification", "Stock Prepayment Register", "Inventory Register", "Capitalisation & Issuance"];
 const SOC_FORMS = ["State/Zonal Office Profile", "State/Zonal Focal Persons Register", "Monthly Enrollee Register", "ETMC/TMC Action-Point Register", "Weekly Actionable", "Contracted Services", "Operation Monitoring Visit", "Spot Check Visit"];
-const STATE_FORMS = ["Enrolment", "Enrolment Drives", "Beneficiary Management", "Stakeholder Management", "Provider Management", "State Complaints Register", "Weekly Compliance Report", "HMO Indebtedness", "Mystery Shopping", "IGR", "SSHIA Financial Report", "Expenditure Profile", "State Office Meeting Report", "ETMC Cascading Report", "Office Accommodation", "Utility Services", "Vehicle Maintenance", "Conflict / Infraction Report", "Enrollee Feedback Survey", "ICT Support Register", "Charter Performance", "HCF Customer Satisfaction Survey", "Challenges & Recommendations"];
-const DASHBOARDS = [entry("Dashboard", ["Dashboard"]), entry("SDO", ["SERVICOM Dashboard", "Stock Verification Dashboard"]), entry("SOC/Zones", ["SOC/Zones Dashboard"]), entry("Zonal", ["Provider Management Dashboard"])];
-const STATE_DASHBOARDS = [entry("Dashboard", ["Dashboard"]), entry("SOC/Zones", ["SOC/Zones Dashboard"]), entry("Zonal", ["Provider Management Dashboard"])];
+const COMPLIANCE_TABS = ["State Complaints Register", "Weekly Compliance Report", "HMO Indebtedness", "Mystery Shopping"];
+const FINANCE_TABS = ["Internally Generated Revenue (IGR)", "SSHIA Financial Report", "Expenditure Profile"];
+const STATE_FORMS = ["Enrolment", "Enrolment Drives", "Beneficiary Management", "Stakeholder Management", "Provider Management", ...COMPLIANCE_TABS, ...FINANCE_TABS, "State Office Meeting Report", "ETMC Cascading Report", "Office Accommodation", "Utility Services", "Vehicle Maintenance", "Conflict / Infraction Report", "Enrollee Feedback Survey", "ICT Support Register", "Charter Performance", "HCF Customer Satisfaction Survey", "Challenges & Recommendations", "State Office Dashboard", "Finance Dashboard"];
+const DASHBOARDS = [entry("Dashboard", ["Dashboard"]), entry("SDO", ["SERVICOM Dashboard", "Stock Verification Dashboard"]), entry("Zonal", ["State Office Dashboard", "Finance Dashboard"])];
+const STATE_DASHBOARDS = [entry("Dashboard", ["Dashboard"]), entry("Zonal", ["State Office Dashboard", "Finance Dashboard"])];
 const ANNUAL = entry("Annual Reports", ["Annual Report"]);
 const ALL_ACCESS = [entry("Dashboard", ["Dashboard"]), ANNUAL, entry("Standards & Quality Assurance", ["Compliance Management"]), entry("SDO", ["SERVICOM Dashboard", ...SERVICOM_FORMS, "Stock Verification Dashboard", ...STOCK_FORMS, "Ad-hoc / Special Assignment"]), entry("SOC/Zones", ["SOC/Zones Dashboard", ...SOC_FORMS]), entry("Zonal", [...STATE_FORMS, "Provider Management Dashboard"]), entry("Notifications", ["Notifications"]), entry("Settings", ["Settings"])];
 
@@ -22,8 +24,8 @@ const DOCUMENT_USER_PROFILES = [
   profile("SOCRO-0001", "soc-reporting-officer", "State Office Coordination Reporting Officer", "SOC", "state", true, false, [entry("SOC/Zones", SOC_FORMS)]),
   profile("SPDSC-0001", "spd-state-coordinator", "Head Special Projects Unit", "SPD", "national", false, false, [entry("Dashboard", ["Dashboard"])]),
   profile("SPDRO-0001", "spd-reporting-officer", "Special Project Reporting Officer", "SPD", "state", true, false, [entry("SDO", ["Ad-hoc / Special Assignment"])]),
-  profile("SC-0001", "state-coordinator", "State Coordinator", null, "state", true, false, [...STATE_DASHBOARDS, ANNUAL], true),
-  profile("SOCZC-0001", "soc-zonal-coordinator", "State Office Coordination Zonal Coordinator", "SOC", "zonal", true, false, [...STATE_DASHBOARDS, ANNUAL], true),
+  profile("SC-0001", "state-coordinator", "State Coordinator", null, "state", false, true, [...STATE_DASHBOARDS, entry("Zonal", STATE_FORMS), ANNUAL]),
+  profile("SOCZC-0001", "soc-zonal-coordinator", "State Office Coordination Zonal Coordinator", "SOC", "zonal", false, true, [...STATE_DASHBOARDS, entry("Zonal", STATE_FORMS), ANNUAL]),
   profile("SORO-0001", "state-officer", "State Office Reporting Officer (KN)", "SOC", "state", true, false, [entry("Zonal", STATE_FORMS)]),
   profile("ENFZC-0001", "enf-zonal-coordinator", "Director Enforcement (ENF)", "ENF", "national", false, false, [entry("Dashboard", ["Dashboard"])]),
   profile("FINZC-0001", "fin-zonal-coordinator", "Director Finance and Admin (F&A)", "FIN", "national", false, false, [entry("Dashboard", ["Dashboard"])]),
@@ -36,6 +38,20 @@ function documentRoleOverrides(role) {
   return spec ? { ...role, label: spec.role === "state-officer" ? "State Office Reporting Officer" : spec.name, staff_id_prefix: spec.staff_id.replace(/-\d+$/, ""), report_scope: spec.report_scope, can_create_monthly: spec.can_create_monthly, can_review_monthly: spec.can_review_monthly } : role;
 }
 
+function isStateOfficeReviewWrite(method, pathname, roleKey = "") {
+  if (method === "PATCH" && /\/api\/state-office\/.+\/(?:reports|office-profiles)\/[^/]+\/status$/.test(pathname)) {
+    return true;
+  }
+  // Enrolment Drive endorse / return / deadline — State Coordinators only.
+  if (
+    method === "POST"
+    && /\/api\/state-office\/enrolment-drives\/batches\/[^/]+\/(?:transition|deadline)$/.test(pathname)
+  ) {
+    return /state.*coordinator/.test(String(roleKey));
+  }
+  return false;
+}
+
 function canWriteDocumentRequest(user, method, originalUrl = "") {
   if (["GET", "HEAD", "OPTIONS"].includes(method)) return true;
   if (user?.role === "admin") return true;
@@ -43,20 +59,27 @@ function canWriteDocumentRequest(user, method, originalUrl = "") {
   if (!spec) return true;
   const pathname = originalUrl.split("?")[0];
   if (/^\/api\/notifications(?:\/|$)/.test(pathname)) return true;
+  const role = user.role_config || spec;
+  const roleKey = String(user?.role || "");
+
   if (spec.annualOnly) {
     if (/^\/api\/(?:annual-reports|reports|state-office\/challenges)(?:\/|$)/.test(pathname)) return true;
-    // State Coordinators may endorse / return / set deadline on Enrolment Drive batches.
-    if (
-      /state.*coordinator/.test(String(user?.role || ""))
-      && ["POST", "PUT", "PATCH"].includes(method)
-      && /^\/api\/state-office\/enrolment-drives\/batches\/[^/]+\/(?:transition|deadline)(?:\/|$)/.test(pathname)
-    ) {
-      return true;
-    }
+    if (role.can_review_monthly && isStateOfficeReviewWrite(method, pathname, roleKey)) return true;
+    // Legacy annual-only State Coordinators may still endorse Enrolment Drives.
+    if (/state.*coordinator/.test(roleKey) && isStateOfficeReviewWrite(method, pathname, roleKey)) return true;
     return false;
   }
-  const role = user.role_config || spec;
-  return !!(role.can_create_monthly || role.can_review_monthly);
+
+  // Create-capable roles may mutate forms; review-only roles may only endorse / return.
+  if (role.can_create_monthly) return true;
+  if (role.can_review_monthly) {
+    if (isStateOfficeReviewWrite(method, pathname, roleKey)) return true;
+    if (/^\/api\/(?:annual-reports|reports|state-office\/challenges)(?:\/|$)/.test(pathname)) return true;
+    return false;
+  }
+  // State Coordinator endorse path when role_config is missing / stale.
+  if (/state.*coordinator/.test(roleKey) && isStateOfficeReviewWrite(method, pathname, roleKey)) return true;
+  return false;
 }
 
 module.exports = { DOCUMENT_USER_PROFILES, documentRoleOverrides, canWriteDocumentRequest };
