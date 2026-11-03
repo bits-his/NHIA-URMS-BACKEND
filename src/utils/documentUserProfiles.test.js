@@ -52,6 +52,26 @@ test("dashboard-only accounts cannot mutate business resources and annual-only r
     assert.equal(canWriteDocumentRequest({ role }, "POST", "/api/state-office/enrolment/reports"), false);
     assert.equal(canWriteDocumentRequest({ role }, "PUT", "/api/admin/users/1"), false);
   }
+  assert(canWriteDocumentRequest(
+    { role: "state-coordinator" },
+    "POST",
+    "/api/state-office/enrolment-drives/batches/EDB-2026-TEST/transition",
+  ));
+  assert(canWriteDocumentRequest(
+    { role: "state-coordinator" },
+    "POST",
+    "/api/state-office/enrolment-drives/batches/EDB-2026-TEST/deadline",
+  ));
+  assert.equal(canWriteDocumentRequest(
+    { role: "soc-zonal-coordinator" },
+    "POST",
+    "/api/state-office/enrolment-drives/batches/EDB-2026-TEST/transition",
+  ), false);
+  assert.equal(canWriteDocumentRequest(
+    { role: "state-coordinator" },
+    "POST",
+    "/api/state-office/enrolment-drives/batches/EDB-2026-TEST/activities",
+  ), false);
   assert(canWriteDocumentRequest({ role: "admin" }, "DELETE", "/api/admin/users/2"));
   assert(canWriteDocumentRequest({ role: "sdo" }, "POST", "/api/admin/users"));
 });

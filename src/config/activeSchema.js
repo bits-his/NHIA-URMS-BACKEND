@@ -108,6 +108,11 @@ const APPROVED_FORMS = {
     ],
     routeSegment: "hmo-indebtedness",
   },
+  "meetings-coordination": {
+    title: "Meetings & Coordination",
+    tables: ["meeting_reports", "meeting_items", "etmc_reports", "etmc_entries", "form_documents"],
+    routeSegment: "meetings",
+  },
   "challenges-support": {
     title: "Challenges & Support",
     tables: ["challenges", "support_requests", "challenge_support_history", "form_documents"],

@@ -97,8 +97,16 @@ const createBatch = respond(async (req, res) => {
   const month = integer(req.body.reporting_month, "Reporting month", true);
   if (year < 2000 || year > 2100 || month < 1 || month > 12) throw fail("Select a valid reporting period");
   const where = { state_code: state.code, reporting_year: year, reporting_month: month };
-  const [batch] = await Batch.findOrCreate({ where, defaults: { ...where, reference_id: reference("EDB"), zonal_code: state.zonal_code, planned_activities: integer(req.body.planned_activities, "Planned activities"), reporting_officer: req.user.name || req.user.staff_id || String(req.user.id), created_by_user_id: req.user.id } });
-  res.json({ success: true, data: await batchData(batch, req.user) });
+  const [batch, created] = await Batch.findOrCreate({ where, defaults: { ...where, reference_id: reference("EDB"), zonal_code: state.zonal_code, planned_activities: integer(req.body.planned_activities, "Planned activities"), reporting_officer: req.user.name || req.user.staff_id || String(req.user.id), created_by_user_id: req.user.id } });
+  // If reopening an existing editable batch, refresh planned count from the form when provided.
+  if (!created && editable(batch) && req.body.planned_activities !== undefined && req.body.planned_activities !== "") {
+    await requireEditor(req.user, batch);
+    await batch.update({
+      planned_activities: integer(req.body.planned_activities, "Planned activities"),
+      revision: batch.revision + 1,
+    });
+  }
+  res.json({ success: true, created, data: await batchData(batch, req.user) });
 });
 const getBatch = respond(async (req, res) => res.json({ success: true, data: await batchData(await allowedRecord(Batch, req.params.id, req.user), req.user) }));
 const updateBatch = respond(async (req, res) => {

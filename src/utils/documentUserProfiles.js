@@ -43,7 +43,18 @@ function canWriteDocumentRequest(user, method, originalUrl = "") {
   if (!spec) return true;
   const pathname = originalUrl.split("?")[0];
   if (/^\/api\/notifications(?:\/|$)/.test(pathname)) return true;
-  if (spec.annualOnly) return /^\/api\/(?:annual-reports|reports|state-office\/challenges)(?:\/|$)/.test(pathname);
+  if (spec.annualOnly) {
+    if (/^\/api\/(?:annual-reports|reports|state-office\/challenges)(?:\/|$)/.test(pathname)) return true;
+    // State Coordinators may endorse / return / set deadline on Enrolment Drive batches.
+    if (
+      /state.*coordinator/.test(String(user?.role || ""))
+      && ["POST", "PUT", "PATCH"].includes(method)
+      && /^\/api\/state-office\/enrolment-drives\/batches\/[^/]+\/(?:transition|deadline)(?:\/|$)/.test(pathname)
+    ) {
+      return true;
+    }
+    return false;
+  }
   const role = user.role_config || spec;
   return !!(role.can_create_monthly || role.can_review_monthly);
 }
