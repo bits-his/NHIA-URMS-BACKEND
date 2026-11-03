@@ -252,27 +252,202 @@ const saveAction = respond(async (req, res) => {
   res.json({ success: true, data: saved });
 });
 
+function groupCount(rows, keyFn) {
+  const map = new Map();
+  for (const row of rows) {
+    const key = keyFn(row) || "Unspecified";
+    map.set(key, (map.get(key) || 0) + 1);
+  }
+  return [...map.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+}
+
+function groupMetrics(activities, enrolmentsByDrive, keyFn) {
+  const map = new Map();
+  for (const activity of activities) {
+    const key = keyFn(activity) || "Unspecified";
+    const current = map.get(key) || { name: key, activities: 0, reached: 0, leads: 0, enrolled: 0 };
+    current.activities += 1;
+    current.reached += Number(activity.target_audience_reached || 0);
+    current.leads += Number(activity.leads_generated || 0);
+    current.enrolled += enrolmentsByDrive.get(activity.reference_id) || 0;
+    map.set(key, current);
+  }
+  return [...map.values()].sort((a, b) => b.enrolled - a.enrolled || b.activities - a.activities);
+}
+
 const analytics = respond(async (req, res) => {
   const scope = scopeWhere(req.user);
   const where = { ...scope };
   if (req.query.year) where.reporting_year = integer(req.query.year, "Reporting year", true);
   if (req.query.month) where.reporting_month = integer(req.query.month, "Reporting month", true);
+  if (req.query.zonal_code && !scope.state_code) {
+    if (scope.zonal_code && String(scope.zonal_code) !== String(req.query.zonal_code)) throw fail("Access denied", 403);
+    where.zonal_code = String(req.query.zonal_code);
+  }
+  if (req.query.state_code) {
+    const selectedState = await StateOffice.findByPk(String(req.query.state_code), { attributes: ["code", "zonal_code"], raw: true });
+    if (!selectedState) throw fail("Select a valid state");
+    assertScope(req.user, selectedState);
+    where.state_code = selectedState.code;
+    where.zonal_code = selectedState.zonal_code;
+  }
   const batches = await Batch.findAll({ where, raw: true });
   const ids = batches.map((row) => row.reference_id);
   const activities = ids.length ? await Drive.findAll({ where: { batch_reference_id: { [Op.in]: ids } }, raw: true }) : [];
   const driveIds = activities.map((row) => row.reference_id);
   const enrolments = driveIds.length ? await Enrolment.findAll({ where: { drive_reference_id: { [Op.in]: driveIds }, category: "enrolment" }, attributes: ["drive_reference_id", "category", "enrolment_count", "status"], raw: true }) : [];
   const summary = totals(batches, activities, enrolments);
-  const states = await StateOffice.findAll({ where: scope.state_code ? { code: scope.state_code } : scope.zonal_code ? { zonal_code: scope.zonal_code } : {}, attributes: ["code", "description", "zonal_code"], raw: true });
+  const enrolmentsByDrive = summary.counts;
+  const stateFilter = where.state_code ? { code: where.state_code } : where.zonal_code ? { zonal_code: where.zonal_code } : scope.state_code ? { code: scope.state_code } : scope.zonal_code ? { zonal_code: scope.zonal_code } : {};
+  const states = await StateOffice.findAll({ where: stateFilter, attributes: ["code", "description", "zonal_code"], raw: true });
+  const zones = await ZonalOffice.findAll({
+    where: { zonal_code: { [Op.in]: [...new Set(states.map((state) => state.zonal_code).filter(Boolean))] } },
+    attributes: ["zonal_code", "description"],
+    raw: true,
+  });
+  const zoneName = Object.fromEntries(zones.map((zone) => [zone.zonal_code, zone.description || zone.zonal_code]));
   const stateRows = states.map((state) => {
     const stateBatches = batches.filter((row) => row.state_code === state.code);
     const stateActivities = activities.filter((row) => row.state_code === state.code);
     const set = new Set(stateActivities.map((row) => row.reference_id));
     const metrics = totals(stateBatches, stateActivities, enrolments.filter((row) => set.has(row.drive_reference_id)));
-    return { ...state, ...metrics, counts: undefined, reports: stateBatches.length, finalised: stateBatches.filter((row) => row.status === "submitted").length, conversion_rate: metrics.leads ? Math.round(metrics.enrolled / metrics.leads * 1000) / 10 : null, pending_activities: stateActivities.filter((row) => ["Not Conducted", "Deferred", "Cancelled"].includes(row.activity_status)).length, late_reports: stateBatches.filter((row) => row.reporting_deadline && (row.finalised_at ? new Date(row.finalised_at).toISOString().slice(0, 10) > row.reporting_deadline : new Date().toISOString().slice(0, 10) > row.reporting_deadline)).length };
+    return {
+      ...state,
+      zone_name: zoneName[state.zonal_code] || state.zonal_code,
+      ...metrics,
+      counts: undefined,
+      reports: stateBatches.length,
+      finalised: stateBatches.filter((row) => row.status === "submitted").length,
+      conversion_rate: metrics.leads ? Math.round((metrics.enrolled / metrics.leads) * 1000) / 10 : null,
+      lead_rate: metrics.reached ? Math.round((metrics.leads / metrics.reached) * 1000) / 10 : null,
+      pending_activities: stateActivities.filter((row) => ["Not Conducted", "Deferred", "Cancelled"].includes(row.activity_status)).length,
+      late_reports: stateBatches.filter((row) => row.reporting_deadline && (row.finalised_at ? new Date(row.finalised_at).toISOString().slice(0, 10) > row.reporting_deadline : new Date().toISOString().slice(0, 10) > row.reporting_deadline)).length,
+    };
   });
-  const history = await Enrolment.findAll({ where: { ...scope, category: "enrolment", drive_reference_id: { [Op.ne]: null } }, attributes: ["reporting_year", "reporting_month", [sequelize.fn("SUM", sequelize.col("enrolment_count")), "enrolled"]], group: ["reporting_year", "reporting_month"], order: [["reporting_year", "ASC"], ["reporting_month", "ASC"]], raw: true });
-  res.json({ success: true, data: { summary: { ...summary, counts: undefined }, states: stateRows, enrolment_trend: history, definitions: { enrolled: "Sum of saved linked enrolment counts, including drafts; renewals remain distinguishable in Enrolment reports", conducted: "Activity status is Completed", planned: "One plan per state and reporting month", conversion: "Enrolment count divided by leads; no target or performance colour is implied", attribution: "Activity cohort totals retain their originating drive; the enrolment trend uses the enrolment reporting month" } } });
+  const zoneRows = zones.map((zone) => {
+    const zoneStates = stateRows.filter((row) => row.zonal_code === zone.zonal_code);
+    const reached = zoneStates.reduce((sum, row) => sum + Number(row.reached || 0), 0);
+    const leads = zoneStates.reduce((sum, row) => sum + Number(row.leads || 0), 0);
+    const enrolled = zoneStates.reduce((sum, row) => sum + Number(row.enrolled || 0), 0);
+    const conducted = zoneStates.reduce((sum, row) => sum + Number(row.conducted || 0), 0);
+    const recorded = zoneStates.reduce((sum, row) => sum + Number(row.recorded || 0), 0);
+    return {
+      zonal_code: zone.zonal_code,
+      description: zone.description || zone.zonal_code,
+      states: zoneStates.length,
+      recorded,
+      conducted,
+      reached,
+      leads,
+      enrolled,
+      lead_rate: reached ? Math.round((leads / reached) * 1000) / 10 : null,
+      conversion_rate: leads ? Math.round((enrolled / leads) * 1000) / 10 : null,
+      offices_reporting: zoneStates.filter((row) => row.finalised > 0).length,
+    };
+  }).sort((a, b) => b.enrolled - a.enrolled);
+
+  const programmeRows = driveIds.length
+    ? await Programme.findAll({ where: { drive_reference_id: { [Op.in]: driveIds } }, attributes: ["drive_reference_id", "programme"], raw: true })
+    : [];
+  const audienceRows = driveIds.length
+    ? await Audience.findAll({ where: { drive_reference_id: { [Op.in]: driveIds } }, attributes: ["drive_reference_id", "audience"], raw: true })
+    : [];
+  const byActivity = groupMetrics(activities, enrolmentsByDrive, (row) => row.activity_category || row.drive_type);
+  const byLocation = groupMetrics(activities, enrolmentsByDrive, (row) => row.location_category);
+  const locationTotal = byLocation.reduce((sum, row) => sum + row.activities, 0) || 1;
+  const byAudience = groupCount(audienceRows, (row) => row.audience);
+  const byProgramme = groupCount(programmeRows, (row) => row.programme).map((row) => ({
+    ...row,
+    enrolled: programmeRows
+      .filter((item) => item.programme === row.name)
+      .reduce((sum, item) => sum + (enrolmentsByDrive.get(item.drive_reference_id) || 0), 0),
+  })).sort((a, b) => b.enrolled - a.enrolled || b.count - a.count);
+  const programmeEnrolledTotal = byProgramme.reduce((sum, row) => sum + row.enrolled, 0) || 1;
+  const programmes = byProgramme.map((row) => ({
+    ...row,
+    pct: Math.round((row.enrolled / programmeEnrolledTotal) * 1000) / 10,
+  }));
+
+  const officesReporting = stateRows.filter((row) => row.finalised > 0).length;
+  const exceptions = stateRows
+    .filter((row) => !row.reports || row.late_reports > 0 || row.pending_activities > 0 || (row.leads > 0 && (row.conversion_rate ?? 100) < 40))
+    .map((row) => {
+      const issues = [];
+      if (!row.reports) issues.push("No report for selected period");
+      else if (row.finalised === 0) issues.push("Report not yet submitted");
+      if (row.late_reports > 0) issues.push(`${row.late_reports} late report(s)`);
+      if (row.pending_activities > 0) issues.push(`${row.pending_activities} deferred/cancelled activities`);
+      if (row.leads > 0 && (row.conversion_rate ?? 100) < 40) issues.push(`Low conversion (${row.conversion_rate}%)`);
+      return {
+        state_code: row.code,
+        office: row.description || row.code,
+        zone: row.zone_name,
+        issue: issues.join("; "),
+        pending_activities: row.pending_activities,
+        late_reports: row.late_reports,
+        conversion_rate: row.conversion_rate,
+        enrolled: row.enrolled,
+        leads: row.leads,
+      };
+    })
+    .sort((a, b) => (b.late_reports + b.pending_activities) - (a.late_reports + a.pending_activities));
+
+  const actionWhere = { ...scope };
+  if (where.zonal_code) actionWhere.zonal_code = where.zonal_code;
+  if (where.state_code) actionWhere.state_code = where.state_code;
+  if (req.query.year) actionWhere.reporting_year = where.reporting_year;
+  if (req.query.month) actionWhere.reporting_month = where.reporting_month;
+  const followUps = await Action.findAll({
+    where: actionWhere,
+    order: [["deadline", "ASC"]],
+    limit: 50,
+    raw: true,
+  });
+
+  const historyWhere = { ...scope, category: "enrolment", drive_reference_id: { [Op.ne]: null } };
+  if (where.zonal_code) historyWhere.zonal_code = where.zonal_code;
+  if (where.state_code) historyWhere.state_code = where.state_code;
+  const history = await Enrolment.findAll({
+    where: historyWhere,
+    attributes: ["reporting_year", "reporting_month", [sequelize.fn("SUM", sequelize.col("enrolment_count")), "enrolled"]],
+    group: ["reporting_year", "reporting_month"],
+    order: [["reporting_year", "ASC"], ["reporting_month", "ASC"]],
+    raw: true,
+  });
+
+  res.json({
+    success: true,
+    data: {
+      summary: {
+        ...summary,
+        counts: undefined,
+        offices_total: stateRows.length,
+        offices_reporting: officesReporting,
+        offices_needing_follow_up: exceptions.length,
+        conversion_rate: summary.leads ? Math.round((summary.enrolled / summary.leads) * 1000) / 10 : null,
+        lead_rate: summary.reached ? Math.round((summary.leads / summary.reached) * 1000) / 10 : null,
+      },
+      states: stateRows,
+      zones: zoneRows,
+      by_activity: byActivity,
+      by_location: byLocation.map((row) => ({
+        ...row,
+        percentage: Math.round((row.activities / locationTotal) * 1000) / 10,
+      })),
+      by_audience: byAudience,
+      programmes,
+      exceptions,
+      follow_ups: followUps,
+      enrolment_trend: history,
+      definitions: {
+        enrolled: "Sum of saved linked enrolment counts, including drafts; renewals remain distinguishable in Enrolment reports",
+        conducted: "Activity status is Completed",
+        planned: "One plan per state and reporting month",
+        conversion: "Enrolment count divided by leads; no target or performance colour is implied",
+        attribution: "Activity cohort totals retain their originating drive; the enrolment trend uses the enrolment reporting month",
+      },
+    },
+  });
 });
 
 const setDeadline = respond(async (req, res) => {
