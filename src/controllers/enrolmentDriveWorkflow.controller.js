@@ -302,8 +302,26 @@ const analytics = respond(async (req, res) => {
   }
   const batches = await Batch.findAll({ where, raw: true });
   const ids = batches.map((row) => row.reference_id);
-  const activities = ids.length ? await Drive.findAll({ where: { batch_reference_id: { [Op.in]: ids } }, raw: true }) : [];
-  const driveIds = activities.map((row) => row.reference_id);
+  let activities = ids.length ? await Drive.findAll({ where: { batch_reference_id: { [Op.in]: ids } }, raw: true }) : [];
+  if (req.query.activity_category) {
+    const category = String(req.query.activity_category);
+    activities = activities.filter((row) => String(row.activity_category || "") === category);
+  }
+  if (req.query.status && String(req.query.status) !== "all") {
+    const status = String(req.query.status);
+    activities = activities.filter((row) => String(row.activity_status || "") === status);
+  }
+  let driveIds = activities.map((row) => row.reference_id);
+  const programmeFilter = req.query.programme ? String(req.query.programme) : null;
+  let programmeRows = driveIds.length
+    ? await Programme.findAll({ where: { drive_reference_id: { [Op.in]: driveIds } }, attributes: ["drive_reference_id", "programme"], raw: true })
+    : [];
+  if (programmeFilter) {
+    const allowed = new Set(programmeRows.filter((row) => row.programme === programmeFilter).map((row) => row.drive_reference_id));
+    activities = activities.filter((row) => allowed.has(row.reference_id));
+    driveIds = activities.map((row) => row.reference_id);
+    programmeRows = programmeRows.filter((row) => allowed.has(row.drive_reference_id));
+  }
   const enrolments = driveIds.length ? await Enrolment.findAll({ where: { drive_reference_id: { [Op.in]: driveIds }, category: "enrolment" }, attributes: ["drive_reference_id", "category", "enrolment_count", "status"], raw: true }) : [];
   const summary = totals(batches, activities, enrolments);
   const enrolmentsByDrive = summary.counts;
@@ -355,9 +373,6 @@ const analytics = respond(async (req, res) => {
     };
   }).sort((a, b) => b.enrolled - a.enrolled);
 
-  const programmeRows = driveIds.length
-    ? await Programme.findAll({ where: { drive_reference_id: { [Op.in]: driveIds } }, attributes: ["drive_reference_id", "programme"], raw: true })
-    : [];
   const audienceRows = driveIds.length
     ? await Audience.findAll({ where: { drive_reference_id: { [Op.in]: driveIds } }, attributes: ["drive_reference_id", "audience"], raw: true })
     : [];
@@ -377,13 +392,42 @@ const analytics = respond(async (req, res) => {
     pct: Math.round((row.enrolled / programmeEnrolledTotal) * 1000) / 10,
   }));
 
+  // Enrolment by activity type × location (Zonal Director comparison view)
+  const activityTypeKeys = [...new Set(activities.map((row) => row.activity_category || row.drive_type || "Unspecified"))];
+  const locationKeys = [...new Set(activities.map((row) => row.location_category || "Unspecified"))];
+  const byActivityLocation = locationKeys.map((location) => {
+    const cells = { location };
+    for (const type of activityTypeKeys) {
+      cells[type] = activities
+        .filter((row) => (row.location_category || "Unspecified") === location && (row.activity_category || row.drive_type || "Unspecified") === type)
+        .reduce((sum, row) => sum + (enrolmentsByDrive.get(row.reference_id) || 0), 0);
+    }
+    return cells;
+  });
+
+  const activityRegister = activities
+    .map((row) => ({
+      reference_id: row.reference_id,
+      batch_reference_id: row.batch_reference_id,
+      activity: row.specific_activity || row.activity_category || row.drive_type || row.reference_id,
+      activity_category: row.activity_category,
+      reached: Number(row.target_audience_reached || 0),
+      leads: Number(row.leads_generated || 0),
+      enrolled: enrolmentsByDrive.get(row.reference_id) || 0,
+      status: row.activity_status || "—",
+      state_code: row.state_code,
+    }))
+    .sort((a, b) => String(a.activity).localeCompare(String(b.activity)));
+
   const officesReporting = stateRows.filter((row) => row.finalised > 0).length;
 
-  // Prior-period enrolments by state (for declining-enrolment signal when a month is selected)
+  // Prior-period enrolments by state (declining signal + DG change vs prior period)
   const priorEnrolledByState = new Map();
+  let priorYear = null;
+  let priorMonth = null;
   if (where.reporting_year && where.reporting_month) {
-    const priorMonth = where.reporting_month === 1 ? 12 : where.reporting_month - 1;
-    const priorYear = where.reporting_month === 1 ? where.reporting_year - 1 : where.reporting_year;
+    priorMonth = where.reporting_month === 1 ? 12 : where.reporting_month - 1;
+    priorYear = where.reporting_month === 1 ? where.reporting_year - 1 : where.reporting_year;
     const priorWhere = { ...scope, category: "enrolment", drive_reference_id: { [Op.ne]: null }, reporting_year: priorYear, reporting_month: priorMonth };
     if (where.zonal_code) priorWhere.zonal_code = where.zonal_code;
     if (where.state_code) priorWhere.state_code = where.state_code;
@@ -395,37 +439,107 @@ const analytics = respond(async (req, res) => {
     });
     for (const row of priorRows) priorEnrolledByState.set(row.state_code, Number(row.enrolled || 0));
   }
+  const priorEnrolledTotal = [...priorEnrolledByState.values()].reduce((sum, value) => sum + value, 0);
+  const changeVsPriorPct = priorEnrolledByState.size
+    ? (priorEnrolledTotal > 0
+      ? Math.round(((summary.enrolled - priorEnrolledTotal) / priorEnrolledTotal) * 1000) / 10
+      : summary.enrolled > 0 ? 100 : 0)
+    : null;
 
   const exceptions = stateRows
     .map((row) => {
-      const issues = [];
       const plannedGap = Math.max(0, Number(row.planned || 0) - Number(row.conducted || 0));
-      if (!row.reports) issues.push("No report for selected period");
-      else if (row.finalised === 0) issues.push("Report not yet submitted");
-      if (row.late_reports > 0) issues.push(`${row.late_reports} late report(s)`);
-      if (row.pending_activities > 0) issues.push(`${row.pending_activities} deferred/cancelled activities`);
-      if (plannedGap > 0) issues.push(`${plannedGap} planned activities not completed`);
-      if (row.leads > 0 && (row.conversion_rate ?? 100) < 40) issues.push(`High leads, low enrolment (${row.conversion_rate}% conversion)`);
       const prior = priorEnrolledByState.get(row.code);
-      if (prior != null && prior > 0 && Number(row.enrolled || 0) < prior) {
-        issues.push(`Enrolment declining vs prior period (${Number(row.enrolled || 0)} vs ${prior})`);
+      const declining = prior != null && prior > 0 && Number(row.enrolled || 0) < prior;
+      const lowConversion = row.leads > 0 && (row.conversion_rate ?? 100) < 40;
+      let issue = null;
+      let action = null;
+      if (!row.reports || row.finalised === 0) {
+        issue = "No report received";
+        action = "Follow up";
+      } else if (declining) {
+        issue = "Declining enrolment";
+        action = "Request recovery plan";
+      } else if (row.pending_activities > 0 || plannedGap > 0) {
+        issue = "Activities not completed";
+        action = "Confirm reason";
+      } else if (
+        row.late_reports > 0
+        || batches.some((batch) => batch.state_code === row.code && ["returned", "awaiting_review"].includes(String(batch.status || "")))
+      ) {
+        issue = "Data correction pending";
+        action = "Return / resolve";
+      } else if (lowConversion) {
+        issue = "Low conversion";
+        action = "Review activity approach";
       }
-      if (!issues.length) return null;
+      if (!issue) return null;
       return {
         state_code: row.code,
         office: row.description || row.code,
         zone: row.zone_name,
-        issue: issues.join("; "),
+        issue,
+        action,
         pending_activities: row.pending_activities,
         late_reports: row.late_reports,
         planned_gap: plannedGap,
-        conversion_rate: row.conversion_rate,
         enrolled: row.enrolled,
         leads: row.leads,
+        prior_enrolled: prior ?? null,
       };
     })
     .filter(Boolean)
     .sort((a, b) => (b.late_reports + b.pending_activities + (b.planned_gap || 0)) - (a.late_reports + a.pending_activities + (a.planned_gap || 0)));
+
+  const stateFollowUps = stateRows.map((row) => {
+    const prior = priorEnrolledByState.get(row.code);
+    const enrolled = Number(row.enrolled || 0);
+    let trend = "flat";
+    if (prior != null && prior > 0) {
+      if (enrolled > prior) trend = "up";
+      else if (enrolled < prior) trend = "down";
+    }
+    let issue = "On track";
+    let next_step = "Monitor";
+    if (trend === "up" && enrolled > 0) {
+      issue = "Strong growth";
+      next_step = "Share practice";
+    } else if (trend === "down") {
+      issue = "Decline";
+      next_step = "Recovery plan";
+    } else if (!row.reports || row.finalised === 0 || row.late_reports > 0) {
+      issue = "Late report";
+      next_step = "Submit report";
+      if (!row.reports) trend = "down";
+    } else if (Number(row.conducted || 0) === 0 || Number(row.recorded || 0) < 2) {
+      issue = "Low activity";
+      next_step = "Review plan";
+      trend = "flat";
+    }
+    return {
+      state_code: row.code,
+      state: row.description || row.code,
+      trend,
+      issue,
+      next_step,
+      enrolled,
+      conducted: row.conducted,
+      prior_enrolled: prior ?? null,
+      below_trend: trend === "down" || issue === "Low activity" || issue === "Late report",
+    };
+  });
+  const statesBelowTrend = stateFollowUps.filter((row) => row.below_trend).length;
+
+  const managementIssues = [];
+  if (stateFollowUps.some((row) => row.trend === "down")) {
+    managementIssues.push({ issue: "Declining state trend", decision_required: "Require recovery plan", owner: "Zone" });
+  }
+  if (stateRows.some((row) => row.leads > 0 && (row.conversion_rate ?? 100) < 40)) {
+    managementIssues.push({ issue: "Low conversion", decision_required: "Review activity approach", owner: "State/Zone" });
+  }
+  if (exceptions.some((row) => row.issue === "No report received" || row.issue === "Data correction pending")) {
+    managementIssues.push({ issue: "Incomplete reporting", decision_required: "Set correction deadline", owner: "State" });
+  }
 
   const actionWhere = { ...scope };
   if (where.zonal_code) actionWhere.zonal_code = where.zonal_code;
@@ -459,7 +573,12 @@ const analytics = respond(async (req, res) => {
         offices_total: stateRows.length,
         offices_reporting: officesReporting,
         offices_needing_follow_up: exceptions.length,
-        conversion_rate: summary.leads ? Math.round((summary.enrolled / summary.leads) * 1000) / 10 : null,
+        states_in_zone: stateRows.length,
+        states_below_trend: statesBelowTrend,
+        change_vs_prior_pct: changeVsPriorPct,
+        prior_enrolled: priorEnrolledByState.size ? priorEnrolledTotal : null,
+        prior_period: priorYear && priorMonth ? { year: priorYear, month: priorMonth } : null,
+        top_programme: programmes[0]?.name || null,
         lead_rate: summary.reached ? Math.round((summary.leads / summary.reached) * 1000) / 10 : null,
       },
       states: stateRows,
@@ -470,15 +589,24 @@ const analytics = respond(async (req, res) => {
         percentage: Math.round((row.activities / locationTotal) * 1000) / 10,
       })),
       by_audience: byAudience,
+      by_activity_location: byActivityLocation,
+      activity_types: activityTypeKeys,
+      activity_register: activityRegister,
       programmes,
       exceptions,
+      state_follow_ups: stateFollowUps,
+      management_issues: managementIssues,
       follow_ups: followUps,
       enrolment_trend: history,
+      catalogue: {
+        programmes: rules.PROGRAMMES,
+        statuses: rules.STATUSES,
+      },
       definitions: {
-        enrolled: "Sum of saved linked enrolment counts, including drafts; renewals remain distinguishable in Enrolment reports",
+        enrolled: "Count only enrolment records linked to the activity; avoid double-counting a beneficiary across activities where identifiable",
         conducted: "Activity status is Completed",
-        planned: "One plan per state and reporting month",
-        conversion: "Enrolment count divided by leads; no target or performance colour is implied",
+        planned: "Planned activities recorded on the state reporting batch",
+        lead_rate: "Leads generated ÷ target audience reached × 100",
         attribution: "Activity cohort totals retain their originating drive; the enrolment trend uses the enrolment reporting month",
       },
     },

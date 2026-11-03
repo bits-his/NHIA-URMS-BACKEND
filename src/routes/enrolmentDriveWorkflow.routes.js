@@ -2,7 +2,7 @@ const express = require("express");
 const { authenticate } = require("../middleware/auth");
 const { upload } = require("../middleware/enrolmentDriveUpload");
 const ctrl = require("../controllers/enrolmentDriveWorkflow.controller");
-const { hasDriveAccess } = require("../utils/enrolmentDriveWorkflow");
+const { hasDriveAccess, canAccessEnrolmentDriveDashboard } = require("../utils/enrolmentDriveWorkflow");
 
 const router = express.Router();
 router.use(authenticate);
@@ -11,7 +11,12 @@ router.use((req, res, next) => {
   next();
 });
 router.get("/catalogue", ctrl.catalogue);
-router.get("/analytics", ctrl.analytics);
+router.get("/analytics", (req, res, next) => {
+  if (!canAccessEnrolmentDriveDashboard(req.user)) {
+    return res.status(403).json({ success: false, message: "Enrolment Drives dashboard is limited to State Coordinator, Zonal Director, SDO and DG" });
+  }
+  return next();
+}, ctrl.analytics);
 router.get("/legacy", ctrl.legacy);
 router.get("/actions", ctrl.listActions);
 router.post("/actions", ctrl.saveAction);
