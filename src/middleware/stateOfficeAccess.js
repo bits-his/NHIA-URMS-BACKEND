@@ -16,9 +16,10 @@ const ROUTE_FUNCTIONALITY = {
   "compliance-visits": "Monitoring Visits",
   "weekly-compliance": "Weekly Compliance Report",
   "mystery-shopping": "Mystery Shopping",
-  "hmo-indebtedness": "HMO Indebtedness Collation",
-  "hmo-reconciliation": "HMO Indebtedness Collation",
-  "hmo-master": "HMO Indebtedness Collation",
+  "hmo-indebtedness": "HMO Indebtedness",
+  "hmo-reconciliation": "HMO Indebtedness",
+  "hmo-master": "HMO Indebtedness",
+  "complaints-register": "State Complaints Register",
   "reconciliation-meetings": "Reconciliation Meetings",
   accreditation: "Provider Management",
   "provider-accreditation": "Provider Management",
@@ -134,7 +135,36 @@ const FUNCTIONALITY_ALIASES = {
   "Additional / Extra Dependant": ["Extra Dependant", "Additional/Extra Dependent", "Additional / Extra Dependent", "Beneficiary Management"],
   "Change of HCF": ["Change of HCP", "Change of HCF/HCP", "Change of HCF", "Beneficiary Management"],
   "Challenges & Recommendations": ["Challenges"],
-  "SSHIA Financial Report": ["SSHIA Financial", "SSHIA Financial Reports"],
+  "SSHIA Financial Report": ["SSHIA Financial", "SSHIA Financial Reports", "SSHIA"],
+  "Internally Generated Revenue (IGR)": ["IGR", "Internally Generated Revenue"],
+  "Expenditure Profile": ["Expenditure"],
+  "IGR, SSHIA & Expenditure": [
+    "Internally Generated Revenue (IGR)",
+    "SSHIA Financial Report",
+    "Expenditure Profile",
+    "IGR",
+    "SSHIA",
+    "Expenditure",
+  ],
+  "Complaint/Compliance Management": [
+    "State Complaints Register",
+    "Weekly Compliance Report",
+    "HMO Indebtedness",
+    "Mystery Shopping",
+    "Complaint/Compliance management",
+  ],
+  "State Complaints Register": ["Complaints Register"],
+  "Weekly Compliance Report": ["Weekly Compliance"],
+  "HMO Indebtedness": [
+    "HMO Indebtedness Collation",
+    "HMO Indebtedness & Reconciliation",
+    "PHI Reconciliation",
+    "Private Health Insurance Reconciliation",
+    "FFS Reconciliation",
+    "Fee For Service Reconciliation",
+    "Capitation Reconciliation",
+    "Reconciliation Master Sheet",
+  ],
   "Complaints & Compliance Monitoring": [
     "Complaints",
     "Compliance Monitoring",
@@ -167,11 +197,34 @@ const ACCREDITED_PROVIDER_SECTIONS = [
   "Monitoring Visits",
   "Mystery Shopping",
   "HMO Indebtedness Collation",
+  "HMO Indebtedness",
   "Beneficiary Management",
   "Additional / Extra Dependant",
   "HMO Selection Process",
   "Change of HCF",
+  "Complaint/Compliance Management",
 ];
+
+/** Hub privilege titles that unlock every child tab privilege */
+const HUB_GRANTS_ALL_TABS = {
+  "Complaint/Compliance Management": [
+    "State Complaints Register",
+    "Weekly Compliance Report",
+    "HMO Indebtedness",
+    "Mystery Shopping",
+  ],
+  "Complaint/Compliance management": [
+    "State Complaints Register",
+    "Weekly Compliance Report",
+    "HMO Indebtedness",
+    "Mystery Shopping",
+  ],
+  "IGR, SSHIA & Expenditure": [
+    "Internally Generated Revenue (IGR)",
+    "SSHIA Financial Report",
+    "Expenditure Profile",
+  ],
+};
 
 const STATE_OFFICE_ACCESS_MODULES = new Set([
   SOC_ZONES_MODULE,
@@ -214,7 +267,19 @@ function findSdoEntry(access) {
 function hasFunctionality(entry, title) {
   const funcs = Array.isArray(entry?.functionalities) ? entry.functionalities : [];
   const accepted = acceptedFunctionalityNames(title);
-  return funcs.some((f) => accepted.has(f));
+  if (funcs.some((f) => accepted.has(f))) return true;
+
+  // Hub title alone (no child tab titles stored) unlocks every child tab
+  for (const [hubTitle, childTitles] of Object.entries(HUB_GRANTS_ALL_TABS)) {
+    if (!childTitles.includes(title)) continue;
+    if (!funcs.some((f) => f === hubTitle)) continue;
+    const hasAnyChild = childTitles.some((c) => {
+      const names = acceptedFunctionalityNames(c);
+      return funcs.some((f) => names.has(f) || f === c);
+    });
+    if (!hasAnyChild) return true;
+  }
+  return false;
 }
 
 function grantForFunctionality(access, requiredFunctionality) {
