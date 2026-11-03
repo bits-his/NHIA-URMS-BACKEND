@@ -369,15 +369,39 @@ const analytics = respond(async (req, res) => {
   }));
 
   const officesReporting = stateRows.filter((row) => row.finalised > 0).length;
+
+  // Prior-period enrolments by state (for declining-enrolment signal when a month is selected)
+  const priorEnrolledByState = new Map();
+  if (where.reporting_year && where.reporting_month) {
+    const priorMonth = where.reporting_month === 1 ? 12 : where.reporting_month - 1;
+    const priorYear = where.reporting_month === 1 ? where.reporting_year - 1 : where.reporting_year;
+    const priorWhere = { ...scope, category: "enrolment", drive_reference_id: { [Op.ne]: null }, reporting_year: priorYear, reporting_month: priorMonth };
+    if (where.zonal_code) priorWhere.zonal_code = where.zonal_code;
+    if (where.state_code) priorWhere.state_code = where.state_code;
+    const priorRows = await Enrolment.findAll({
+      where: priorWhere,
+      attributes: ["state_code", [sequelize.fn("SUM", sequelize.col("enrolment_count")), "enrolled"]],
+      group: ["state_code"],
+      raw: true,
+    });
+    for (const row of priorRows) priorEnrolledByState.set(row.state_code, Number(row.enrolled || 0));
+  }
+
   const exceptions = stateRows
-    .filter((row) => !row.reports || row.late_reports > 0 || row.pending_activities > 0 || (row.leads > 0 && (row.conversion_rate ?? 100) < 40))
     .map((row) => {
       const issues = [];
+      const plannedGap = Math.max(0, Number(row.planned || 0) - Number(row.conducted || 0));
       if (!row.reports) issues.push("No report for selected period");
       else if (row.finalised === 0) issues.push("Report not yet submitted");
       if (row.late_reports > 0) issues.push(`${row.late_reports} late report(s)`);
       if (row.pending_activities > 0) issues.push(`${row.pending_activities} deferred/cancelled activities`);
-      if (row.leads > 0 && (row.conversion_rate ?? 100) < 40) issues.push(`Low conversion (${row.conversion_rate}%)`);
+      if (plannedGap > 0) issues.push(`${plannedGap} planned activities not completed`);
+      if (row.leads > 0 && (row.conversion_rate ?? 100) < 40) issues.push(`High leads, low enrolment (${row.conversion_rate}% conversion)`);
+      const prior = priorEnrolledByState.get(row.code);
+      if (prior != null && prior > 0 && Number(row.enrolled || 0) < prior) {
+        issues.push(`Enrolment declining vs prior period (${Number(row.enrolled || 0)} vs ${prior})`);
+      }
+      if (!issues.length) return null;
       return {
         state_code: row.code,
         office: row.description || row.code,
@@ -385,12 +409,14 @@ const analytics = respond(async (req, res) => {
         issue: issues.join("; "),
         pending_activities: row.pending_activities,
         late_reports: row.late_reports,
+        planned_gap: plannedGap,
         conversion_rate: row.conversion_rate,
         enrolled: row.enrolled,
         leads: row.leads,
       };
     })
-    .sort((a, b) => (b.late_reports + b.pending_activities) - (a.late_reports + a.pending_activities));
+    .filter(Boolean)
+    .sort((a, b) => (b.late_reports + b.pending_activities + (b.planned_gap || 0)) - (a.late_reports + a.pending_activities + (a.planned_gap || 0)));
 
   const actionWhere = { ...scope };
   if (where.zonal_code) actionWhere.zonal_code = where.zonal_code;
