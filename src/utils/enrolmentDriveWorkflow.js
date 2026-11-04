@@ -29,6 +29,22 @@ function isStateCoordinatorRole(role) {
   return r === "state-coordinator" || r.endsWith("-state-coordinator");
 }
 
+function isZonalCoordinatorRole(role) {
+  const r = String(role || "").trim().toLowerCase().replace(/_/g, "-").replace(/\s+/g, "-");
+  return r === "zonal-coordinator" || r === "zc" || r.endsWith("-zonal-coordinator");
+}
+
+/** Dashboard actors from the Enrolment Drives design: SC, Zonal Director, SDO, DG (+ admin for support). */
+function canAccessEnrolmentDriveDashboard(user) {
+  const role = String(user?.role || "").trim().toLowerCase().replace(/_/g, "-").replace(/\s+/g, "-");
+  const scope = user?.role_config?.report_scope;
+  if (role === "admin" || role === "sdo" || role === "dg-ceo") return true;
+  if (role === "state-coordinator") return true;
+  if (isStateCoordinatorRole(role) && scope === "state" && user?.state_code) return true;
+  if (isZonalCoordinatorRole(role) && scope !== "national" && user?.zonal_code) return true;
+  return false;
+}
+
 function scopeWhere(user) {
   const role = user?.role || "";
   const reportScope = user?.role_config?.report_scope;
@@ -128,4 +144,4 @@ function totals(batches, activities, enrolments) {
   };
 }
 
-module.exports = { PROGRAMMES, AUDIENCES, LOCATIONS, FUNDING, STATUSES, EVIDENCE_TYPES, NATIONAL, fail, reference, text, hasDriveAccess, scopeWhere, assertScope, integer, activityValues, nextStatus, totals };
+module.exports = { PROGRAMMES, AUDIENCES, LOCATIONS, FUNDING, STATUSES, EVIDENCE_TYPES, NATIONAL, fail, reference, text, hasDriveAccess, canAccessEnrolmentDriveDashboard, isStateCoordinatorRole, isZonalCoordinatorRole, scopeWhere, assertScope, integer, activityValues, nextStatus, totals };

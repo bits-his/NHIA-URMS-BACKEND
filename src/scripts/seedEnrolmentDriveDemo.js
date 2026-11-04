@@ -141,6 +141,38 @@ async function main() {
   await clearDemo();
 
   const months = [8, 9, 10, 11]; // Aug–Nov 2026
+
+  // One batch per state+period — clear any non-demo rows that would collide.
+  const collide = await Batch.findAll({
+    where: {
+      reporting_year: YEAR,
+      reporting_month: { [Op.in]: months },
+      state_code: { [Op.in]: states.map((s) => s.code) },
+    },
+    attributes: ["reference_id"],
+    raw: true,
+  });
+  if (collide.length) {
+    const collideIds = collide.map((row) => row.reference_id);
+    const collideDrives = (
+      await EnrolmentDriveReport.findAll({
+        where: { batch_reference_id: { [Op.in]: collideIds } },
+        attributes: ["reference_id"],
+        raw: true,
+      })
+    ).map((row) => row.reference_id);
+    if (collideDrives.length) {
+      await Programme.destroy({ where: { drive_reference_id: { [Op.in]: collideDrives } } });
+      await Audience.destroy({ where: { drive_reference_id: { [Op.in]: collideDrives } } });
+      await EnrolmentReport.destroy({ where: { drive_reference_id: { [Op.in]: collideDrives } } });
+      await EnrolmentDriveReport.destroy({ where: { reference_id: { [Op.in]: collideDrives } } });
+    }
+    await Review.destroy({ where: { batch_reference_id: { [Op.in]: collideIds } } });
+    await Action.destroy({ where: { batch_reference_id: { [Op.in]: collideIds } } });
+    await Batch.destroy({ where: { reference_id: { [Op.in]: collideIds } } });
+    console.log(`Cleared ${collideIds.length} existing batch(es) for ${YEAR} months ${months.join(",")}`);
+  }
+
   let batchN = 0;
   let driveN = 0;
   let enrolN = 0;

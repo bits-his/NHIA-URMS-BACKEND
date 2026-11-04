@@ -38,12 +38,16 @@ function documentRoleOverrides(role) {
   return spec ? { ...role, label: spec.role === "state-officer" ? "State Office Reporting Officer" : spec.name, staff_id_prefix: spec.staff_id.replace(/-\d+$/, ""), report_scope: spec.report_scope, can_create_monthly: spec.can_create_monthly, can_review_monthly: spec.can_review_monthly } : role;
 }
 
-function isStateOfficeReviewWrite(method, pathname) {
+function isStateOfficeReviewWrite(method, pathname, roleKey = "") {
   if (method === "PATCH" && /\/api\/state-office\/.+\/(?:reports|office-profiles)\/[^/]+\/status$/.test(pathname)) {
     return true;
   }
-  if (method === "POST" && /\/api\/state-office\/enrolment-drives\/batches\/[^/]+\/transition$/.test(pathname)) {
-    return true;
+  // Enrolment Drive endorse / return / deadline — State Coordinators only.
+  if (
+    method === "POST"
+    && /\/api\/state-office\/enrolment-drives\/batches\/[^/]+\/(?:transition|deadline)$/.test(pathname)
+  ) {
+    return /state.*coordinator/.test(String(roleKey));
   }
   return false;
 }
@@ -56,20 +60,25 @@ function canWriteDocumentRequest(user, method, originalUrl = "") {
   const pathname = originalUrl.split("?")[0];
   if (/^\/api\/notifications(?:\/|$)/.test(pathname)) return true;
   const role = user.role_config || spec;
+  const roleKey = String(user?.role || "");
 
   if (spec.annualOnly) {
     if (/^\/api\/(?:annual-reports|reports|state-office\/challenges)(?:\/|$)/.test(pathname)) return true;
-    if (role.can_review_monthly && isStateOfficeReviewWrite(method, pathname)) return true;
+    if (role.can_review_monthly && isStateOfficeReviewWrite(method, pathname, roleKey)) return true;
+    // Legacy annual-only State Coordinators may still endorse Enrolment Drives.
+    if (/state.*coordinator/.test(roleKey) && isStateOfficeReviewWrite(method, pathname, roleKey)) return true;
     return false;
   }
 
   // Create-capable roles may mutate forms; review-only roles may only endorse / return.
   if (role.can_create_monthly) return true;
   if (role.can_review_monthly) {
-    if (isStateOfficeReviewWrite(method, pathname)) return true;
+    if (isStateOfficeReviewWrite(method, pathname, roleKey)) return true;
     if (/^\/api\/(?:annual-reports|reports|state-office\/challenges)(?:\/|$)/.test(pathname)) return true;
     return false;
   }
+  // State Coordinator endorse path when role_config is missing / stale.
+  if (/state.*coordinator/.test(roleKey) && isStateOfficeReviewWrite(method, pathname, roleKey)) return true;
   return false;
 }
 

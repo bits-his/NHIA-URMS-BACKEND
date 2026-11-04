@@ -805,6 +805,17 @@ const FORM_MODEL_LOADERS = {
     return [ServicomComplaint, ServicomComplaintComment];
   },
 
+  "meetings-coordination": () => {
+    const { MeetingReport, MeetingItem, EtmcReport, EtmcEntry } = require("./MeetingsCoordination");
+    for (const M of [MeetingReport, EtmcReport]) {
+      StateOffice.hasMany(M, { foreignKey: "state_code", sourceKey: "code", as: M === MeetingReport ? "meeting_reports" : "etmc_reports" });
+      M.belongsTo(StateOffice, { foreignKey: "state_code", targetKey: "code", as: "state" });
+      ZonalOffice.hasMany(M, { foreignKey: "zonal_code", sourceKey: "zonal_code", as: M === MeetingReport ? "meeting_reports" : "etmc_reports" });
+      M.belongsTo(ZonalOffice, { foreignKey: "zonal_code", targetKey: "zonal_code", as: "zone" });
+    }
+    return [MeetingReport, MeetingItem, EtmcReport, EtmcEntry];
+  },
+
   "challenges-support": () => {
     const { Challenge, SupportRequest, RecordHistory } = require("./ChallengesSupport");
     StateOffice.hasMany(Challenge, { foreignKey: "state_code", sourceKey: "code", as: "challenges" });
