@@ -3,9 +3,13 @@ const sequelize = require("../config/database");
 const { MeetingReport, MeetingItem, EtmcReport, EtmcEntry } = require("../models/MeetingsCoordination");
 const { StateOffice, ZonalOffice, User } = require("../models");
 const FormDocument = require("../models/shared/FormDocument");
+const { appendDocuments } = require("../utils/formDocuments");
 const { NATIONAL, fail, reference, text, scopeWhere, assertScope, integer } = require("../utils/enrolmentDriveWorkflow");
 const { grantForFunctionality } = require("../middleware/stateOfficeAccess");
 const { Department } = require("../models");
+
+const MEETING_FORM_KEY = "meeting-reports";
+const ETMC_FORM_KEY = "etmc-reports";
 
 const MEETING_TYPES = [
   "Monthly Meeting", "ETMC Cascading Meeting", "Activity / Outing Planning Briefing",
@@ -100,8 +104,6 @@ const meetingHeader = (body, user) => {
     prepared_by: text(body.prepared_by, 150) || actorName(user),
     designation: text(body.designation, 120) || null,
     submission_date: dateOnly(body.submission_date, "submission date") || new Date().toISOString().slice(0, 10),
-    endorsed_by: text(body.endorsed_by, 150) || null,
-    evidence_note: text(body.evidence_note, 5000) || null,
   };
 };
 
@@ -216,9 +218,41 @@ const getMeeting = RESPOND(async (req, res) => {
   const row = await allowed(MeetingReport, "meeting_id", req.params.id, req.user);
   const [items, docs] = await Promise.all([
     MeetingItem.findAll({ where: { meeting_id: row.meeting_id }, order: [["createdAt", "ASC"]] }),
-    FormDocument.findAll({ where: { form_key: "meeting-reports", report_reference_id: row.meeting_id } }),
+    FormDocument.findAll({ where: { form_key: MEETING_FORM_KEY, report_reference_id: row.meeting_id }, order: [["sn", "ASC"]] }),
   ]);
   res.json({ success: true, data: { ...row.toJSON(), items, documents: docs } });
+});
+
+const uploadMeetingDocuments = RESPOND(async (req, res) => {
+  const row = await allowed(MeetingReport, "meeting_id", req.params.id, req.user);
+  if (row.created_by_user_id !== req.user.id && !canAssign(req.user)) throw fail("You can only upload evidence to reports you created", 403);
+  if (row.status === "approved") throw fail("Approved reports cannot receive new evidence", 403);
+  const files = req.files?.length ? req.files : (req.file ? [req.file] : []);
+  if (!files.length) throw fail("Select at least one evidence file", 422);
+  const added = files.map((f) => ({
+    doc_kind: "evidence",
+    name: f.originalname,
+    path: `/uploads/meetings/${f.filename}`,
+    mime: f.mimetype || null,
+  }));
+  await appendDocuments(MEETING_FORM_KEY, row.meeting_id, added);
+  const documents = await FormDocument.findAll({
+    where: { form_key: MEETING_FORM_KEY, report_reference_id: row.meeting_id },
+    order: [["sn", "ASC"]],
+  });
+  res.json({ success: true, data: { meeting_id: row.meeting_id, documents } });
+});
+
+const deleteMeetingDocument = RESPOND(async (req, res) => {
+  const row = await allowed(MeetingReport, "meeting_id", req.params.id, req.user);
+  if (row.created_by_user_id !== req.user.id && !canAssign(req.user)) throw fail("You can only remove evidence from reports you created", 403);
+  if (row.status === "approved") throw fail("Approved reports cannot be edited", 403);
+  const sn = integer(req.params.sn, "document", true);
+  const removed = await FormDocument.destroy({
+    where: { form_key: MEETING_FORM_KEY, report_reference_id: row.meeting_id, sn },
+  });
+  if (!removed) throw fail("Document not found", 404);
+  res.json({ success: true });
 });
 
 /** Open action points from earlier meetings — feed §4 follow-up */
@@ -237,8 +271,8 @@ const transitionMeeting = RESPOND(async (req, res) => {
   const next = text(req.body.status, 20);
   const own = row.created_by_user_id === req.user.id;
   if (next === "submitted" && own && row.status === "draft") await row.update({ status: "submitted" });
-  else if (next === "approved" && canReview(req.user) && row.status === "submitted") await row.update({ status: "approved", endorsed_by: text(req.body.endorsed_by, 150) || actorName(req.user) });
-  else if (next === "draft" && canReview(req.user) && row.status === "submitted") await row.update({ status: "draft" });
+  else if (next === "approved" && canReview(req.user) && row.status === "submitted") await row.update({ status: "approved", endorsed_by: actorName(req.user) });
+  else if (next === "draft" && canReview(req.user) && row.status === "submitted") await row.update({ status: "draft", endorsed_by: null });
   else throw fail("This action is not permitted for your role or the current status", 403);
   res.json({ success: true, data: row });
 });
@@ -268,7 +302,6 @@ const etmcHeader = (body, user) => {
     prepared_by: text(body.prepared_by, 150) || actorName(user),
     designation: text(body.designation, 120) || null,
     submission_date: dateOnly(body.submission_date, "submission date") || new Date().toISOString().slice(0, 10),
-    endorsed_by: text(body.endorsed_by, 150) || null,
   };
 };
 const entryRows = (etmcId, body) => {
@@ -320,7 +353,7 @@ const getEtmc = RESPOND(async (req, res) => {
   const row = await allowed(EtmcReport, "etmc_id", req.params.id, req.user);
   const [entries, docs] = await Promise.all([
     EtmcEntry.findAll({ where: { etmc_id: row.etmc_id }, order: [["createdAt", "ASC"]] }),
-    FormDocument.findAll({ where: { form_key: "etmc-reports", report_reference_id: row.etmc_id } }),
+    FormDocument.findAll({ where: { form_key: ETMC_FORM_KEY, report_reference_id: row.etmc_id }, order: [["sn", "ASC"]] }),
   ]);
   res.json({ success: true, data: { ...row.toJSON(), entries, documents: docs } });
 });
@@ -329,8 +362,8 @@ const transitionEtmc = RESPOND(async (req, res) => {
   const next = text(req.body.status, 20);
   const own = row.created_by_user_id === req.user.id;
   if (next === "submitted" && own && row.status === "draft") await row.update({ status: "submitted" });
-  else if (next === "approved" && canReview(req.user) && row.status === "submitted") await row.update({ status: "approved", endorsed_by: text(req.body.endorsed_by, 150) || actorName(req.user) });
-  else if (next === "draft" && canReview(req.user) && row.status === "submitted") await row.update({ status: "draft" });
+  else if (next === "approved" && canReview(req.user) && row.status === "submitted") await row.update({ status: "approved", endorsed_by: actorName(req.user) });
+  else if (next === "draft" && canReview(req.user) && row.status === "submitted") await row.update({ status: "draft", endorsed_by: null });
   else throw fail("This action is not permitted for your role or the current status", 403);
   res.json({ success: true, data: row });
 });
@@ -338,6 +371,7 @@ const transitionEtmc = RESPOND(async (req, res) => {
 module.exports = {
   hasAccess, MEETING_TYPES,
   catalogue, listMeetings, getMeeting, openActionPoints, transitionMeeting,
+  uploadMeetingDocuments, deleteMeetingDocument,
   createMeeting: RESPOND((req, res) => saveMeeting(req, res, null)),
   updateMeeting: RESPOND((req, res) => saveMeeting(req, res, req.params.id)),
   listEtmc, getEtmc, transitionEtmc,
