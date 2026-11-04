@@ -51,12 +51,15 @@ const catalogue = RESPOND(async (req, res) => {
   });
   const zones = await ZonalOffice.findAll({ where: { zonal_code: { [Op.in]: [...new Set(states.map((s) => s.zonal_code))] } }, attributes: ["zonal_code", "description"] });
   const departments = await Department.findAll({ attributes: ["department_code", "description"], order: [["description", "ASC"]] }).catch(() => []);
+  const roleLabel = req.user.role_label || String(req.user.role || "").replace(/-/g, " ");
   res.json({ success: true, data: {
     meeting_types: MEETING_TYPES, item_statuses: ITEM_STATUSES, decision_statuses: DECISION_STATUSES,
     yn: YNP, venues: ["Physical", "Virtual"], etmc_sessions: ["Q1", "Q2", "Q3", "Q4"],
     departments, states, zones,
     default_state: scope.state_code || req.user.state_code || null,
     default_zone: scope.zonal_code || req.user.zonal_code || null,
+    role_label: roleLabel,
+    user_name: actorName(req.user),
     permissions: { user_id: req.user.id, create: canCreate(req.user), review: canReview(req.user), assign: canAssign(req.user), national: NATIONAL.has(req.user.role) },
   } });
 });
@@ -98,13 +101,28 @@ const meetingHeader = (body, user) => {
     designation: text(body.designation, 120) || null,
     submission_date: dateOnly(body.submission_date, "submission date") || new Date().toISOString().slice(0, 10),
     endorsed_by: text(body.endorsed_by, 150) || null,
+    evidence_note: text(body.evidence_note, 5000) || null,
   };
 };
 
-function itemRows(items = [], meetingId, year, month, seq = { n: 0 }) {
+function itemRows(meetingId, year, month, seedRefs = []) {
   const rows = [];
+  const usedRefs = new Set(seedRefs.filter(Boolean));
+  let seq = 0;
+  for (const r of usedRefs) {
+    const m = String(r).match(/-(\d+)$/);
+    if (m) seq = Math.max(seq, Number(m[1]) || 0);
+  }
+  const nextRef = () => {
+    let ref;
+    do {
+      seq += 1;
+      ref = `TAR-MMR-${year}-${String(month).padStart(2, "0")}-${String(seq).padStart(3, "0")}`;
+    } while (usedRefs.has(ref));
+    usedRefs.add(ref);
+    return ref;
+  };
   const push = (kind, list) => (Array.isArray(list) ? list : []).forEach((item) => {
-    seq.n += 1;
     const isDecision = kind === "decision";
     const row = {
       item_id: reference("MIT"), meeting_id: meetingId, item_kind: kind,
@@ -115,11 +133,15 @@ function itemRows(items = [], meetingId, year, month, seq = { n: 0 }) {
       responsible_officer: text(item.responsible_officer, 150) || null,
       due_date: dateOnly(item.due_date, "due date"),
       expected_output: text(item.expected_output, 255) || null,
-      status: item.status && ITEM_STATUSES.includes(item.status) ? item.status : "Pending",
+      status: item.status && ITEM_STATUSES.includes(item.status) ? item.status : (isDecision || kind === "followup" ? "Pending" : null),
       remarks: text(item.remarks, 5000) || null,
-      parent_item_id: null,
+      parent_item_id: kind === "followup" && text(item.parent_item_id, 30) ? text(item.parent_item_id, 30) : null,
+      action_ref: null,
     };
-    if (isDecision) row.action_ref = `TAR-MMR-${year}-${String(month).padStart(2, "0")}-${String(seq.n).padStart(3, "0")}`;
+    if (isDecision) {
+      const kept = text(item.action_ref, 40);
+      row.action_ref = kept && !usedRefs.has(kept) ? (usedRefs.add(kept), kept) : nextRef();
+    }
     rows.push(row);
   });
   return { push, rows };
@@ -128,6 +150,7 @@ function itemRows(items = [], meetingId, year, month, seq = { n: 0 }) {
 const listMeetings = RESPOND(async (req, res) => {
   const where = { ...scopeWhere(req.user) };
   for (const [q, c] of [["status", "status"], ["type", "meeting_type"], ["state", "state_code"], ["year", "reporting_year"], ["month", "reporting_month"]]) if (req.query[q]) where[c] = req.query[q];
+  if (req.query.mine === "1" || req.query.mine === "true") where.created_by_user_id = req.user.id;
   const rows = await MeetingReport.findAll({ where, include: [{ model: MeetingItem, as: "items", attributes: ["item_id", "item_kind", "subject", "status", "action_ref"] }], order: [["meeting_date", "DESC"], ["createdAt", "DESC"]] });
   res.json({ success: true, data: rows });
 });
@@ -142,6 +165,22 @@ const saveMeeting = async (req, res, id) => {
     assertScope(req.user, { state_code: state.code, zonal_code: state.zonal_code });
     const header = meetingHeader(req.body, req.user);
     header.status = req.body.status === "submitted" ? "submitted" : "draft";
+    const followups = Array.isArray(req.body.followups) ? req.body.followups : [];
+    if (header.status === "submitted") {
+      const openWhere = {
+        item_kind: "decision",
+        status: { [Op.in]: ["Pending", "In Progress"] },
+        ...(id ? { meeting_id: { [Op.ne]: id } } : {}),
+      };
+      const open = await MeetingItem.count({
+        where: openWhere,
+        include: [{ model: MeetingReport, as: "meeting", where: { ...scope }, attributes: [], required: true }],
+        transaction,
+      });
+      if (open > 0 && followups.length === 0) {
+        throw fail("Record follow-up on previous meeting action points before submitting", 422);
+      }
+    }
     if (id) {
       row = await allowed(MeetingReport, "meeting_id", id, req.user, transaction);
       if (row.created_by_user_id !== req.user.id && !canAssign(req.user)) throw fail("You can only edit reports you created", 403);
@@ -151,11 +190,24 @@ const saveMeeting = async (req, res, id) => {
     } else {
       row = await MeetingReport.create({ ...header, meeting_id: reference("MMR"), state_code: state.code, zonal_code: state.zonal_code, created_by_user_id: req.user.id, created_by_name: actorName(req.user) }, { transaction });
     }
-    const builder = itemRows(null, row.meeting_id, header.reporting_year, header.reporting_month);
+    const existingRefs = await MeetingItem.findAll({
+      where: { item_kind: "decision", action_ref: { [Op.like]: `TAR-MMR-${header.reporting_year}-${String(header.reporting_month).padStart(2, "0")}-%` } },
+      attributes: ["action_ref"],
+      include: [{ model: MeetingReport, as: "meeting", where: { state_code: state.code }, attributes: [], required: true }],
+      transaction,
+    }).catch(() => []);
+    const builder = itemRows(row.meeting_id, header.reporting_year, header.reporting_month, existingRefs.map((r) => r.action_ref));
     builder.push("agenda", req.body.agenda_items);
     builder.push("decision", req.body.decisions);
-    builder.push("followup", req.body.followups);
+    builder.push("followup", followups);
     if (builder.rows.length) await MeetingItem.bulkCreate(builder.rows, { transaction });
+    for (const f of followups) {
+      const parentId = text(f.parent_item_id, 30);
+      if (!parentId) continue;
+      const patch = {};
+      if (f.status && ITEM_STATUSES.includes(f.status)) patch.status = f.status;
+      if (Object.keys(patch).length) await MeetingItem.update(patch, { where: { item_id: parentId, item_kind: "decision" }, transaction });
+    }
   });
   res.status(id ? 200 : 201).json({ success: true, data: row });
 };
@@ -237,6 +289,7 @@ const entryRows = (etmcId, body) => {
 const listEtmc = RESPOND(async (req, res) => {
   const where = { ...scopeWhere(req.user) };
   for (const [q, c] of [["status", "status"], ["state", "state_code"], ["year", "reporting_year"], ["month", "reporting_month"], ["session", "etmc_session"]]) if (req.query[q]) where[c] = req.query[q];
+  if (req.query.mine === "1" || req.query.mine === "true") where.created_by_user_id = req.user.id;
   const rows = await EtmcReport.findAll({ where, order: [["etmc_meeting_date", "DESC"]] });
   res.json({ success: true, data: rows });
 });

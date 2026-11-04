@@ -36,6 +36,7 @@ const MeetingReport = define("MeetingReport", "meeting_reports", {
   designation: { type: D.STRING(120), allowNull: true },
   submission_date: { type: D.DATEONLY, allowNull: true },
   endorsed_by: { type: D.STRING(150), allowNull: true },
+  evidence_note: { type: D.TEXT, allowNull: true },
   status: { type: D.STRING(20), allowNull: false, defaultValue: "draft" },
   created_by_user_id: { type: D.INTEGER.UNSIGNED, allowNull: true, references: { model: "users", key: "id" } },
   created_by_name: { type: D.STRING(150), allowNull: false },

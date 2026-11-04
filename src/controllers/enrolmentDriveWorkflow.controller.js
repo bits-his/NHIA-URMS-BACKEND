@@ -626,22 +626,4 @@ const setDeadline = respond(async (req, res) => {
   res.json({ success: true, data: await batchData(await allowedRecord(Batch, req.params.id, req.user), req.user) });
 });
 
-const legacy = respond(async (req, res) => {
-  const rows = await Drive.findAll({ where: { ...scopeWhere(req.user), batch_reference_id: null }, order: [["reporting_year", "DESC"], ["reporting_month", "DESC"]] });
-  res.json({ success: true, data: rows.map((row) => ({ ...row.toJSON(), evidence: historicalEvidence(row) })) });
-});
-const attachLegacy = respond(async (req, res) => {
-  await sequelize.transaction(async (transaction) => {
-    const batch = await allowedRecord(Batch, req.params.id, req.user, transaction);
-    await requireEditor(req.user, batch);
-    const drive = await allowedRecord(Drive, req.params.driveId, req.user, transaction);
-    if (drive.batch_reference_id || drive.state_code !== batch.state_code || drive.reporting_year !== batch.reporting_year || drive.reporting_month !== batch.reporting_month) throw fail("Only unattached activities from the same state and reporting period can be attached");
-    await drive.update({ batch_reference_id: batch.reference_id }, { transaction });
-    await Programme.bulkCreate((drive.programs_supported || []).filter((value) => rules.PROGRAMMES.includes(value)).map((programme) => ({ drive_reference_id: drive.reference_id, programme })), { transaction });
-    await Audience.bulkCreate((drive.target_audience || []).filter((value) => rules.AUDIENCES.includes(value)).map((audience) => ({ drive_reference_id: drive.reference_id, audience })), { transaction });
-    await batch.update({ revision: batch.revision + 1 }, { transaction });
-  });
-  res.json({ success: true });
-});
-
-module.exports = { catalogue, listBatches, createBatch, getBatch, updateBatch, createActivity: respond(saveActivity), updateActivity: respond(saveActivity), changeStatus, uploadEvidence, downloadEvidence, listActions, saveAction, analytics, setDeadline, legacy, attachLegacy, batchForDrive, requireEditor };
+module.exports = { catalogue, listBatches, createBatch, getBatch, updateBatch, createActivity: respond(saveActivity), updateActivity: respond(saveActivity), changeStatus, uploadEvidence, downloadEvidence, listActions, saveAction, analytics, setDeadline, batchForDrive, requireEditor };

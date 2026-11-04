@@ -34,11 +34,11 @@ function isZonalCoordinatorRole(role) {
   return r === "zonal-coordinator" || r === "zc" || r.endsWith("-zonal-coordinator");
 }
 
-/** Dashboard actors from the Enrolment Drives design: SC, Zonal Director, SDO, DG only. */
+/** Dashboard actors from the Enrolment Drives design: SC, Zonal Director, SDO, DG (+ admin for support). */
 function canAccessEnrolmentDriveDashboard(user) {
   const role = String(user?.role || "").trim().toLowerCase().replace(/_/g, "-").replace(/\s+/g, "-");
   const scope = user?.role_config?.report_scope;
-  if (role === "sdo" || role === "dg-ceo") return true;
+  if (role === "admin" || role === "sdo" || role === "dg-ceo") return true;
   if (role === "state-coordinator") return true;
   if (isStateCoordinatorRole(role) && scope === "state" && user?.state_code) return true;
   if (isZonalCoordinatorRole(role) && scope !== "national" && user?.zonal_code) return true;

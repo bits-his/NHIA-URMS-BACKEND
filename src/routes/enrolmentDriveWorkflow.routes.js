@@ -17,7 +17,6 @@ router.get("/analytics", (req, res, next) => {
   }
   return next();
 }, ctrl.analytics);
-router.get("/legacy", ctrl.legacy);
 router.get("/actions", ctrl.listActions);
 router.post("/actions", ctrl.saveAction);
 router.put("/actions/:actionId", ctrl.saveAction);
@@ -30,7 +29,6 @@ router.put("/batches/:id", ctrl.updateBatch);
 router.post("/batches/:id/transition", ctrl.changeStatus);
 router.post("/batches/:id/deadline", ctrl.setDeadline);
 router.post("/batches/:id/activities", ctrl.createActivity);
-router.post("/batches/:id/legacy/:driveId", ctrl.attachLegacy);
 router.put("/activities/:driveId", ctrl.updateActivity);
 router.post("/activities/:driveId/evidence", upload.array("files", 10), ctrl.uploadEvidence);
 module.exports = router;
