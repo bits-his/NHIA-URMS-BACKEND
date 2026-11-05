@@ -200,6 +200,13 @@ app.use(errorHandler);
       console.warn("⚠️  Department/unit catalog sync skipped:", catalogErr.message);
     }
 
+    try {
+      const { ensureEnrolmentDriveBatchPeriodIndex } = require("./scripts/migrations/ensureEnrolmentDriveBatchPeriodIndex");
+      await ensureEnrolmentDriveBatchPeriodIndex();
+    } catch (driveIdxErr) {
+      console.warn("⚠️  Enrolment drive batch index migration skipped:", driveIdxErr.message);
+    }
+
     app.listen(PORT, () => console.log(`🚀  Server running on http://localhost:${PORT} (rebuild mode)`));
   } catch (err) {
     console.error("❌  Cannot connect to DB:", err.message);

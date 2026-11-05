@@ -99,14 +99,36 @@ const createBatch = respond(async (req, res) => {
   if (year < 2000 || year > 2100 || month < 1 || month > 12) throw fail("Select a valid reporting period");
   const where = { state_code: state.code, reporting_year: year, reporting_month: month };
   // Multiple reports allowed in the same month — always create a new batch.
-  const batch = await Batch.create({
-    ...where,
-    reference_id: reference("EDB"),
-    zonal_code: state.zonal_code,
-    planned_activities: integer(req.body.planned_activities, "Planned activities"),
-    reporting_officer: req.user.name || req.user.staff_id || String(req.user.id),
-    created_by_user_id: req.user.id,
-  });
+  let batch;
+  try {
+    batch = await Batch.create({
+      ...where,
+      reference_id: reference("EDB"),
+      zonal_code: state.zonal_code,
+      planned_activities: integer(req.body.planned_activities, "Planned activities"),
+      reporting_officer: String(req.user.name || req.user.staff_id || req.user.id || "Officer").slice(0, 150),
+      created_by_user_id: req.user.id,
+    });
+  } catch (error) {
+    if (error?.name === "SequelizeUniqueConstraintError" || /uq_drive_batch_state_period|Duplicate entry/i.test(String(error?.parent?.sqlMessage || error?.message || ""))) {
+      // Older DBs may still have the unique month index — relax it and retry once.
+      const { ensureEnrolmentDriveBatchPeriodIndex } = require("../scripts/migrations/ensureEnrolmentDriveBatchPeriodIndex");
+      await ensureEnrolmentDriveBatchPeriodIndex();
+      batch = await Batch.create({
+        ...where,
+        reference_id: reference("EDB"),
+        zonal_code: state.zonal_code,
+        planned_activities: integer(req.body.planned_activities, "Planned activities"),
+        reporting_officer: String(req.user.name || req.user.staff_id || req.user.id || "Officer").slice(0, 150),
+        created_by_user_id: req.user.id,
+      });
+    } else if (error?.name === "SequelizeValidationError") {
+      const detail = error.errors?.map((item) => item.message).filter(Boolean).join("; ");
+      throw fail(detail || error.message || "Validation error", 422);
+    } else {
+      throw error;
+    }
+  }
   res.json({ success: true, created: true, data: await batchData(batch, req.user) });
 });
 const getBatch = respond(async (req, res) => res.json({ success: true, data: await batchData(await allowedRecord(Batch, req.params.id, req.user), req.user) }));
