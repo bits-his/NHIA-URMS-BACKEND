@@ -74,8 +74,34 @@ async function buildServicomListWhere(user, query = {}) {
 function applyComplaintExtraFilters(where, query = {}) {
   const and = Array.isArray(where[Op.and]) ? [...where[Op.and]] : [];
 
-  if (query.transmission_route) {
-    and.push({ transmission_route: query.transmission_route });
+  const routeParam = query.transmission_route || query.route;
+  if (
+    query.channel === "servicom" ||
+    query.servicom_only === "1" ||
+    query.servicom_only === "true" ||
+    (routeParam && String(routeParam).toUpperCase() === "SERVICOM")
+  ) {
+    and.push({ transmission_route: "SERVICOM" });
+  } else if (
+    query.channel === "state" ||
+    query.channel === "non-servicom" ||
+    query.exclude_servicom === "1" ||
+    query.exclude_servicom === "true" ||
+    query.exclude_route === "SERVICOM" ||
+    query.exclude_transmission_route === "SERVICOM"
+  ) {
+    if (routeParam && routeParam !== "all" && String(routeParam).toUpperCase() !== "SERVICOM") {
+      and.push({ transmission_route: routeParam });
+    } else {
+      and.push({
+        [Op.or]: [
+          { transmission_route: { [Op.ne]: "SERVICOM" } },
+          { transmission_route: null },
+        ],
+      });
+    }
+  } else if (routeParam && routeParam !== "all") {
+    and.push({ transmission_route: routeParam });
   }
 
   const hmoKey = query.hmo_code || query.hmo_id;

@@ -438,7 +438,6 @@ const complaintsDashboard = async (req, res, next) => {
     setIf("priority_rating", req.query.priority);
     setIf("complaint_category", req.query.category);
     setIf("complaint_type", req.query.type);
-    setIf("transmission_route", req.query.route);
     setIf("status", req.query.status);
     setIf("complaint_domain", req.query.domain);
 
@@ -516,7 +515,6 @@ function applyComplaintDrillFilters(where, query = {}) {
   setIf("priority_rating", query.priority);
   setIf("complaint_category", query.category);
   setIf("complaint_type", query.type);
-  setIf("transmission_route", query.route);
   setIf("status", query.status);
   setIf("complaint_domain", query.domain);
   if (query.state_code || (query.state_id && !/^\d+$/.test(String(query.state_id)))) {
