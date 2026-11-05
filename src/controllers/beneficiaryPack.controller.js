@@ -205,7 +205,11 @@ function syntheticLine(p, docs = []) {
   const at = p.activity_type;
 
   if (at === "additional_dependant" || at === "extra_dependant") {
-    const dependent = ["principal", "dependent_1", "dependent_2", "dependent_3"].includes(p.dependant_entity)
+    const dependent = [
+      "principal",
+      "dependent_1", "dependent_2", "dependent_3", "dependent_4",
+      "extra_dependent_1", "extra_dependent_2", "extra_dependent_3", "extra_dependent_4"
+    ].includes(p.dependant_entity)
       ? p.dependant_entity
       : null;
     const program = p.program_name
