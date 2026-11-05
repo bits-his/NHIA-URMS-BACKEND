@@ -128,10 +128,15 @@ async function saveActivity(req, res) {
     else batch = await allowedRecord(Batch, req.params.id, req.user, transaction);
     await requireEditor(req.user, batch);
     if (drive && Number(req.body.revision) !== drive.revision) throw fail("This activity changed. Refresh before editing.", 409);
-    const type = ENROLMENT_DRIVE_TYPES.find((item) => item.key === req.body.drive_type);
+    let driveType = req.body.drive_type;
+    if (!driveType && req.body.activity_category) {
+      const { CATEGORY_TO_DRIVE_KEY } = require("../utils/enrolmentDriveTypes");
+      driveType = CATEGORY_TO_DRIVE_KEY[req.body.activity_category] || "community-sensitization";
+    }
+    const type = ENROLMENT_DRIVE_TYPES.find((item) => item.key === driveType) || ENROLMENT_DRIVE_TYPES[0];
     if (!type) throw fail("Select a valid drive type");
     const values = activityValues(req.body, { complete: req.body.complete === true, year: batch.reporting_year, month: batch.reporting_month });
-    if (values.activity_category && !type.categories.some((category) => category.label === values.activity_category)) throw fail("Select an activity category for the chosen drive type");
+    if (values.activity_category && !type.categories.some((category) => category.label === values.activity_category)) throw fail("Select a valid activity category");
     const { programs_supported, target_audience, other_programme, ...fields } = values;
     const patch = { ...fields, activity_category: values.activity_category || "", drive_type: type.key, drive_code: type.categories.find((category) => category.label === values.activity_category)?.code || null, state_code: batch.state_code, zonal_code: batch.zonal_code, reporting_year: batch.reporting_year, reporting_month: batch.reporting_month, batch_reference_id: batch.reference_id, quarter: Math.ceil(batch.reporting_month / 3), status: "draft" };
     if (drive) await drive.update({ ...patch, revision: drive.revision + 1 }, { transaction });
