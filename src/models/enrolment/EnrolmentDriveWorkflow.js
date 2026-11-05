@@ -27,7 +27,7 @@ const EnrolmentDriveBatch = define("EnrolmentDriveBatch", "enrolment_drive_batch
   finalised_at: { type: D.DATE, allowNull: true },
   revision: { type: D.INTEGER.UNSIGNED, allowNull: false, defaultValue: 1 },
   reporting_deadline: { type: D.DATEONLY, allowNull: true },
-}, [{ unique: true, fields: ["state_code", "reporting_year", "reporting_month"], name: "uq_drive_batch_state_period" }]);
+}, [{ fields: ["state_code", "reporting_year", "reporting_month"], name: "idx_drive_batch_state_period" }]);
 
 const EnrolmentDriveProgramme = define("EnrolmentDriveProgramme", "enrolment_drive_programmes", {
   drive_reference_id: { ...ref("enrolment_drive_reports"), primaryKey: true },
