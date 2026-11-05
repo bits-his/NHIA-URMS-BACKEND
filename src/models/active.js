@@ -829,6 +829,33 @@ const FORM_MODEL_LOADERS = {
     return [Challenge, SupportRequest, RecordHistory];
   },
 
+  "vehicle-maintenance": () => {
+    const VehicleMaintenanceReport = require("./VehicleMaintenanceReport");
+
+    ZonalOffice.hasMany(VehicleMaintenanceReport, {
+      foreignKey: "zonal_code",
+      sourceKey: "zonal_code",
+      as: "vehicle_maintenance_reports",
+    });
+    VehicleMaintenanceReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code",
+      targetKey: "zonal_code",
+      as: "zone",
+    });
+    StateOffice.hasMany(VehicleMaintenanceReport, {
+      foreignKey: "state_code",
+      sourceKey: "code",
+      as: "vehicle_maintenance_reports",
+    });
+    VehicleMaintenanceReport.belongsTo(StateOffice, {
+      foreignKey: "state_code",
+      targetKey: "code",
+      as: "state",
+    });
+
+    return [VehicleMaintenanceReport];
+  },
+
   "office-profile": () => {
     const StateZonalOfficeProfile = require("./StateZonalOfficeProfile");
     const OfficeAccommodation = require("./OfficeAccommodation");
@@ -1246,6 +1273,8 @@ const FinanceSshiaReport =
   approvedFormModels.find((m) => m.tableName === "finance_sshia_reports") || null;
 const FinanceExpenditureProfile =
   approvedFormModels.find((m) => m.tableName === "finance_expenditure_profiles") || null;
+const VehicleMaintenanceReport =
+  approvedFormModels.find((m) => m.tableName === "vehicle_maintenance_reports") || null;
 
 module.exports = {
   CORE_TABLES,
@@ -1303,4 +1332,5 @@ module.exports = {
   FinanceIgrReport,
   FinanceSshiaReport,
   FinanceExpenditureProfile,
+  VehicleMaintenanceReport,
 };

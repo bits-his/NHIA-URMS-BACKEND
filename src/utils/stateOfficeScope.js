@@ -196,6 +196,10 @@ async function buildStateOfficeListWhere(user, query = {}, Model = null) {
 
 function userOwnsRecord(user, record) {
   if (!user || !record) return false;
+  if (user.id != null && record.created_by_user_id != null
+    && Number(record.created_by_user_id) === Number(user.id)) {
+    return true;
+  }
   const creators = [record.submitted_by, record.created_by].filter(Boolean).map(String);
   if (!creators.length) return false;
   const name = String(user.name || "").trim();
@@ -203,6 +207,12 @@ function userOwnsRecord(user, record) {
   const staffId = String(user.staff_id || "").trim();
   if (staffId && creators.some((c) => c.includes(`(${staffId})`))) return true;
   return false;
+}
+
+function resolveSubmittedBy(user, value) {
+  const raw = value == null ? "" : String(value).trim();
+  if (raw && raw !== "State Office") return raw;
+  return user?.name || raw || null;
 }
 
 async function assertRecordAccess(user, record) {
@@ -356,5 +366,6 @@ module.exports = {
   withCoordinatorTeam,
   isCoordinatorRole,
   isReportingOfficerRole,
+  resolveSubmittedBy,
   ROLE_SCOPE_FALLBACK,
 };

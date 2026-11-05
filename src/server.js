@@ -152,6 +152,9 @@ if (APPROVED_FORMS["challenges-support"]) {
 if (APPROVED_FORMS["office-profile"]) {
   require("./routes/officeProfilePack.routes").mountOfficeProfilePack(app);
 }
+if (APPROVED_FORMS["vehicle-maintenance"]) {
+  app.use("/api/state-office/vehicle-maintenance", require("./routes/vehicleMaintenancePack.routes"));
+}
 if (APPROVED_FORMS["adhoc-assignment"]) {
   const adhocRoutes = require("./routes/adhocAssignmentPack.routes");
   app.use("/api/state-office/adhoc-special-assignment", adhocRoutes);

@@ -239,16 +239,17 @@ function utilityPayload(i) {
 }
 
 function vehiclePayload(i) {
+  const maintenanceDate = dateInMonth(YEAR, i + 1, 8);
   return {
     rows: [
       {
+        vehicleModel: ["Toyota Hilux", "Nissan Patrol", "Toyota Corolla", "Ford Ranger", "Honda Accord"][i],
+        chassisNumber: [`CHASSIS-LG-${100 + i}`, `CHASSIS-KN-${200 + i}`, `CHASSIS-FCT-${300 + i}`, `CHASSIS-RV-${400 + i}`, `CHASSIS-OY-${500 + i}`][i],
         maintenanceType: i % 2 === 0 ? "Preventive Maintenance" : "Emergency Repair",
-        vehicleReg: [`LG-${100 + i}-ABC`, `KN-${200 + i}-XYZ`, `FCT-${300 + i}-AA`, `RV-${400 + i}-BB`, `OY-${500 + i}-CC`][i],
         problemReported: ["Routine service", "Battery failure", "Brake pads", "AC compressor", "Tyre replacement"][i],
-        workshop: ["NHIA Workshop", "AutoCare", "State Mechanic", "FleetFix", "MotorHub"][i],
+        maintenanceDate,
+        nextServiceDate: dateInMonth(YEAR, Math.min(i + 2, 12), 8),
         vehicleStatus: i === 3 ? "Restricted Use" : "Operational",
-        dateIn: dateInMonth(YEAR, i + 1, 8),
-        dateOut: dateInMonth(YEAR, i + 1, 12),
         remarks: "Seed sample maintenance entry",
       },
     ],

@@ -128,6 +128,11 @@ const APPROVED_FORMS = {
     ],
     routeSegment: "office-profile",
   },
+  "vehicle-maintenance": {
+    title: "Vehicle Maintenance",
+    tables: ["vehicle_maintenance_reports"],
+    routeSegment: "vehicle-maintenance",
+  },
   "adhoc-assignment": {
     title: "Ad-hoc / Special Assignment Management",
     tables: [
