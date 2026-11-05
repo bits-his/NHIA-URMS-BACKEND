@@ -168,6 +168,17 @@ const listReports = async (req, res, next) => {
     }
 
     Object.assign(where, driveRules.scopeWhere(req.user));
+    // Reporting officers: list only their own submissions (drafts + submitted).
+    if (String(req.query.mine || "") === "1" || String(req.query.mine || "").toLowerCase() === "true") {
+      if (!req.user?.id) {
+        return res.status(401).json({ success: false, message: "Authentication required" });
+      }
+      const own = [{ created_by_user_id: req.user.id }];
+      if (req.user.name) {
+        own.push({ submitted_by: req.user.name, created_by_user_id: null });
+      }
+      where[Op.and] = [...(where[Op.and] || []), { [Op.or]: own }];
+    }
     const rows = await EnrolmentReport.findAll({
       where,
       include: reportIncludes,

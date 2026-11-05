@@ -83,6 +83,11 @@ const listBatches = respond(async (req, res) => {
   if (req.query.state_code) { assertScope(req.user, { ...scope, state_code: req.query.state_code }); where.state_code = req.query.state_code; }
   if (req.query.year) where.reporting_year = integer(req.query.year, "Year", true);
   if (req.query.month) where.reporting_month = integer(req.query.month, "Month", true);
+  const caps = await capabilities(req.user);
+  // Reporting officers see only the drive reports they created; coordinators see the full state list.
+  if (caps.create && !caps.review && req.user?.id && String(req.query.mine || "1") !== "0") {
+    where.created_by_user_id = req.user.id;
+  }
   const batches = await Batch.findAll({ where, order: [["reporting_year", "DESC"], ["reporting_month", "DESC"]] });
   const ids = batches.map((batch) => batch.reference_id);
   const activities = ids.length ? await Drive.findAll({ where: { batch_reference_id: { [Op.in]: ids } }, attributes: ["reference_id", "batch_reference_id", "activity_status", "target_audience_reached", "leads_generated"], raw: true }) : [];
@@ -105,7 +110,7 @@ const createBatch = respond(async (req, res) => {
       ...where,
       reference_id: reference("EDB"),
       zonal_code: state.zonal_code,
-      planned_activities: integer(req.body.planned_activities, "Planned activities"),
+      planned_activities: integer(req.body.planned_activities, "Number of planned activities"),
       reporting_officer: String(req.user.name || req.user.staff_id || req.user.id || "Officer").slice(0, 150),
       created_by_user_id: req.user.id,
     });
@@ -118,7 +123,7 @@ const createBatch = respond(async (req, res) => {
         ...where,
         reference_id: reference("EDB"),
         zonal_code: state.zonal_code,
-        planned_activities: integer(req.body.planned_activities, "Planned activities"),
+        planned_activities: integer(req.body.planned_activities, "Number of planned activities"),
         reporting_officer: String(req.user.name || req.user.staff_id || req.user.id || "Officer").slice(0, 150),
         created_by_user_id: req.user.id,
       });
@@ -137,7 +142,7 @@ const updateBatch = respond(async (req, res) => {
     const batch = await allowedRecord(Batch, req.params.id, req.user, transaction);
     await requireEditor(req.user, batch);
     if (Number(req.body.revision) !== batch.revision) throw fail("The batch changed. Refresh before saving.", 409);
-    await batch.update({ planned_activities: integer(req.body.planned_activities, "Planned activities"), revision: batch.revision + 1 }, { transaction });
+    await batch.update({ planned_activities: integer(req.body.planned_activities, "Number of planned activities", true), revision: batch.revision + 1 }, { transaction });
   });
   res.json({ success: true, data: await batchData(await allowedRecord(Batch, req.params.id, req.user), req.user) });
 });
