@@ -175,7 +175,12 @@ const FUNCTIONALITY_ALIASES = {
   "Ad-hoc / Special Assignment": [
     "SPECIAL PROJECT",
     "Special Project",
+    "Special Projects",
     "Ad-hoc Project",
+    "Adhoc project",
+    "Adhoc Project",
+    "adhoc project",
+    "Ad-hoc / Special Assignment",
   ],
   "State Office Meeting Report": ["Meetings", "State Office Meeting"],
   "ETMC Cascading Report": ["ETMC Cascading"],
@@ -294,13 +299,10 @@ function grantForFunctionality(access, requiredFunctionality) {
     // Legacy: previously under SOC/Zones
     const socEntry = findSocZonesEntry(access);
     if (socEntry && hasFunctionality(socEntry, requiredFunctionality)) return true;
-    // Provider Management Dashboard is also granted under Zonal for coordinators
-    if (requiredFunctionality === "Provider Management Dashboard") {
-      const zonalEntry = findZonalEntry(access);
-      if (zonalEntry && hasFunctionality(zonalEntry, requiredFunctionality)) return true;
-    } else {
-      return false;
-    }
+    // Also check Zonal (State Offices) entry for Ad-hoc / Special Assignment and Provider Management Dashboard
+    const zonalEntry = findZonalEntry(access);
+    if (zonalEntry && hasFunctionality(zonalEntry, requiredFunctionality)) return true;
+    return false;
   }
 
   // Prefer Zonal / SOC entries, then any state-office-related module row
@@ -322,6 +324,24 @@ function grantForFunctionality(access, requiredFunctionality) {
 function requireStateOfficeSection(requiredFunctionality) {
   return (req, res, next) => {
     if (req.user?.role === "admin") return next();
+
+    // Allow state and zonal officers/coordinators and SDO staff for Ad-hoc / Special Assignment
+    if (requiredFunctionality === "Ad-hoc / Special Assignment") {
+      const roleKey = String(req.user?.role || "").toLowerCase();
+      if (
+        roleKey === "state-officer" ||
+        roleKey === "state-coordinator" ||
+        roleKey === "zonal-coordinator" ||
+        roleKey === "zonal-officer" ||
+        roleKey === "sdo" ||
+        roleKey.startsWith("sdo-") ||
+        req.user?.department_code === "SDU" ||
+        req.user?.department_code === "SDO" ||
+        req.user?.department_code === "SPD"
+      ) {
+        return next();
+      }
+    }
 
     const access = parseAccess(req.user?.functionalities);
     if (grantForFunctionality(access, requiredFunctionality)) return next();
