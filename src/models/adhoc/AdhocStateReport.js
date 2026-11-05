@@ -52,7 +52,7 @@ const AdhocStateReport = sequelize.define(
       defaultValue: [],
     },
     review_status: {
-      type: DataTypes.ENUM("submitted", "under_review", "returned_for_clarification", "accepted"),
+      type: DataTypes.STRING(50),
       allowNull: false,
       defaultValue: "submitted",
     },

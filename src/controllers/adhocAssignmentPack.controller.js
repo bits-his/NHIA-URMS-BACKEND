@@ -188,6 +188,11 @@ async function listMasterAssignments(req, res, next) {
 
     if (status) where.status = status;
     if (department) where.originating_department_code = department;
+
+    // Scoping: Originating department only sees directives it originated
+    if (!isSdoOrAdmin(req.user) && req.user?.department_code && !req.user?.state_code && !req.user?.zonal_code) {
+      where.originating_department_code = req.user.department_code;
+    }
     if (year) {
       where.date_received = {
         [Op.between]: [`${year}-01-01`, `${year}-12-31`],
@@ -490,25 +495,39 @@ async function submitStateReport(req, res, next) {
       return res.status(404).json({ success: false, message: "State assignment not found" });
     }
 
+    // Role Guard: State officers can only submit reports for their assigned State Office
+    if (!isSdoOrAdmin(req.user) && req.user?.state_code && assignment.state_code !== req.user.state_code) {
+      await t.rollback();
+      return res.status(403).json({
+        success: false,
+        message: `Access denied: You can only submit reports for your assigned state (${req.user.state_code}).`,
+      });
+    }
+
     const {
       completion_status,
       date_completed,
       work_summary,
       output_achieved,
       challenges,
+      is_draft,
     } = req.body;
 
-    if (!completion_status) {
-      await t.rollback();
-      return res.status(422).json({ success: false, message: "Completion status is required" });
-    }
-    if (!work_summary || !work_summary.trim()) {
-      await t.rollback();
-      return res.status(422).json({ success: false, message: "Summary of work carried out is required" });
-    }
-    if (!output_achieved || !output_achieved.trim()) {
-      await t.rollback();
-      return res.status(422).json({ success: false, message: "Output / outcome achieved is required" });
+    const isDraft = is_draft === "true" || is_draft === true;
+
+    if (!isDraft) {
+      if (!completion_status) {
+        await t.rollback();
+        return res.status(422).json({ success: false, message: "Completion status is required" });
+      }
+      if (!work_summary || !work_summary.trim()) {
+        await t.rollback();
+        return res.status(422).json({ success: false, message: "Summary of work carried out is required" });
+      }
+      if (!output_achieved || !output_achieved.trim()) {
+        await t.rollback();
+        return res.status(422).json({ success: false, message: "Output / outcome achieved is required" });
+      }
     }
 
     // Process files
@@ -541,48 +560,50 @@ async function submitStateReport(req, res, next) {
     const report = await AdhocStateReport.create({
       state_assignment_id: stateAssignmentId,
       report_version: existingCount + 1,
-      completion_status,
+      completion_status: completion_status || "ongoing",
       date_completed: (completion_status === "completed" && date_completed) ? date_completed : null,
-      work_summary: work_summary.trim(),
-      output_achieved: output_achieved.trim(),
+      work_summary: (work_summary || "").trim(),
+      output_achieved: (output_achieved || "").trim(),
       challenges: challenges ? challenges.trim() : null,
       evidence_files,
-      review_status: "submitted",
+      review_status: isDraft ? "draft" : "submitted",
       submitted_by: req.user?.id || null,
       submitted_by_name: req.user?.name || req.user?.staff_id || "State Officer",
       submitted_at: new Date(),
     }, { transaction: t });
 
     // Update state assignment progress
-    const nextProgress = completion_status === "completed"
-      ? "completed"
-      : completion_status === "partially_completed"
-        ? "in_progress"
+    const nextProgress = isDraft
+      ? "in_progress"
+      : completion_status === "completed"
+        ? "completed"
         : "in_progress";
 
     await assignment.update({ progress_status: nextProgress }, { transaction: t });
     await t.commit();
 
-    // In-app notifications to SDO and originating department in background
-    (async () => {
-      try {
-        const sdoUsers = await User.findAll({
-          where: { role: ["sdo", "admin"], is_active: true },
-          attributes: ["id"],
-        });
-        const masterTitle = assignment.master_assignment?.assignment_title || "Special Assignment";
-        for (const u of sdoUsers) {
-          await AppNotification.create({
-            user_id: u.id,
-            title: `Report Submitted: ${assignment.state_assignment_id}`,
-            body: `State ${assignment.state_code} submitted report for "${masterTitle}".`,
-            type: "report",
-            link: `/sdo/projects/master/${assignment.master_assignment_id}`,
-            entity_type: "adhoc_report",
-          }).catch(() => {});
-        }
-      } catch (_) {}
-    })();
+    // In-app notifications to SDO and originating department in background (only on real submission)
+    if (!isDraft) {
+      (async () => {
+        try {
+          const sdoUsers = await User.findAll({
+            where: { role: ["sdo", "admin"], is_active: true },
+            attributes: ["id"],
+          });
+          const masterTitle = assignment.master_assignment?.assignment_title || "Special Assignment";
+          for (const u of sdoUsers) {
+            await AppNotification.create({
+              user_id: u.id,
+              title: `Report Submitted: ${assignment.state_assignment_id}`,
+              body: `State ${assignment.state_code} submitted report for "${masterTitle}".`,
+              type: "report",
+              link: `/sdo/projects/master/${assignment.master_assignment_id}`,
+              entity_type: "adhoc_report",
+            }).catch(() => {});
+          }
+        } catch (_) {}
+      })();
+    }
 
     res.status(201).json({ success: true, data: report });
   } catch (err) {
@@ -598,10 +619,35 @@ async function reviewStateReport(req, res, next) {
     const { action, clarification_note } = req.body;
 
     const report = await AdhocStateReport.findByPk(reportId, {
-      include: [{ model: AdhocStateAssignment, as: "state_assignment" }],
+      include: [
+        {
+          model: AdhocStateAssignment,
+          as: "state_assignment",
+          include: [{ model: AdhocMasterAssignment, as: "master_assignment" }],
+        },
+      ],
     });
     if (!report) {
       return res.status(404).json({ success: false, message: "Report not found" });
+    }
+
+    const isSdo = isSdoOrAdmin(req.user);
+    const userDept = req.user?.department_code;
+    const masterDept = report.state_assignment?.master_assignment?.originating_department_code;
+    const isOriginatingDept = !isSdo && !!userDept && (!masterDept || userDept === masterDept);
+
+    if (!isSdo && !isOriginatingDept) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: Only SDO or the Originating Department can review or acknowledge this report.",
+      });
+    }
+
+    if (action === "accept" && !isSdo) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied: Only SDO can formally accept state reports. Department reviewers can Acknowledge or Return for clarification.",
+      });
     }
 
     if (action === "return_for_clarification") {
@@ -618,12 +664,20 @@ async function reviewStateReport(req, res, next) {
       if (report.state_assignment) {
         await report.state_assignment.update({ progress_status: "awaiting_support" });
       }
-    } else if (action === "accept" || action === "acknowledge") {
+    } else if (action === "accept") {
       await report.update({
         review_status: "accepted",
         clarification_note: clarification_note ? clarification_note.trim() : null,
         reviewed_by: req.user?.id || null,
         reviewed_by_name: req.user?.name || req.user?.staff_id || "Reviewer",
+        reviewed_at: new Date(),
+      });
+    } else if (action === "acknowledge") {
+      await report.update({
+        review_status: "acknowledged",
+        clarification_note: clarification_note ? clarification_note.trim() : null,
+        reviewed_by: req.user?.id || null,
+        reviewed_by_name: req.user?.name || req.user?.staff_id || "Department Reviewer",
         reviewed_at: new Date(),
       });
     } else {
