@@ -4,7 +4,9 @@ const { upload: beneficiaryUpload } = require("../middleware/beneficiaryUpload")
 const ctrl = require("../controllers/stakeholderPack.controller");
 
 const router = express.Router();
+const dash = require("../controllers/stakeholderDashboard.controller");
 router.use(authenticate);
+router.get("/dashboard", dash.dashboard);
 router.get("/reports", ctrl.listReports);
 router.get("/reports/:id", ctrl.getReport);
 router.post("/reports", ctrl.createReport);

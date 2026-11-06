@@ -134,6 +134,7 @@ const BeneficiaryManagementReport = sequelize.define(
     hmos_invited: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     hmos_attended: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     hmos_in_attendance: { type: DataTypes.STRING(500), allowNull: true },
+    hmos_invited_names: { type: DataTypes.STRING(500), allowNull: true },
     compliance_guideline: { type: DataTypes.STRING(10), allowNull: true },
     transparent_process: { type: DataTypes.STRING(10), allowNull: true },
   },

@@ -195,6 +195,7 @@ function activityFieldsFromLine(segment, line = {}) {
     hmos_invited: optNum(line.hmos_invited),
     hmos_attended: optNum(line.hmos_attended),
     hmos_in_attendance: line.hmos_in_attendance || null,
+    hmos_invited_names: line.hmos_invited_names || null,
     compliance_guideline: line.compliance_guideline || null,
     transparent_process: line.transparent_process || null,
   };
@@ -283,6 +284,7 @@ function syntheticLine(p, docs = []) {
     mda: p.mda,
     selection_date: p.selection_date,
     hmos_in_attendance: p.hmos_in_attendance,
+    hmos_invited_names: p.hmos_invited_names,
     former_hmo: p.former_hmo,
     reason_for_change: p.reason_for_change,
     hmos_invited: p.hmos_invited,

@@ -10,6 +10,7 @@ router.use((req, res, next) => {
 });
 
 router.get("/catalogue", ctrl.catalogue);
+router.get("/dashboard", require("../controllers/challengesDashboard.controller").dashboard);
 router.get("/records", ctrl.listChallenges);
 router.post("/records", ctrl.createChallenge);
 router.get("/records/:id", ctrl.getChallenge);

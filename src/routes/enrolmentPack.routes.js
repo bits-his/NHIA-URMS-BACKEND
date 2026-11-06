@@ -2,9 +2,11 @@ const express = require("express");
 const router = express.Router();
 const { authenticate } = require("../middleware/auth");
 const ctrl = require("../controllers/enrolmentPack.controller");
+const dashboard = require("../controllers/enrolmentDashboard.controller");
 
 router.use(authenticate);
 
+router.get("/dashboard", dashboard.dashboard);
 router.get("/reports", ctrl.listReports);
 router.get("/reports/:id", ctrl.getReport);
 router.post("/reports", ctrl.createReport);
