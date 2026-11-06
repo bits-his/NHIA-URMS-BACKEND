@@ -39,6 +39,11 @@ function mountBeneficiaryPack(app) {
     if (!ctrl) continue;
     app.use(`/api/state-office/${segment}`, buildRouter(ctrl));
   }
+  const dash = require("../controllers/beneficiaryDashboard.controller");
+  const dashRouter = express.Router();
+  dashRouter.use(authenticate);
+  dashRouter.get("/dashboard", dash.dashboard);
+  app.use("/api/state-office/beneficiary-management", dashRouter);
 }
 
 module.exports = { mountBeneficiaryPack, buildRouter };
