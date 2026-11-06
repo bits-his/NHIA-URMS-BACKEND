@@ -1,10 +1,10 @@
 const entry = (access_to, functionalities) => ({ access_to, functionalities });
 const SERVICOM_FORMS = ["Charter Performance", "Complaints Management", "HCF Customer Satisfaction Survey"];
 const STOCK_FORMS = ["Physical Asset Verification", "Stock Prepayment Register", "Inventory Register", "Capitalisation & Issuance"];
-const SOC_FORMS = ["State/Zonal Office Profile", "State/Zonal Focal Persons Register", "Monthly Enrollee Register", "ETMC/TMC Action-Point Register", "Weekly Actionable", "Contracted Services", "Operation Monitoring Visit", "Spot Check Visit"];
+const SOC_FORMS = ["State/Zonal Office Profile", "State/Zonal Focal Persons Register", "Monthly Enrollee Register", "ETMC/TMC Action-Point Register", "Weekly Actionable", "Contracted Services", "Operation Monitoring Visit", "Spot Check Visit", "Ad-hoc / Special Assignment"];
 const COMPLIANCE_TABS = ["State Complaints Register", "Weekly Compliance Report", "HMO Indebtedness", "Mystery Shopping"];
 const FINANCE_TABS = ["Internally Generated Revenue (IGR)", "SSHIA Financial Report", "Expenditure Profile"];
-const STATE_FORMS = ["Enrolment", "Enrolment Drives", "Beneficiary Management", "Stakeholder Management", "Provider Management", ...COMPLIANCE_TABS, ...FINANCE_TABS, "State Office Meeting Report", "ETMC Cascading Report", "Office Accommodation", "Utility Services", "Vehicle Maintenance", "Conflict / Infraction Report", "Enrollee Feedback Survey", "ICT Support Register", "Charter Performance", "HCF Customer Satisfaction Survey", "Challenges & Recommendations", "State Office Dashboard", "Finance Dashboard"];
+const STATE_FORMS = ["Enrolment", "Enrolment Drives", "Beneficiary Management", "Stakeholder Management", "Provider Management", ...COMPLIANCE_TABS, ...FINANCE_TABS, "State Office Meeting Report", "ETMC Cascading Report", "Office Accommodation", "Utility Services", "Vehicle Maintenance", "Conflict / Infraction Report", "Enrollee Feedback Survey", "ICT Support Register", "Charter Performance", "HCF Customer Satisfaction Survey", "Challenges & Recommendations", "Ad-hoc / Special Assignment", "State Office Dashboard", "Finance Dashboard"];
 const DASHBOARDS = [entry("Dashboard", ["Dashboard"]), entry("SDO", ["SERVICOM Dashboard", "Stock Verification Dashboard"]), entry("Zonal", ["State Office Dashboard", "Finance Dashboard"])];
 const STATE_DASHBOARDS = [entry("Dashboard", ["Dashboard"]), entry("Zonal", ["State Office Dashboard", "Finance Dashboard"])];
 const ANNUAL = entry("Annual Reports", ["Annual Report"]);
