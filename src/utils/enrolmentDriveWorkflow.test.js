@@ -21,6 +21,10 @@ test("reasons are mandatory for non-conducted, deferred and cancelled activities
     assert.equal(activityValues({ ...activity(), activity_status, status_reason: "Rescheduled by the community" }, { complete: true }).activity_status, activity_status);
   }
 });
+test("planned audience can be left blank on a complete activity", () => {
+  const values = activityValues({ ...activity(), planned_target_audience: "" }, { complete: true });
+  assert.equal(values.planned_target_audience, null);
+});
 test("drafts can be incomplete but invalid numbers, references and dates are rejected", () => {
   assert.doesNotThrow(() => activityValues({}));
   assert.throws(() => activityValues({ leads_generated: 1.2 }), /whole number/);

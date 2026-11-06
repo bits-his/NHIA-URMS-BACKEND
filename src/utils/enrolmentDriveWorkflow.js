@@ -100,7 +100,8 @@ function activityValues(body, { complete = false, year, month } = {}) {
   if (result.activity_status && !STATUSES.includes(result.activity_status)) throw fail("Select a valid activity status");
   if (result.funding_option && !FUNDING.includes(result.funding_option)) throw fail("Select a valid funding option");
   if (result.evidence_type && !EVIDENCE_TYPES.includes(result.evidence_type)) throw fail("Select a valid evidence type");
-  for (const key of ["planned_target_audience", "target_audience_reached", "leads_generated"]) result[key] = integer(body[key], key.replaceAll("_", " "), complete);
+  result.planned_target_audience = integer(body.planned_target_audience, "planned target audience");
+  for (const key of ["target_audience_reached", "leads_generated"]) result[key] = integer(body[key], key.replaceAll("_", " "), complete);
   for (const key of ["activity_budget", "approved_amount"]) {
     const value = body[key];
     result[key] = result.funding_option === FUNDING[1] && value != null && value !== "" ? Number(value) : null;
