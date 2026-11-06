@@ -41,7 +41,7 @@ const checkYN = (v, allowPartial = true, allowNA = false) => {
 };
 const actorName = (u) => u.name || u.staff_id || String(u.id);
 const ZONAL = /zonal-coordinator|^zc$|-zonal-coordinator/;
-const hasAccess = (u) => NATIONAL.has(u?.role) || ["State Office Meeting Report", "ETMC Cascading Report"].some((t) => grantForFunctionality(Array.isArray(u?.functionalities) ? u.functionalities : (() => { try { return JSON.parse(u?.functionalities || "[]"); } catch { return []; } })(), t));
+const hasAccess = (u) => NATIONAL.has(u?.role) || ["State Office Meeting Report", "ETMC Cascading Report", "Meetings & Coordination"].some((t) => grantForFunctionality(Array.isArray(u?.functionalities) ? u.functionalities : (() => { try { return JSON.parse(u?.functionalities || "[]"); } catch { return []; } })(), t));
 const canCreate = (u) => u?.role === "admin" || (hasAccess(u) && u?.role !== "dg-ceo" && !ZONAL.test(u?.role || ""));
 const isZonal = (u) => ZONAL.test(u?.role || "") || u?.role_config?.report_scope === "zonal";
 const canReview = (u) => hasAccess(u) && (canAssign(u) || isZonal(u) || u?.role === "soc-state-coordinator" || (u?.role || "").endsWith("-state-coordinator"));
