@@ -24,7 +24,12 @@ const DEFAULT_IDS = ["SORO-0001", "SOCZC-0001", "SOCSC-0001", "SDO-0001"];
         touched++;
       }
     }
-    await u.update({ functionalities: f });
+    if (touched > 0) {
+      const valueToSave = typeof u.functionalities === "string" ? JSON.stringify(f) : f;
+      u.set("functionalities", valueToSave);
+      u.changed("functionalities", true);
+      await u.save();
+    }
     console.log(id, `granted in ${touched} entries`);
   }
   await sequelize.close();
