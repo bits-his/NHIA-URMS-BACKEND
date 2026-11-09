@@ -482,7 +482,12 @@ function buildDashboard({ rows, offices, year, month, programme, view }) {
       pending_by_program: bars(pendingByProgram, PROGRAM_ORDER).filter((row) => row.value > 0),
     },
     gifship: {
-      by_month: [...expiryByMonth.entries()].map(([label, value]) => ({ label, value })),
+      by_month: [...expiryByMonth.entries()]
+        .sort(([a], [b]) => {
+          const key = (label) => { const [m, y] = label.split(" "); return Number(y) * 12 + MONTHS.indexOf(m); };
+          return key(a) - key(b);
+        })
+        .map(([label, value]) => ({ label, value })),
       by_type: bars(renewalByType),
       queue: queue.slice(0, 8),
     },
