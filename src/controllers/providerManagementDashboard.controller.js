@@ -10,12 +10,13 @@ const {
   ZonalOffice,
 } = require("../models");
 
-const ACTIVITY_KEYS = ["accreditation", "reaccreditation", "qa-inspections", "medical-audits"];
+const ACTIVITY_KEYS = ["accreditation", "reaccreditation", "qa-inspections", "medical-audits", "empanelment"];
 const ACTIVITY_LABELS = {
   accreditation: "Accreditation",
   reaccreditation: "Reaccreditation",
   "qa-inspections": "Quality Assurance",
   "medical-audits": "Medical Audit",
+  empanelment: "Empanelment",
 };
 
 const COMPLETED_STATUSES = new Set(["Completed", "completed"]);
@@ -286,6 +287,16 @@ function buildActivityAnalysis(rows) {
         `Planned audit activities: ${g.count}`,
         `Facilities covered: ${g.covered}`,
         `Completed records: ${g.completed_count}`,
+      ],
+      rate: (g) => pct(g.covered, g.planned),
+    },
+    {
+      key: "empanelment",
+      title: "Empanelment",
+      bullets: (g) => [
+        `Facilities planned for empanelment: ${g.planned}`,
+        `Facilities empaneled: ${g.covered}`,
+        `Plan achievement: ${pct(g.covered, g.planned) ?? "—"}%`,
       ],
       rate: (g) => pct(g.covered, g.planned),
     },

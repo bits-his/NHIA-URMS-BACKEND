@@ -6,6 +6,7 @@ const FORM_ENUM = [
   "reaccreditation",
   "qa-inspections",
   "medical-audits",
+  "empanelment",
 ];
 
 /**
@@ -85,6 +86,8 @@ const ProviderManagementReport = sequelize.define(
     related_programme: { type: DataTypes.STRING(40), allowNull: true },
     bhcpf_activity_type: { type: DataTypes.STRING(40), allowNull: true },
     activity_date: { type: DataTypes.DATEONLY, allowNull: true },
+    primary_facilities: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
+    secondary_facilities: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     total_facilities_in_state: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     facilities_planned: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
     facilities_covered: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
