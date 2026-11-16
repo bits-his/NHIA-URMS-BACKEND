@@ -129,6 +129,28 @@ async function updateMasterAssignment(req, res, next) {
       return res.status(404).json({ success: false, message: "Master assignment not found" });
     }
 
+    // Guard: Once assigned to states and any state report is submitted, master assignment cannot be edited
+    const submittedReportsCount = await AdhocStateReport.count({
+      include: [
+        {
+          model: AdhocStateAssignment,
+          as: "state_assignment",
+          where: { master_assignment_id: id },
+          required: true,
+        },
+      ],
+      where: {
+        review_status: { [Op.ne]: "draft" },
+      },
+    });
+
+    if (submittedReportsCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "This assignment cannot be edited because one or more State Offices have already submitted reports.",
+      });
+    }
+
     let original_instruction_url = record.original_instruction_url;
     let original_instruction_name = record.original_instruction_name;
     if (req.file) {
@@ -228,11 +250,16 @@ async function listMasterAssignments(req, res, next) {
       let completedStates = 0;
       let inProgressStates = 0;
       let notStartedStates = 0;
+      let submittedReportsCount = 0;
 
       for (const sa of states) {
         if (sa.progress_status === "completed") completedStates++;
         else if (sa.progress_status === "in_progress") inProgressStates++;
         else notStartedStates++;
+
+        if (Array.isArray(sa.reports) && sa.reports.some((r) => r.review_status && r.review_status !== "draft")) {
+          submittedReportsCount++;
+        }
       }
 
       return {
@@ -242,6 +269,8 @@ async function listMasterAssignments(req, res, next) {
           completedStates,
           inProgressStates,
           notStartedStates,
+          submittedReportsCount,
+          hasSubmittedReports: submittedReportsCount > 0 || completedStates > 0,
         },
       };
     });
