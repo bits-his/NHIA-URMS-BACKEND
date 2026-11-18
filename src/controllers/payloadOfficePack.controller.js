@@ -199,7 +199,7 @@ function makePayloadPack({ Model, reportType, refPrefix }) {
 
   const updateStatus = async (req, res, next) => {
     try {
-      const allowed = ["draft", "submitted", "approved"];
+      const allowed = ["draft", "submitted"];
       const { status } = req.body;
       if (!allowed.includes(status)) {
         return res.status(422).json({ success: false, message: "Invalid status" });

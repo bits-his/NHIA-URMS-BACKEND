@@ -35,7 +35,7 @@ function dateInMonth(year, month, day) {
   return `${year}-${pad(month)}-${pad(d)}`;
 }
 
-const STATUSES = ["draft", "submitted", "approved", "submitted", "draft"];
+const STATUSES = ["draft", "submitted", "submitted", "submitted", "draft"];
 
 const MEETING_TYPES = [
   "Management Meeting",
@@ -225,7 +225,7 @@ async function main() {
         prepared_by: "Admin Desk",
         designation: "State Admin Officer",
         submission_date: submitted,
-        endorsed_by: status === "approved" ? "State Coordinator" : null,
+        endorsed_by: status === "submitted" ? "State Coordinator" : null,
         status,
         created_by_name: "Seed",
       });
@@ -290,7 +290,7 @@ async function main() {
         prepared_by: "Programmes Desk",
         designation: "State Programmes Officer",
         submission_date: submitted,
-        endorsed_by: status === "approved" ? "State Coordinator" : null,
+        endorsed_by: status === "submitted" ? "State Coordinator" : null,
         status,
         created_by_name: "Seed",
       });

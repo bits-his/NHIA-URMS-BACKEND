@@ -111,7 +111,7 @@ const createReport = async (req, res, next) => {
 
     const rows = normalizeRows(scoped.payload || {});
     const status = scoped.status || "draft";
-    const err = validateRows(rows, { requireComplete: status === "submitted" || status === "approved" });
+    const err = validateRows(rows, { requireComplete: status === "submitted" });
     if (err) return res.status(422).json({ success: false, message: err });
 
     const title = scoped.title
@@ -230,7 +230,7 @@ const updateReport = async (req, res, next) => {
       ? normalizeRows(scoped.payload || {})
       : normalizeRows(report.payload || {});
     const status = scoped.status || report.status;
-    const err = validateRows(rows, { requireComplete: status === "submitted" || status === "approved" });
+    const err = validateRows(rows, { requireComplete: status === "submitted" });
     if (err) return res.status(422).json({ success: false, message: err });
 
     const title = scoped.title !== undefined
@@ -263,7 +263,7 @@ const updateReport = async (req, res, next) => {
 
 const updateStatus = async (req, res, next) => {
   try {
-    const allowed = ["draft", "submitted", "approved"];
+    const allowed = ["draft", "submitted"];
     const { status } = req.body;
     if (!allowed.includes(status)) {
       return res.status(422).json({ success: false, message: "Invalid status" });
@@ -274,7 +274,7 @@ const updateStatus = async (req, res, next) => {
     if (!access.ok) {
       return res.status(access.status).json({ success: false, message: access.message });
     }
-    if (status === "submitted" || status === "approved") {
+    if (status === "submitted") {
       const err = validateRows(normalizeRows(report.payload || {}), { requireComplete: true });
       if (err) return res.status(422).json({ success: false, message: err });
     }

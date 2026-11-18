@@ -186,7 +186,7 @@ const saveMeeting = async (req, res, id) => {
     if (id) {
       row = await allowed(MeetingReport, "meeting_id", id, req.user, transaction);
       if (row.created_by_user_id !== req.user.id && !canAssign(req.user)) throw fail("You can only edit reports you created", 403);
-      if (row.status === "approved") throw fail("Approved reports cannot be edited", 403);
+      if (row.status === "submitted") throw fail("Submitted reports cannot be edited", 403);
       await row.update(header, { transaction });
       await MeetingItem.destroy({ where: { meeting_id: row.meeting_id }, transaction });
     } else {
@@ -226,7 +226,7 @@ const getMeeting = RESPOND(async (req, res) => {
 const uploadMeetingDocuments = RESPOND(async (req, res) => {
   const row = await allowed(MeetingReport, "meeting_id", req.params.id, req.user);
   if (row.created_by_user_id !== req.user.id && !canAssign(req.user)) throw fail("You can only upload evidence to reports you created", 403);
-  if (row.status === "approved") throw fail("Approved reports cannot receive new evidence", 403);
+  if (row.status === "submitted") throw fail("Submitted reports cannot receive new evidence", 403);
   const files = req.files?.length ? req.files : (req.file ? [req.file] : []);
   if (!files.length) throw fail("Select at least one evidence file", 422);
   const added = files.map((f) => ({
@@ -246,7 +246,7 @@ const uploadMeetingDocuments = RESPOND(async (req, res) => {
 const deleteMeetingDocument = RESPOND(async (req, res) => {
   const row = await allowed(MeetingReport, "meeting_id", req.params.id, req.user);
   if (row.created_by_user_id !== req.user.id && !canAssign(req.user)) throw fail("You can only remove evidence from reports you created", 403);
-  if (row.status === "approved") throw fail("Approved reports cannot be edited", 403);
+  if (row.status === "submitted") throw fail("Submitted reports cannot be edited", 403);
   const sn = integer(req.params.sn, "document", true);
   const removed = await FormDocument.destroy({
     where: { form_key: MEETING_FORM_KEY, report_reference_id: row.meeting_id, sn },
@@ -271,7 +271,6 @@ const transitionMeeting = RESPOND(async (req, res) => {
   const next = text(req.body.status, 20);
   const own = row.created_by_user_id === req.user.id;
   if (next === "submitted" && own && row.status === "draft") await row.update({ status: "submitted" });
-  else if (next === "approved" && canReview(req.user) && row.status === "submitted") await row.update({ status: "approved", endorsed_by: actorName(req.user) });
   else if (next === "draft" && canReview(req.user) && row.status === "submitted") await row.update({ status: "draft", endorsed_by: null });
   else throw fail("This action is not permitted for your role or the current status", 403);
   res.json({ success: true, data: row });
@@ -362,7 +361,6 @@ const transitionEtmc = RESPOND(async (req, res) => {
   const next = text(req.body.status, 20);
   const own = row.created_by_user_id === req.user.id;
   if (next === "submitted" && own && row.status === "draft") await row.update({ status: "submitted" });
-  else if (next === "approved" && canReview(req.user) && row.status === "submitted") await row.update({ status: "approved", endorsed_by: actorName(req.user) });
   else if (next === "draft" && canReview(req.user) && row.status === "submitted") await row.update({ status: "draft", endorsed_by: null });
   else throw fail("This action is not permitted for your role or the current status", 403);
   res.json({ success: true, data: row });

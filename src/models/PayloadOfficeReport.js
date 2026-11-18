@@ -41,7 +41,7 @@ function definePayloadReport(name, tableName, indexPrefix) {
         onUpdate: "CASCADE",
       },
       status: {
-        type: DataTypes.ENUM("draft", "submitted", "approved"),
+        type: DataTypes.ENUM("draft", "submitted"),
         allowNull: false,
         defaultValue: "draft",
       },
