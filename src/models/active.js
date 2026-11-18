@@ -856,6 +856,57 @@ const FORM_MODEL_LOADERS = {
     return [VehicleMaintenanceReport];
   },
 
+  "ict-support-register": () => {
+    const { IctSupportRegisterReport } = require("./PayloadOfficeReport");
+    ZonalOffice.hasMany(IctSupportRegisterReport, {
+      foreignKey: "zonal_code", sourceKey: "zonal_code", as: "ict_support_register_reports",
+    });
+    IctSupportRegisterReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code", targetKey: "zonal_code", as: "zone",
+    });
+    StateOffice.hasMany(IctSupportRegisterReport, {
+      foreignKey: "state_code", sourceKey: "code", as: "ict_support_register_reports",
+    });
+    IctSupportRegisterReport.belongsTo(StateOffice, {
+      foreignKey: "state_code", targetKey: "code", as: "state",
+    });
+    return [IctSupportRegisterReport];
+  },
+
+  "conflict-infraction": () => {
+    const { ConflictInfractionReport } = require("./PayloadOfficeReport");
+    ZonalOffice.hasMany(ConflictInfractionReport, {
+      foreignKey: "zonal_code", sourceKey: "zonal_code", as: "conflict_infraction_reports",
+    });
+    ConflictInfractionReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code", targetKey: "zonal_code", as: "zone",
+    });
+    StateOffice.hasMany(ConflictInfractionReport, {
+      foreignKey: "state_code", sourceKey: "code", as: "conflict_infraction_reports",
+    });
+    ConflictInfractionReport.belongsTo(StateOffice, {
+      foreignKey: "state_code", targetKey: "code", as: "state",
+    });
+    return [ConflictInfractionReport];
+  },
+
+  "enrollee-feedback": () => {
+    const { EnrolleeFeedbackReport } = require("./PayloadOfficeReport");
+    ZonalOffice.hasMany(EnrolleeFeedbackReport, {
+      foreignKey: "zonal_code", sourceKey: "zonal_code", as: "enrollee_feedback_reports",
+    });
+    EnrolleeFeedbackReport.belongsTo(ZonalOffice, {
+      foreignKey: "zonal_code", targetKey: "zonal_code", as: "zone",
+    });
+    StateOffice.hasMany(EnrolleeFeedbackReport, {
+      foreignKey: "state_code", sourceKey: "code", as: "enrollee_feedback_reports",
+    });
+    EnrolleeFeedbackReport.belongsTo(StateOffice, {
+      foreignKey: "state_code", targetKey: "code", as: "state",
+    });
+    return [EnrolleeFeedbackReport];
+  },
+
   "office-profile": () => {
     const StateZonalOfficeProfile = require("./StateZonalOfficeProfile");
     const OfficeAccommodation = require("./OfficeAccommodation");
@@ -1273,8 +1324,18 @@ const FinanceSshiaReport =
   approvedFormModels.find((m) => m.tableName === "finance_sshia_reports") || null;
 const FinanceExpenditureProfile =
   approvedFormModels.find((m) => m.tableName === "finance_expenditure_profiles") || null;
+const MeetingReport =
+  approvedFormModels.find((m) => m.tableName === "meeting_reports") || null;
+const MeetingItem =
+  approvedFormModels.find((m) => m.tableName === "meeting_items") || null;
 const VehicleMaintenanceReport =
   approvedFormModels.find((m) => m.tableName === "vehicle_maintenance_reports") || null;
+const IctSupportRegisterReport =
+  approvedFormModels.find((m) => m.tableName === "ict_support_register_reports") || null;
+const ConflictInfractionReport =
+  approvedFormModels.find((m) => m.tableName === "conflict_infraction_reports") || null;
+const EnrolleeFeedbackReport =
+  approvedFormModels.find((m) => m.tableName === "enrollee_feedback_reports") || null;
 
 module.exports = {
   CORE_TABLES,
@@ -1332,5 +1393,10 @@ module.exports = {
   FinanceIgrReport,
   FinanceSshiaReport,
   FinanceExpenditureProfile,
+  MeetingReport,
+  MeetingItem,
   VehicleMaintenanceReport,
+  IctSupportRegisterReport,
+  ConflictInfractionReport,
+  EnrolleeFeedbackReport,
 };

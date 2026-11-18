@@ -56,6 +56,7 @@
     "db:migrate-access": "node src/scripts/legacy/migrateProductionAccess.js",
     "db:seed-weekly-compliance": "node src/scripts/seedWeeklyCompliance.js",
     "db:seed-office-profile": "node src/scripts/seedOfficeProfileDemo.js",
+    "db:seed-office-registers": "node src/scripts/seedOfficeRegistersDemo.js",
     "db:seed:rebuilt": "node src/scripts/seedRebuiltPacks.js",
     "db:reset-passwords": "node src/scripts/resetAllPasswords.js",
     "db:reset-prod-users": "node src/scripts/resetProductionUsers.js",
