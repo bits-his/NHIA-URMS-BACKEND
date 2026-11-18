@@ -157,6 +157,21 @@ const APPROVED_FORMS = {
     tables: ["finance_expenditure_profiles"],
     routeSegment: "expenditure-profile",
   },
+  "ict-support-register": {
+    title: "ICT Support Register",
+    tables: ["ict_support_register_reports"],
+    routeSegment: "ict-support-register",
+  },
+  "enrollee-feedback": {
+    title: "Enrollee Feedback Survey",
+    tables: ["enrollee_feedback_reports"],
+    routeSegment: "enrollee-feedback",
+  },
+  "conflict-infraction": {
+    title: "Conflict / Infraction Report",
+    tables: ["conflict_infraction_reports"],
+    routeSegment: "conflict-infraction",
+  },
 };
 
 function approvedFormTables() {

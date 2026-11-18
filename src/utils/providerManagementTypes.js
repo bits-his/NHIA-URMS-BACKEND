@@ -7,6 +7,7 @@ const FORM_TYPES = [
   { key: "reaccreditation", prefix: "PREC", code: "PM-0002", category: "Re-accreditation", segment: "provider-reaccreditation" },
   { key: "qa-inspections", prefix: "PQA", code: "PM-0003", category: "Quality Assurance", segment: "provider-qa-inspections" },
   { key: "medical-audits", prefix: "PMED", code: "PM-0004", category: "Medical Audit", segment: "provider-medical-audits" },
+  { key: "empanelment", prefix: "PEMP", code: "PM-0005", category: "Empanelment", segment: "provider-empanelment" },
 ];
 
 const SEGMENT_TO_FORM = Object.fromEntries(FORM_TYPES.map((t) => [t.segment, t.key]));

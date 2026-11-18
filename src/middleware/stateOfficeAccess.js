@@ -26,6 +26,7 @@ const ROUTE_FUNCTIONALITY = {
   "provider-reaccreditation": "Provider Management",
   "provider-medical-audits": "Provider Management",
   "provider-qa-inspections": "Provider Management",
+  "provider-empanelment": "Provider Management",
   stakeholder: "Stakeholder Engagement",
   ...Object.fromEntries(ENROLMENT_DRIVE_TYPES.map((t) => [t.segment, t.title])),
   "hmo-selection": "Beneficiary Management",
@@ -228,6 +229,10 @@ const HUB_GRANTS_ALL_TABS = {
     "Internally Generated Revenue (IGR)",
     "SSHIA Financial Report",
     "Expenditure Profile",
+  ],
+  "Meetings & Coordination": [
+    "State Office Meeting Report",
+    "ETMC Cascading Report",
   ],
 };
 

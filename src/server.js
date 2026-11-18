@@ -155,6 +155,13 @@ if (APPROVED_FORMS["office-profile"]) {
 if (APPROVED_FORMS["vehicle-maintenance"]) {
   app.use("/api/state-office/vehicle-maintenance", require("./routes/vehicleMaintenancePack.routes"));
 }
+if (
+  APPROVED_FORMS["ict-support-register"]
+  || APPROVED_FORMS["enrollee-feedback"]
+  || APPROVED_FORMS["conflict-infraction"]
+) {
+  require("./routes/payloadOfficePack.routes").mountPayloadOfficePacks(app);
+}
 if (APPROVED_FORMS["adhoc-assignment"]) {
   const adhocRoutes = require("./routes/adhocAssignmentPack.routes");
   app.use("/api/state-office/adhoc-special-assignment", adhocRoutes);

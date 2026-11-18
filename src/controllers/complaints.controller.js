@@ -61,7 +61,15 @@ const WRITABLE = [
 ];
 
 function complaintPk(req) {
-  return decodeURIComponent(String(req.params.id || "").trim());
+  // Numbers look like ENF/HCF/TAR/SEP 26/001. A regex route stores that in params[0]
+  // when the slashes are real path segments; :id only holds one segment.
+  const raw = req.params.id || req.params[0] || "";
+  const value = String(raw).trim();
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function pickFields(body) {
