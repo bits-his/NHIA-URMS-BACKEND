@@ -15,6 +15,7 @@
     "db:update-store": "node src/scripts/updateStoreDb.js",
     "db:update-admin-hr": "node src/scripts/updateAdminHrDb.js",
     "db:sync-vehicle-maintenance": "node src/scripts/syncVehicleMaintenanceSchema.js",
+    "db:sync-ict-support-register": "node src/scripts/syncIctSupportRegisterSchema.js",
     "db:seed-admin-hr": "node src/scripts/seedAdminHr.js",
     "db:seed-store": "node src/scripts/seedStoreManagement.js",
     "db:seed-all": "node src/scripts/seedAll.js",

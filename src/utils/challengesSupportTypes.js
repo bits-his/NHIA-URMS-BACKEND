@@ -43,7 +43,7 @@ const CHALLENGE_SPECIFICS = {
 const CHALLENGE_SEVERITIES = ["Low", "Medium", "High", "Critical"];
 const CHALLENGE_IMPACTS = ["No significant impact", "Delayed activity", "Reduced activity/output", "Reduced enrolment", "Delayed reporting", "Reduced service quality", "Increased operational cost", "Affected stakeholder engagement", "Affected beneficiary services", "Affected provider management", "Compliance risk", "Financial risk", "Other"];
 const CHALLENGE_STATUSES = ["In-progress", "Resolved", "Escalated", "Under Review", "Action Initiated", "Closed", "No Further Action Required"];
-const CHALLENGE_RELATED_ACTIVITIES = ["Enrolment / Enrolee Update", "Enrolment Drives", "Stakeholder Engagement", "Internal Operations", "Provider Management", "Complaint Management"];
+const CHALLENGE_RELATED_ACTIVITIES = ["Enrolment / Enrolee Update", "Enrolment Drives", "Stakeholder Engagement", "Internal Operations", "Meetings & Coordination", "Provider Management", "Complaint Management"];
 const CHALLENGE_PROGRAMS = ["FSSHIP", "OPS", "GIFSHIP", "BHCPF", "TISHIP", "CEmONC", "FFP", "CBSHIP"];
 const CHALLENGE_DEPARTMENTS = ["Internal Audit", "Procurement", "DG/CEO", "SQA", "Legal", "PRSD", "Finance & Account", "HRMD", "Enforcement", "ISD", "FSD", "CMD", "ICT", "Strategic & Purchasing", "Risk & Regulatory", "SDO"];
 

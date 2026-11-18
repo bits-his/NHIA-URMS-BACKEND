@@ -29,6 +29,7 @@ function makePayloadPack({ Model, reportType, refPrefix }) {
     const lines = Array.isArray(payload.lines) ? payload.lines : [];
     return {
       ...p,
+      id: p.reference_id,
       payload,
       lines,
       zone_id: p.zonal_code,
@@ -104,7 +105,7 @@ function makePayloadPack({ Model, reportType, refPrefix }) {
         payload,
       });
 
-      const full = await findReport(report.id);
+      const full = await findReport(report.reference_id);
       res.status(201).json({ success: true, data: mapReport(full) });
     } catch (err) {
       next(err);
@@ -189,7 +190,7 @@ function makePayloadPack({ Model, reportType, refPrefix }) {
         payload,
       });
 
-      const full = await findReport(report.id);
+      const full = await findReport(report.reference_id);
       res.json({ success: true, data: mapReport(full) });
     } catch (err) {
       next(err);
@@ -210,7 +211,7 @@ function makePayloadPack({ Model, reportType, refPrefix }) {
         return res.status(access.status).json({ success: false, message: access.message });
       }
       await report.update({ status });
-      const full = await findReport(report.id);
+      const full = await findReport(report.reference_id);
       res.json({ success: true, data: mapReport(full) });
     } catch (err) {
       next(err);

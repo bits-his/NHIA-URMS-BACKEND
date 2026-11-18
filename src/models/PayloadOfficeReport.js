@@ -3,15 +3,18 @@ const sequelize = require("../config/database");
 
 /**
  * Shared shape for rebuilt state-office registers that store the form body in JSON.
- * ICT Support keeps its line items on payload.lines (returned at the top level).
- * Conflict / Infraction and Enrollee Feedback keep the form object on payload.
+ * PK is auto-generated reference_id (e.g. ICT-2026-00001) — no numeric id.
+ * ICT Support keeps line items on payload.lines; Conflict / Enrollee Feedback keep the form on payload.
  */
 function definePayloadReport(name, tableName, indexPrefix) {
   return sequelize.define(
     name,
     {
-      id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
-      reference_id: { type: DataTypes.STRING(30), allowNull: false, unique: true },
+      reference_id: {
+        type: DataTypes.STRING(30),
+        allowNull: false,
+        primaryKey: true,
+      },
       zonal_code: {
         type: DataTypes.STRING(20),
         allowNull: false,
