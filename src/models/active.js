@@ -1328,6 +1328,10 @@ const MeetingReport =
   approvedFormModels.find((m) => m.tableName === "meeting_reports") || null;
 const MeetingItem =
   approvedFormModels.find((m) => m.tableName === "meeting_items") || null;
+const EtmcReport =
+  approvedFormModels.find((m) => m.tableName === "etmc_reports") || null;
+const EtmcEntry =
+  approvedFormModels.find((m) => m.tableName === "etmc_entries") || null;
 const VehicleMaintenanceReport =
   approvedFormModels.find((m) => m.tableName === "vehicle_maintenance_reports") || null;
 const IctSupportRegisterReport =
@@ -1395,6 +1399,8 @@ module.exports = {
   FinanceExpenditureProfile,
   MeetingReport,
   MeetingItem,
+  EtmcReport,
+  EtmcEntry,
   VehicleMaintenanceReport,
   IctSupportRegisterReport,
   ConflictInfractionReport,

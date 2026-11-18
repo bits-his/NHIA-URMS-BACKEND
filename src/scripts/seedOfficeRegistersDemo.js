@@ -1,6 +1,10 @@
 /**
- * Demo rows for Meeting Report, Vehicle Maintenance, ICT Support Register,
- * Enrollee Feedback Survey, and Conflict / Infraction Report.
+ * Demo rows for:
+ *   - Meetings & Coordination (meeting reports + ETMC)
+ *   - Vehicle Maintenance
+ *   - ICT Support Register
+ *   - Conflict / Infraction (with resolution fields)
+ *   - Enrollee Feedback Survey
  *
  *   node src/scripts/seedOfficeRegistersDemo.js
  *   npm run db:seed-office-registers
@@ -12,6 +16,8 @@ const {
   StateOffice,
   MeetingReport,
   MeetingItem,
+  EtmcReport,
+  EtmcEntry,
   VehicleMaintenanceReport,
   IctSupportRegisterReport,
   ConflictInfractionReport,
@@ -38,6 +44,8 @@ const MEETING_TYPES = [
   "Stakeholder Meeting",
   "Other",
 ];
+
+const ETMC_SESSIONS = ["Q1", "Q1", "Q2", "Q2", "Q3"];
 
 function vehiclePayload(i) {
   const maintenanceDate = dateInMonth(YEAR, i + 1, 8);
@@ -77,6 +85,7 @@ function ictLine(i, month) {
 }
 
 function conflictPayload(label, i, month) {
+  const resolved = i % 2 === 0;
   return {
     refNo: `CIF-SEED-${pad(i + 1, 3)}`,
     dateOfReport: dateInMonth(YEAR, month, 4 + i),
@@ -91,6 +100,11 @@ function conflictPayload(label, i, month) {
     description: `Sample conflict report ${i + 1} for ${label}`,
     immediateAction: "Parties counselled separately",
     recommendedResolution: "Mediation meeting with HOD",
+    resolutionStatus: resolved ? "Resolved" : "Pending",
+    resolutionDate: resolved ? dateInMonth(YEAR, month, 18 + i) : null,
+    resolutionOutcome: resolved
+      ? "Parties reconciled; workplan agreed and signed"
+      : "Awaiting zonal mediation",
     escalatedTo: "Zonal Coordinator",
     dateEscalated: dateInMonth(YEAR, month, 5 + i),
     expectedResponseDate: dateInMonth(YEAR, month, 12 + i),
@@ -127,9 +141,13 @@ async function clearSeed(Model, field, prefix) {
 
 async function main() {
   await sequelize.authenticate();
+  console.log("✅  DB connected");
 
   const missing = [
     ["MeetingReport", MeetingReport],
+    ["MeetingItem", MeetingItem],
+    ["EtmcReport", EtmcReport],
+    ["EtmcEntry", EtmcEntry],
     ["VehicleMaintenanceReport", VehicleMaintenanceReport],
     ["IctSupportRegisterReport", IctSupportRegisterReport],
     ["ConflictInfractionReport", ConflictInfractionReport],
@@ -139,9 +157,14 @@ async function main() {
     throw new Error(`Models not loaded: ${missing.map(([name]) => name).join(", ")}. Approve the forms in activeSchema first.`);
   }
 
+  await VehicleMaintenanceReport.sync();
   await IctSupportRegisterReport.sync();
   await ConflictInfractionReport.sync();
   await EnrolleeFeedbackReport.sync();
+  await MeetingReport.sync();
+  await MeetingItem.sync();
+  await EtmcReport.sync();
+  await EtmcEntry.sync();
 
   const states = await StateOffice.findAll({
     attributes: ["code", "description", "zonal_code"],
@@ -150,14 +173,18 @@ async function main() {
   });
   if (!states.length) throw new Error("No state offices found to attach seed rows");
 
+  // Clear previous demo rows (children first)
   await MeetingItem.destroy({ where: { meeting_id: { [Op.like]: "SEED-MTG-%" } } });
   await clearSeed(MeetingReport, "meeting_id", "SEED-MTG-");
+  await EtmcEntry.destroy({ where: { etmc_id: { [Op.like]: "SEED-ETMC-%" } } });
+  await clearSeed(EtmcReport, "etmc_id", "SEED-ETMC-");
   await clearSeed(VehicleMaintenanceReport, "reference_id", "SEED-VEH-");
   await clearSeed(IctSupportRegisterReport, "reference_id", "SEED-ICT-");
   await clearSeed(ConflictInfractionReport, "reference_id", "SEED-CIF-");
   await clearSeed(EnrolleeFeedbackReport, "reference_id", "SEED-EFS-");
 
   let meetings = 0;
+  let etmc = 0;
   let vehicles = 0;
   let ict = 0;
   let conflicts = 0;
@@ -170,6 +197,7 @@ async function main() {
     const label = state.description || state.code;
     const submitted = status === "draft" ? null : dateInMonth(YEAR, month, 10);
 
+    // ── Meetings & Coordination ──────────────────────────────────────────
     const meetingId = `SEED-MTG-${pad(i + 1, 3)}`;
     try {
       await MeetingReport.create({
@@ -222,12 +250,87 @@ async function main() {
           due_date: dateInMonth(YEAR, Math.min(month + 1, 12), 15),
           status: "Pending",
         },
+        {
+          item_id: `SEED-MTG-FU-${pad(i + 1, 3)}`,
+          meeting_id: meetingId,
+          item_kind: "followup",
+          subject: "Previous action: ICT downtime escalation",
+          detail: "Network restored; monitoring continues",
+          status: i % 2 === 0 ? "Completed" : "In Progress",
+          remarks: "Seed follow-up",
+        },
       ]);
       meetings += 1;
     } catch (err) {
       console.warn(`Skipped meeting seed for ${state.code}: ${err.message}`);
     }
 
+    const etmcId = `SEED-ETMC-${pad(i + 1, 3)}`;
+    try {
+      await EtmcReport.create({
+        etmc_id: etmcId,
+        state_code: state.code,
+        zonal_code: state.zonal_code,
+        reporting_year: YEAR,
+        reporting_month: month,
+        etmc_meeting_date: dateInMonth(YEAR, month, 12),
+        cascade_session_date: dateInMonth(YEAR, month, 14),
+        etmc_session: ETMC_SESSIONS[i],
+        presiding_officer: "Zonal Coordinator",
+        venue: i % 2 === 0 ? "Physical" : "Virtual",
+        staff_strength: 20 + i,
+        staff_present: 16 + i,
+        attendance_rate: 80 + i,
+        ev_attendance_list: "Yes",
+        ev_minutes: "Yes",
+        ev_presentation: "Yes",
+        ev_photographs: i % 2 === 0 ? "Yes" : "No",
+        ev_action_tracker: "Yes",
+        ev_escalations_documented: "Partially",
+        prepared_by: "Programmes Desk",
+        designation: "State Programmes Officer",
+        submission_date: submitted,
+        endorsed_by: status === "approved" ? "State Coordinator" : null,
+        status,
+        created_by_name: "Seed",
+      });
+      await EtmcEntry.bulkCreate([
+        {
+          entry_id: `SEED-ETMC-HL-${pad(i + 1, 3)}`,
+          etmc_id: etmcId,
+          entry_kind: "highlight",
+          subject: "Quarterly performance",
+          detail: `${label}: enrolment and provider compliance on track`,
+        },
+        {
+          entry_id: `SEED-ETMC-DU-${pad(i + 1, 3)}`,
+          etmc_id: etmcId,
+          entry_kind: "department_update",
+          subject: "Admin / HR",
+          detail: "Vehicle and ICT registers updated for the period",
+        },
+        {
+          entry_id: `SEED-ETMC-RS-${pad(i + 1, 3)}`,
+          etmc_id: etmcId,
+          entry_kind: "resolution",
+          subject: "Close open conflict cases",
+          detail: "State offices to conclude pending conflict/infraction resolutions within 14 days",
+          owner_deadline: `State Coordinator · ${dateInMonth(YEAR, Math.min(month + 1, 12), 20)}`,
+        },
+        {
+          entry_id: `SEED-ETMC-FB-${pad(i + 1, 3)}`,
+          etmc_id: etmcId,
+          entry_kind: "feedback",
+          subject: "Cascade feedback",
+          detail: "Officers acknowledged action tracker and deadlines",
+        },
+      ]);
+      etmc += 1;
+    } catch (err) {
+      console.warn(`Skipped ETMC seed for ${state.code}: ${err.message}`);
+    }
+
+    // ── Vehicle Maintenance ──────────────────────────────────────────────
     await VehicleMaintenanceReport.create({
       reference_id: `SEED-VEH-${pad(i + 1, 3)}`,
       zonal_code: state.zonal_code,
@@ -242,6 +345,7 @@ async function main() {
     });
     vehicles += 1;
 
+    // ── ICT Support Register ─────────────────────────────────────────────
     const line = ictLine(i, month);
     await IctSupportRegisterReport.create({
       reference_id: `SEED-ICT-${pad(i + 1, 3)}`,
@@ -257,6 +361,8 @@ async function main() {
     });
     ict += 1;
 
+    // ── Conflict / Infraction (+ resolution) ─────────────────────────────
+    const conflict = conflictPayload(label, i, month);
     await ConflictInfractionReport.create({
       reference_id: `SEED-CIF-${pad(i + 1, 3)}`,
       zonal_code: state.zonal_code,
@@ -266,11 +372,12 @@ async function main() {
       submission_date: submitted,
       submitted_by: "Admin Desk (Demo)",
       status,
-      title: conflictPayload(label, i, month).reportingOfficer,
-      payload: conflictPayload(label, i, month),
+      title: conflict.reportingOfficer,
+      payload: conflict,
     });
     conflicts += 1;
 
+    // ── Enrollee Feedback (bonus — same pack) ────────────────────────────
     await EnrolleeFeedbackReport.create({
       reference_id: `SEED-EFS-${pad(i + 1, 3)}`,
       zonal_code: state.zonal_code,
@@ -286,15 +393,18 @@ async function main() {
     feedback += 1;
   }
 
-  console.log(`Meeting reports: ${meetings}`);
-  console.log(`Vehicle maintenance: ${vehicles}`);
-  console.log(`ICT support: ${ict}`);
-  console.log(`Conflict / infraction: ${conflicts}`);
-  console.log(`Enrollee feedback: ${feedback}`);
+  console.log("── Seed summary ──");
+  console.log(`Meeting reports:        ${meetings}`);
+  console.log(`ETMC reports:           ${etmc}`);
+  console.log(`Vehicle maintenance:    ${vehicles}`);
+  console.log(`ICT support:            ${ict}`);
+  console.log(`Conflict / resolution:  ${conflicts}`);
+  console.log(`Enrollee feedback:      ${feedback}`);
   await sequelize.close();
 }
 
 main().catch(async (err) => {
+  console.error("❌  Seed failed:", err.message);
   console.error(err);
   try { await sequelize.close(); } catch { /* ignore */ }
   process.exit(1);
