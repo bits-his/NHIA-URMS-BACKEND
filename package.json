@@ -36,6 +36,8 @@
     "db:seed-store-pack": "node src/scripts/seedStorePackDemo.js",
     "db:seed-enrolment-pack": "node src/scripts/seedEnrolmentDemo.js",
     "db:seed-enrolment-renewals": "node src/scripts/seedEnrolmentRenewalsDemo.js",
+    "db:seed-enrolment-dashboard": "node src/scripts/seedEnrolmentDashboardDemo.js",
+    "db:seed-dashboard-viz": "node src/scripts/seedDashboardVisualization.js",
     "db:seed-enrolment-drive-pack": "node src/scripts/seedEnrolmentDriveDemo.js",
     "db:upgrade-enrolment-drives": "node src/scripts/redesign/upgradeEnrolmentDrives.js",
     "test:enrolment-drives": "node --test src/utils/enrolmentDriveWorkflow.test.js",

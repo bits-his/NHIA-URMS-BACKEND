@@ -29,6 +29,8 @@ const SEED_SCRIPTS = [
   { script: "src/scripts/seedHcfMasterFacilities.js", label: "Healthcare Facilities Master" },
   { script: "src/scripts/seedHmoProviders.js", label: "HMO Providers Master" },
   { script: "src/scripts/seedEnrolmentDemo.js", label: "Enrolment Activity Reporting Pack" },
+  { script: "src/scripts/seedEnrolmentDashboardDemo.js", label: "Enrolment Activity Dashboard Viz" },
+  { script: "src/scripts/seedEnrolmentRenewalsDemo.js", label: "GIFSHIP Renewals Dashboard" },
   { script: "src/scripts/seedEnrolmentDriveDemo.js", label: "Enrolment Drive Workflow & Batches" },
   { script: "src/scripts/seedBeneficiaryDemo.js", label: "Beneficiary Management Pack" },
   { script: "src/scripts/seedStakeholderDemo.js", label: "Stakeholder Management Pack" },

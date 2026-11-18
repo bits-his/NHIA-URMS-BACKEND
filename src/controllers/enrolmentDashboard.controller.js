@@ -173,6 +173,7 @@ function buildDashboard({ rows, offices, year, month, programme, view }) {
   const byType = new Map();
   let enrolled = 0;
   let annualEnrolled = 0;
+  let cumulativeEnrolled = 0;
   let zeroCost = 0;
   let budgeted = 0;
   const fundingByProgram = new Map();
@@ -180,6 +181,7 @@ function buildDashboard({ rows, offices, year, month, programme, view }) {
   for (const row of enrolment(scoped)) {
     const count = volume(row);
     annualEnrolled += count;
+    if (Number(row.reporting_month) <= month) cumulativeEnrolled += count;
     const bucket = programBucket(row.program_name);
     const monthLabel = MONTHS[(Number(row.reporting_month) || 1) - 1];
     if (monthLabel) bump(byMonth, monthLabel, count);
@@ -440,6 +442,7 @@ function buildDashboard({ rows, offices, year, month, programme, view }) {
       activities: period.length,
       enrolled,
       annual_enrolled: annualEnrolled,
+      cumulative_enrolled: cumulativeEnrolled,
       coverage_pct: null,
       annual_target: null,
       gifship_renewals_due: expire60,

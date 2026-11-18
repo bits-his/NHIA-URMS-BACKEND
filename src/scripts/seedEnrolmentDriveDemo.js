@@ -17,6 +17,7 @@ const {
   EnrolmentDriveAudience: Audience,
   EnrolmentDriveAction: Action,
   EnrolmentDriveReview: Review,
+  EnrolmentDriveEvidence: Evidence,
 } = require("../models/enrolment/EnrolmentDriveWorkflow");
 const { ENROLMENT_DRIVE_TYPES } = require("../utils/enrolmentDriveTypes");
 const rules = require("../utils/enrolmentDriveWorkflow");
@@ -102,6 +103,7 @@ async function clearDemo() {
   ).map((row) => row.reference_id);
 
   if (demoDriveIds.length) {
+    await Evidence.destroy({ where: { drive_reference_id: { [Op.in]: demoDriveIds } } });
     await Programme.destroy({ where: { drive_reference_id: { [Op.in]: demoDriveIds } } });
     await Audience.destroy({ where: { drive_reference_id: { [Op.in]: demoDriveIds } } });
     await EnrolmentReport.destroy({ where: { drive_reference_id: { [Op.in]: demoDriveIds } } });
@@ -162,6 +164,7 @@ async function main() {
       })
     ).map((row) => row.reference_id);
     if (collideDrives.length) {
+      await Evidence.destroy({ where: { drive_reference_id: { [Op.in]: collideDrives } } });
       await Programme.destroy({ where: { drive_reference_id: { [Op.in]: collideDrives } } });
       await Audience.destroy({ where: { drive_reference_id: { [Op.in]: collideDrives } } });
       await EnrolmentReport.destroy({ where: { drive_reference_id: { [Op.in]: collideDrives } } });
