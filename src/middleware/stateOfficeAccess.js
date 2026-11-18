@@ -33,9 +33,10 @@ const ROUTE_FUNCTIONALITY = {
   "extra-dependant": "Beneficiary Management",
   "hcf-change": "Beneficiary Management",
   challenges: "Challenges & Recommendations",
-  igr: "IGR",
+  igr: "Internally Generated Revenue (IGR)",
   "sshia-financial": "SSHIA Financial Report",
   "expenditure-profile": "Expenditure Profile",
+  finance: "IGR, SSHIA & Expenditure",
   "weekly-actionable": "Weekly Actionable",
   "contracted-services": "Contracted Services",
   "ict-support-register": "ICT Support Register",
@@ -139,18 +140,10 @@ const FUNCTIONALITY_ALIASES = {
   "Internally Generated Revenue (IGR)": ["IGR", "Internally Generated Revenue"],
   "Expenditure Profile": ["Expenditure"],
   "IGR, SSHIA & Expenditure": [
-    "Internally Generated Revenue (IGR)",
-    "SSHIA Financial Report",
-    "Expenditure Profile",
-    "IGR",
-    "SSHIA",
-    "Expenditure",
+    "Finance",
+    "IGR SSHIA Expenditure",
   ],
   "Complaint/Compliance Management": [
-    "State Complaints Register",
-    "Weekly Compliance Report",
-    "HMO Indebtedness",
-    "Mystery Shopping",
     "Complaint/Compliance management",
   ],
   "State Complaints Register": ["Complaints Register"],
@@ -242,6 +235,9 @@ const HUB_GRANTS_ALL_TABS = {
     "Internally Generated Revenue (IGR)",
     "SSHIA Financial Report",
     "Expenditure Profile",
+    "IGR",
+    "SSHIA",
+    "Expenditure",
   ],
   "Meetings & Coordination": [
     "State Office Meeting Report",
@@ -268,7 +264,15 @@ function parseAccess(raw) {
 }
 
 function acceptedFunctionalityNames(title) {
-  return new Set([title, ...(FUNCTIONALITY_ALIASES[title] || [])]);
+  const names = new Set([title, ...(FUNCTIONALITY_ALIASES[title] || [])]);
+  // Bidirectional: "IGR" must also match "Internally Generated Revenue (IGR)" and vice versa
+  for (const [canonical, aliases] of Object.entries(FUNCTIONALITY_ALIASES)) {
+    if (canonical === title || aliases.includes(title)) {
+      names.add(canonical);
+      for (const a of aliases) names.add(a);
+    }
+  }
+  return names;
 }
 
 function findSocZonesEntry(access) {
@@ -294,8 +298,12 @@ function hasFunctionality(entry, title) {
 
   // Hub title alone (no child tab titles stored) unlocks every child tab
   for (const [hubTitle, childTitles] of Object.entries(HUB_GRANTS_ALL_TABS)) {
-    if (!childTitles.includes(title)) continue;
-    if (!funcs.some((f) => f === hubTitle)) continue;
+    const coversRequired = childTitles.some(
+      (c) => c === title || acceptedFunctionalityNames(c).has(title),
+    );
+    if (!coversRequired) continue;
+    const hasHub = funcs.some((f) => f === hubTitle || acceptedFunctionalityNames(hubTitle).has(f));
+    if (!hasHub) continue;
     const hasAnyChild = childTitles.some((c) => {
       const names = acceptedFunctionalityNames(c);
       return funcs.some((f) => names.has(f) || f === c);

@@ -8,10 +8,23 @@ const utilityServices = require("../controllers/utilityServiceReport.controller"
 const { optionalAopUpload } = require("../middleware/officeProfileUpload");
 const { utilityFilesUpload } = require("../middleware/utilityUpload");
 
+const OFFICE_PROFILE_SEGMENTS = new Set([
+  "office-profiles",
+  "office-accommodations",
+  "utility-services",
+  "focal-persons",
+]);
+
 function mountOfficeProfilePack(app) {
   const router = express.Router();
   router.use(authenticate);
-  router.use(requireStateOfficeRoute);
+  // This router is mounted at /api/state-office — skip unrelated packs (igr, meetings, …)
+  // so Express can fall through to their dedicated mounts.
+  router.use((req, res, next) => {
+    const segment = req.path.split("/").filter(Boolean)[0];
+    if (!segment || !OFFICE_PROFILE_SEGMENTS.has(segment)) return next("router");
+    return requireStateOfficeRoute(req, res, next);
+  });
   router.use(blockCoordinatorWrites);
 
   // Form 1: General Profile
