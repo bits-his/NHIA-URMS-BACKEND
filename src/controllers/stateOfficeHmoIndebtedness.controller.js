@@ -82,7 +82,7 @@ const createSheet = async (req, res, next) => {
     const row = await StateOfficeHmoIndebtedness.create({
       reference_id, zone_id, state_id,
       reporting_year, reporting_month,
-      submitted_by: submitted_by || req.user?.full_name || "State Office",
+      submitted_by: submitted_by || req.user?.name || req.user?.full_name || "State Office",
       status,
     }, { transaction: t });
     const mapped = mapLines(row.id, lines);
