@@ -15,15 +15,17 @@ router.use(authenticate);
 router.get("/", ctrl.listComplaints);
 router.get("/next-number", ctrl.previewNextNumber);
 router.get("/sla", ctrl.listComplaintSla);
-router.get("/:id/comments", ctrl.listComplaintComments);
+// Complaint numbers contain slashes (ENF/HCF/TAR/SEP 26/001). A single :id
+// segment does not match, and the request then hits the SERVICOM rebuild stub.
+router.get(/^\/(.+)\/comments$/, ctrl.listComplaintComments);
 router.post(
-  "/:id/comments",
+  /^\/(.+)\/comments$/,
   requireComplaintUpdateAccess,
   [body("body").notEmpty().withMessage("Comment is required")],
   validate,
   ctrl.addComplaintComment,
 );
-router.get("/:id", ctrl.getComplaint);
+router.get(/^\/(.+)$/, ctrl.getComplaint);
 router.post(
   "/",
   requireCreateAccess,
@@ -41,6 +43,6 @@ router.post(
   validate,
   ctrl.createComplaint,
 );
-router.put("/:id", requireComplaintUpdateAccess, ctrl.updateComplaint);
+router.put(/^\/(.+)$/, requireComplaintUpdateAccess, ctrl.updateComplaint);
 
 module.exports = router;
