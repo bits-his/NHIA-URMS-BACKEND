@@ -47,6 +47,7 @@ function mountProviderPack(app) {
   app.use("/api/state-office/provider-reaccreditation", buildRouter("reaccreditation"));
   app.use("/api/state-office/provider-qa-inspections", buildRouter("qa-inspections"));
   app.use("/api/state-office/provider-medical-audits", buildRouter("medical-audits"));
+  app.use("/api/state-office/provider-empanelment", buildRouter("empanelment"));
   // Legacy accreditation segment → accreditation form_type
   app.use("/api/state-office/accreditation", buildRouter("accreditation"));
 }
